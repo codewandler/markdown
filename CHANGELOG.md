@@ -10,6 +10,29 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-27
+
+### Added
+
+- Added source position spans and list metadata to stream parser events.
+- Added parser options and an explicit paragraph-boundary inline mode.
+- Added a production-oriented incremental block parser for headings,
+  paragraphs, thematic breaks, fenced code, indented code, blockquotes, and
+  ordered/unordered lists.
+- Added paragraph-boundary inline parsing for emphasis, strong, code spans,
+  inline links, and autolinks.
+- Added stream parser structural tests, exhaustive split-equivalence tests, and
+  parser benchmarks for long fences, long paragraphs, and tiny chunks.
+- Added a minimal `html` reference renderer for conformance-oriented tests.
+- Added terminal rendering support for inline styles, thematic breaks,
+  blockquotes, and list item metadata.
+
+### Changed
+
+- Replaced the initial line parser with the incremental parser foundation.
+- Hardened terminal rendering so block and inline presentation is driven by
+  parser events rather than Markdown syntax parsing.
+
 ## [0.1.0] - 2026-04-27
 
 ### Added

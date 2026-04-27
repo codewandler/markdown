@@ -11,3 +11,24 @@ type Parser interface {
 	Flush() ([]Event, error)
 	Reset()
 }
+
+// ParserOption configures a parser.
+type ParserOption func(*ParserConfig)
+
+// ParserConfig stores parser configuration.
+type ParserConfig struct {
+	InlineMode InlineMode
+}
+
+// InlineMode controls when inline Markdown is parsed.
+type InlineMode int
+
+const (
+	// InlineParagraphBoundary parses inlines only after a paragraph or heading
+	// has reached a stable block boundary.
+	InlineParagraphBoundary InlineMode = iota
+)
+
+func defaultParserConfig() ParserConfig {
+	return ParserConfig{InlineMode: InlineParagraphBoundary}
+}

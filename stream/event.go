@@ -11,6 +11,21 @@ const (
 	EventLineBreak  EventKind = "line_break"
 )
 
+// Position identifies a byte position in the streamed Markdown source.
+//
+// Offset is zero-based. Line and Column are one-based byte coordinates.
+type Position struct {
+	Offset int64
+	Line   int
+	Column int
+}
+
+// Span identifies the source range that produced an event.
+type Span struct {
+	Start Position
+	End   Position
+}
+
 // BlockKind describes a Markdown block represented in the event stream.
 type BlockKind string
 
@@ -37,10 +52,19 @@ type InlineStyle struct {
 	Link     string
 }
 
+// ListData describes a Markdown list represented by a list block event.
+type ListData struct {
+	Ordered bool
+	Start   int
+	Marker  string
+	Tight   bool
+}
+
 // Event is one append-only parser output item.
 //
 // Block is set for block boundary events. Text and Style are set for text
-// events. Level is used by hierarchical blocks such as headings.
+// events. Level is used by hierarchical blocks such as headings. Span identifies
+// the source range that produced the event when a meaningful range exists.
 type Event struct {
 	Kind  EventKind
 	Block BlockKind
@@ -48,4 +72,6 @@ type Event struct {
 	Style InlineStyle
 	Level int
 	Info  string
+	Span  Span
+	List  *ListData
 }
