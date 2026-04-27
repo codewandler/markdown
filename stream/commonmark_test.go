@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   113,
-		statusKnownGap:    116,
+		statusSupported:   130,
+		statusKnownGap:    99,
 		statusUnsupported: 423,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -220,7 +220,24 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	226: expectLineBreaks(1),
 	227: expectBlocks(BlockParagraph, 1, BlockHeading, 1),
 	228: expectBlocks(BlockBlockquote, 1, BlockHeading, 1, BlockParagraph, 1),
+	229: expectBlocks(BlockBlockquote, 1, BlockHeading, 1, BlockParagraph, 1),
+	230: expectBlocks(BlockBlockquote, 1, BlockHeading, 1, BlockParagraph, 1),
+	231: expectBlocks(BlockIndentedCode, 1),
+	232: expectBlocks(BlockBlockquote, 1, BlockHeading, 1, BlockParagraph, 1),
+	233: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
+	234: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1, BlockThematicBreak, 1),
+	238: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
+	239: expectBlocks(BlockBlockquote, 1, BlockParagraph, 0),
+	240: expectBlocks(BlockBlockquote, 1, BlockParagraph, 0),
+	241: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
+	242: expectBlocks(BlockBlockquote, 2, BlockParagraph, 2),
 	243: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
+	244: expectBlocks(BlockBlockquote, 1, BlockParagraph, 2),
+	245: expectBlocks(BlockParagraph, 2, BlockBlockquote, 1),
+	246: expectBlocks(BlockBlockquote, 2, BlockParagraph, 2, BlockThematicBreak, 1),
+	247: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
+	248: expectBlocks(BlockBlockquote, 1, BlockParagraph, 2),
+	249: expectBlocks(BlockBlockquote, 1, BlockParagraph, 2),
 	322: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1),
 	328: expectTextStyle("foo", InlineStyle{Code: true}),
 	329: expectTextStyle("foo ` bar", InlineStyle{Code: true}),

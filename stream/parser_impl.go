@@ -176,6 +176,10 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			p.inBlockquote = true
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
 		}
+		if strings.TrimSpace(content) == "" {
+			p.closeParagraph(events)
+			return
+		}
 		inner := line
 		inner.text = content
 		p.processNonContainerLine(inner, events)
@@ -183,9 +187,11 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	}
 
 	if p.inBlockquote {
-		p.closeParagraph(events)
-		p.inBlockquote = false
-		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
+		if len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
+			p.addParagraphLine(line)
+			return
+		}
+		p.closeBlockquote(line, events)
 	}
 
 	if thematicBreak(line.text) {
@@ -358,9 +364,17 @@ func (p *parser) closeContainers(events *[]Event) {
 		p.closeList(events)
 	}
 	if p.inBlockquote {
-		p.inBlockquote = false
-		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote})
+		p.closeBlockquote(lineInfo{}, events)
 	}
+}
+
+func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
+	if !p.inBlockquote {
+		return
+	}
+	p.closeParagraph(events)
+	p.inBlockquote = false
+	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
 }
 
 func (p *parser) closeListItem(events *[]Event) {

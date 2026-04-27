@@ -10,6 +10,23 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `130` supported,
+  `99` known gaps, and `423` unsupported examples.
+- Added structural assertions for simple blockquotes, empty blockquotes,
+  lazy paragraph continuation, separated blockquotes, and blockquote/thematic
+  break interactions.
+
+### Changed
+
+- Improved blockquote handling for lazy paragraph continuation lines.
+- Avoided emitting phantom empty paragraphs for blank quoted lines.
+- Kept blockquote fenced-code and indented-code continuation edge cases as
+  known gaps until the parser has a real container stack.
+
 ## [0.9.0] - 2026-04-27
 
 ### Added
