@@ -20,8 +20,8 @@ Production-target implementation plan. The repository currently has:
   paragraphs, and reset behavior
 - `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
   malformed/pathological inline delimiter input
-- exact CommonMark classification totals: `244` supported, `147` known gaps,
-  and `261` unsupported examples
+- exact CommonMark classification totals: `250` supported, `152` known gaps,
+  and `250` unsupported examples
 - complete ATX heading section coverage in the supported CommonMark corpus
 - expanded fenced-code, indented-code, and code-span coverage
 - complete paragraph, blank-line, and soft-line-break coverage in the
@@ -49,6 +49,9 @@ Production-target implementation plan. The repository currently has:
   destinations, escaped punctuation, balanced raw parentheses, character
   references, and optional link titles; reference-style links remain a known
   gap until reference definitions are represented in parser state
+- tab-stop indentation support for non-nested block recognition, including
+  indented code, headings, and thematic breaks; nested tab cases remain tied to
+  the container-stack work
 
 The next implementation turns must expand conformance, performance,
 responsiveness, memory, and agentsdk compatibility without weakening the

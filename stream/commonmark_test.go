@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   244,
-		statusKnownGap:    147,
-		statusUnsupported: 261,
+		statusSupported:   250,
+		statusKnownGap:    152,
+		statusUnsupported: 250,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -146,6 +146,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Paragraphs",
 		"Setext headings",
 		"Soft line breaks",
+		"Tabs",
 		"Thematic breaks":
 		return statusKnownGap
 	default:
@@ -154,6 +155,12 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 }
 
 var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
+	1:   expectBlocks(BlockIndentedCode, 1),
+	2:   expectBlocks(BlockIndentedCode, 1),
+	3:   expectBlocks(BlockIndentedCode, 1),
+	8:   expectBlocks(BlockIndentedCode, 1),
+	10:  expectHeadingLevels(1),
+	11:  expectBlocks(BlockThematicBreak, 1),
 	12:  expectTextParts("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"),
 	13:  expectTextParts("\\\t\\A\\a\\ \\3\\φ\\«"),
 	14:  expectTextParts("*not emphasized*", "<br/> not a tag", "[not a link](/foo)", "`not code`", "1. not a list", "* not a list", "# not a heading", "[foo]: /url \"not a reference\"", "&ouml; not a character entity"),

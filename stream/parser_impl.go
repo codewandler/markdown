@@ -313,8 +313,8 @@ func (p *parser) ensureDocument(events *[]Event) {
 func (p *parser) addParagraphLine(line lineInfo) {
 	text := line.text
 	if len(p.paragraph.lines) == 0 {
-		if indent := leadingSpaces(text); indent <= 3 {
-			text = text[indent:]
+		if indent, bytes := leadingIndent(text); indent <= 3 {
+			text = text[bytes:]
 		}
 	} else {
 		text = strings.TrimLeft(text, " \t")
@@ -390,7 +390,7 @@ func (p *parser) emitIndentedCodeLine(line lineInfo, events *[]Event) {
 		)
 		p.indentedBlankLines--
 	}
-	text := strings.TrimPrefix(line.text, "    ")
+	text := stripIndentColumns(line.text, 4)
 	*events = append(*events,
 		Event{Kind: EventText, Text: text, Span: Span{Start: line.start, End: line.end}},
 		Event{Kind: EventLineBreak, Span: Span{Start: line.end, End: line.end}},
@@ -447,11 +447,11 @@ func (p *parser) closeList(events *[]Event) {
 }
 
 func (p *parser) isClosingFence(line string) bool {
-	indent := leadingSpaces(line)
+	indent, indentBytes := leadingIndent(line)
 	if indent > 3 {
 		return false
 	}
-	trimmed := line[indent:]
+	trimmed := line[indentBytes:]
 	if len(trimmed) < p.fence.length {
 		return false
 	}
@@ -464,11 +464,11 @@ func (p *parser) isClosingFence(line string) bool {
 }
 
 func openingFence(line string) (byte, int, int, string, bool) {
-	indent := leadingSpaces(line)
+	indent, indentBytes := leadingIndent(line)
 	if indent > 3 {
 		return 0, 0, 0, "", false
 	}
-	trimmed := line[indent:]
+	trimmed := line[indentBytes:]
 	if len(trimmed) < 3 {
 		return 0, 0, 0, "", false
 	}
@@ -499,11 +499,11 @@ func stripFenceIndent(line string, indent int) string {
 }
 
 func heading(line string) (int, string, bool) {
-	indent := leadingSpaces(line)
+	indent, indentBytes := leadingIndent(line)
 	if indent > 3 {
 		return 0, "", false
 	}
-	trimmed := line[indent:]
+	trimmed := line[indentBytes:]
 	level := 0
 	for level < len(trimmed) && trimmed[level] == '#' {
 		level++
@@ -536,7 +536,7 @@ func closingATXSequence(text string) int {
 }
 
 func thematicBreak(line string) bool {
-	if leadingSpaces(line) > 3 {
+	if indent, _ := leadingIndent(line); indent > 3 {
 		return false
 	}
 	trimmed := strings.TrimSpace(line)
@@ -565,11 +565,11 @@ func thematicBreak(line string) bool {
 }
 
 func setextHeading(line string) (int, bool) {
-	indent := leadingSpaces(line)
+	indent, indentBytes := leadingIndent(line)
 	if indent > 3 {
 		return 0, false
 	}
-	trimmed := strings.TrimSpace(line[indent:])
+	trimmed := strings.TrimSpace(line[indentBytes:])
 	if trimmed == "" {
 		return 0, false
 	}
@@ -589,15 +589,16 @@ func setextHeading(line string) (int, bool) {
 }
 
 func indentedCode(line string) bool {
-	return strings.HasPrefix(line, "    ") && strings.TrimSpace(line) != ""
+	indent, _ := leadingIndent(line)
+	return indent >= 4 && strings.TrimSpace(line) != ""
 }
 
 func blockquoteContent(line string) (string, bool) {
-	indent := leadingSpaces(line)
-	if indent > 3 || indent >= len(line) || line[indent] != '>' {
+	indent, indentBytes := leadingIndent(line)
+	if indent > 3 || indentBytes >= len(line) || line[indentBytes] != '>' {
 		return "", false
 	}
-	content := line[indent+1:]
+	content := line[indentBytes+1:]
 	if strings.HasPrefix(content, " ") || strings.HasPrefix(content, "\t") {
 		content = content[1:]
 	}
@@ -610,11 +611,11 @@ type listItemData struct {
 }
 
 func listItem(line string) (listItemData, bool) {
-	indent := leadingSpaces(line)
+	indent, indentBytes := leadingIndent(line)
 	if indent > 3 {
 		return listItemData{}, false
 	}
-	trimmed := line[indent:]
+	trimmed := line[indentBytes:]
 	if len(trimmed) == 1 && strings.ContainsRune("-+*", rune(trimmed[0])) {
 		return listItemData{
 			data: ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true},
@@ -662,12 +663,40 @@ func listItem(line string) (listItemData, bool) {
 	}, true
 }
 
-func leadingSpaces(line string) int {
-	n := 0
-	for n < len(line) && line[n] == ' ' {
-		n++
+func leadingIndent(line string) (int, int) {
+	columns := 0
+	bytes := 0
+	for bytes < len(line) {
+		switch line[bytes] {
+		case ' ':
+			columns++
+			bytes++
+		case '\t':
+			columns += 4 - columns%4
+			bytes++
+		default:
+			return columns, bytes
+		}
 	}
-	return n
+	return columns, bytes
+}
+
+func stripIndentColumns(line string, columns int) string {
+	current := 0
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		case ' ':
+			current++
+		case '\t':
+			current += 4 - current%4
+		default:
+			return line[i:]
+		}
+		if current >= columns {
+			return line[i+1:]
+		}
+	}
+	return ""
 }
 
 func parseInline(text string, span Span) []Event {

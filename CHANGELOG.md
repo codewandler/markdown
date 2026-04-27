@@ -10,6 +10,23 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-04-28
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `250` supported,
+  `152` known gaps, and `250` unsupported examples.
+- Added structural assertions for supported CommonMark tab examples.
+
+### Changed
+
+- Added tab-stop aware leading-indentation handling for block recognition.
+- Applied tab-stop indentation to indented code, ATX headings, setext
+  underlines, thematic breaks, blockquotes, lists, and fenced-code open/close
+  checks.
+- Reclassified remaining tab examples as known gaps because they depend on
+  nested list/blockquote container parsing.
+
 ## [0.18.0] - 2026-04-28
 
 ### Added
