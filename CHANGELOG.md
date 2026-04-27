@@ -10,6 +10,21 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `159` supported,
+  `85` known gaps, and `408` unsupported examples.
+- Added structural assertions for hard-line-break examples that are supported
+  by paragraph-boundary inline parsing.
+
+### Changed
+
+- Reclassified hard-line-break examples as known gaps instead of unsupported;
+  unsupported cases in that section now remain limited to raw HTML or emphasis
+  interactions outside the current inline scope.
+
 ## [0.11.0] - 2026-04-27
 
 ### Added

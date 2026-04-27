@@ -61,7 +61,7 @@ The parser test suite includes:
 
 - full CommonMark `0.31.2` corpus split-equivalence checks
 - exact supported/known-gap/unsupported CommonMark accounting, currently
-  `148` supported, `81` known gaps, and `423` unsupported examples
+  `159` supported, `85` known gaps, and `408` unsupported examples
 - event invariants for balanced block enter/exit ordering
 - responsiveness tests for stable streaming emission points
 - memory-retention checks for large partial lines, fenced code, paragraphs, and

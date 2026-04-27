@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   148,
-		statusKnownGap:    81,
-		statusUnsupported: 423,
+		statusSupported:   159,
+		statusKnownGap:    85,
+		statusUnsupported: 408,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -136,6 +136,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Block quotes",
 		"Code spans",
 		"Fenced code blocks",
+		"Hard line breaks",
 		"Indented code blocks",
 		"List items",
 		"Lists",
@@ -295,6 +296,17 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	610: expectParagraphText("<foo.bar.baz>"),
 	611: expectParagraphText("https://example.com"),
 	612: expectParagraphText("foo@bar.example.com"),
+	633: expectLineBreaks(1),
+	634: expectLineBreaks(1),
+	635: expectLineBreaks(1),
+	636: expectLineBreaks(1),
+	637: expectLineBreaks(1),
+	640: expectTextStyle("code   span", InlineStyle{Code: true}),
+	641: expectTextStyle("code\\ span", InlineStyle{Code: true}),
+	644: expectParagraphText("foo\\"),
+	645: expectLineBreaks(0),
+	646: expectTextParts("foo\\"),
+	647: expectTextParts("foo"),
 	648: expectSoftBreaks(1),
 	649: expectSoftBreaks(1),
 }
