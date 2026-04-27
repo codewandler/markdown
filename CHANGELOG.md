@@ -10,6 +10,22 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `104` supported,
+  `125` known gaps, and `423` unsupported examples.
+- Added structural CommonMark assertions for every autolink example.
+
+### Changed
+
+- Implemented CommonMark-style URI autolink validation for arbitrary valid
+  schemes, including mixed-case schemes and two-to-thirty-two character scheme
+  names.
+- Implemented CommonMark-style email autolinks with `mailto:` link targets.
+- Kept invalid angle-bracketed autolinks as literal paragraph text.
+
 ## [0.7.0] - 2026-04-27
 
 ### Added

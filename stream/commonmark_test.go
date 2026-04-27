@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   87,
-		statusKnownGap:    142,
+		statusSupported:   104,
+		statusKnownGap:    125,
 		statusUnsupported: 423,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -234,6 +234,23 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	339: expectTextStyle("foo`bar", InlineStyle{Code: true}),
 	594: expectTextStyle("http://foo.bar.baz", InlineStyle{Link: "http://foo.bar.baz"}),
 	595: expectTextStyle("https://foo.bar.baz/test?q=hello&id=22&boolean", InlineStyle{Link: "https://foo.bar.baz/test?q=hello&id=22&boolean"}),
+	596: expectTextStyle("irc://foo.bar:2233/baz", InlineStyle{Link: "irc://foo.bar:2233/baz"}),
+	597: expectTextStyle("MAILTO:FOO@BAR.BAZ", InlineStyle{Link: "MAILTO:FOO@BAR.BAZ"}),
+	598: expectTextStyle("a+b+c:d", InlineStyle{Link: "a+b+c:d"}),
+	599: expectTextStyle("made-up-scheme://foo,bar", InlineStyle{Link: "made-up-scheme://foo,bar"}),
+	600: expectTextStyle("https://../", InlineStyle{Link: "https://../"}),
+	601: expectTextStyle("localhost:5001/foo", InlineStyle{Link: "localhost:5001/foo"}),
+	602: expectParagraphText("<https://foo.bar/baz bim>"),
+	603: expectTextStyle("https://example.com/\\[\\", InlineStyle{Link: "https://example.com/\\[\\"}),
+	604: expectTextStyle("foo@bar.example.com", InlineStyle{Link: "mailto:foo@bar.example.com"}),
+	605: expectTextStyle("foo+special@Bar.baz-bar0.com", InlineStyle{Link: "mailto:foo+special@Bar.baz-bar0.com"}),
+	606: expectParagraphText("<foo+@bar.example.com>"),
+	607: expectParagraphText("<>"),
+	608: expectParagraphText("< https://foo.bar >"),
+	609: expectParagraphText("<m:abc>"),
+	610: expectParagraphText("<foo.bar.baz>"),
+	611: expectParagraphText("https://example.com"),
+	612: expectParagraphText("foo@bar.example.com"),
 	648: expectSoftBreaks(1),
 	649: expectSoftBreaks(1),
 }

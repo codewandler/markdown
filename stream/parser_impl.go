@@ -737,10 +737,63 @@ func parseAutolink(text string, span Span) (Event, string, bool) {
 		return Event{}, text, false
 	}
 	target := text[1:end]
-	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") || strings.Contains(target, "@") {
+	if isURIAutolink(target) {
 		return Event{Kind: EventText, Text: target, Style: InlineStyle{Link: target}, Span: span}, text[end+1:], true
 	}
+	if isEmailAutolink(target) {
+		return Event{Kind: EventText, Text: target, Style: InlineStyle{Link: "mailto:" + target}, Span: span}, text[end+1:], true
+	}
 	return Event{}, text, false
+}
+
+func isURIAutolink(target string) bool {
+	colon := strings.IndexByte(target, ':')
+	if colon < 2 || colon > 32 || !isASCIIAlpha(target[0]) {
+		return false
+	}
+	for i := 1; i < colon; i++ {
+		c := target[i]
+		if !isASCIIAlphaNumeric(c) && c != '.' && c != '+' && c != '-' {
+			return false
+		}
+	}
+	for i := colon + 1; i < len(target); i++ {
+		c := target[i]
+		if c <= ' ' || c == '<' || c == '>' {
+			return false
+		}
+	}
+	return colon+1 < len(target)
+}
+
+func isEmailAutolink(target string) bool {
+	at := strings.IndexByte(target, '@')
+	if at <= 0 || at != strings.LastIndexByte(target, '@') || at == len(target)-1 {
+		return false
+	}
+	local, domain := target[:at], target[at+1:]
+	if strings.Contains(domain, ".") == false {
+		return false
+	}
+	for i := 0; i < len(local); i++ {
+		c := local[i]
+		if !isASCIIAlphaNumeric(c) && !strings.ContainsRune(".!#$%&'*+/=?^_`{|}~-", rune(c)) {
+			return false
+		}
+	}
+	labels := strings.Split(domain, ".")
+	for _, label := range labels {
+		if label == "" || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			if !isASCIIAlphaNumeric(c) && c != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func nextInlineDelimiter(text string) int {
@@ -792,6 +845,14 @@ func sameStyle(a, b InlineStyle) bool {
 
 func isEscapablePunctuation(c byte) bool {
 	return strings.ContainsRune("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", rune(c))
+}
+
+func isASCIIAlpha(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func isASCIIAlphaNumeric(c byte) bool {
+	return isASCIIAlpha(c) || (c >= '0' && c <= '9')
 }
 
 func isAlphaNumeric(r rune) bool {
