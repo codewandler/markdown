@@ -10,6 +10,22 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `214` supported,
+  `87` known gaps, and `351` unsupported examples.
+- Added structural assertions for additional indented-code examples with
+  internal blank lines.
+
+### Changed
+
+- Preserve blank lines inside an indented-code block when the block continues.
+- Drop pending trailing blank lines when an indented-code block closes.
+- Completed the currently tracked setext-heading corpus section by fixing the
+  indented-code blank-line interaction used by the final known gap.
+
 ## [0.16.0] - 2026-04-27
 
 ### Added

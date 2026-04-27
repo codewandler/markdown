@@ -37,11 +37,12 @@ type parser struct {
 	paragraph paragraphState
 	fence     fenceState
 
-	inBlockquote bool
-	inList       bool
-	listData     ListData
-	inListItem   bool
-	inIndented   bool
+	inBlockquote       bool
+	inList             bool
+	listData           ListData
+	inListItem         bool
+	inIndented         bool
+	indentedBlankLines int
 }
 
 type lineInfo struct {
@@ -157,6 +158,10 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	if p.inIndented {
 		if indentedCode(line.text) {
 			p.emitIndentedCodeLine(line, events)
+			return
+		}
+		if strings.TrimSpace(line.text) == "" {
+			p.indentedBlankLines++
 			return
 		}
 		p.closeIndentedCode(events)
@@ -378,6 +383,13 @@ func (p *parser) emitThematicBreak(line lineInfo, events *[]Event) {
 }
 
 func (p *parser) emitIndentedCodeLine(line lineInfo, events *[]Event) {
+	for p.indentedBlankLines > 0 {
+		*events = append(*events,
+			Event{Kind: EventText, Text: ""},
+			Event{Kind: EventLineBreak},
+		)
+		p.indentedBlankLines--
+	}
 	text := strings.TrimPrefix(line.text, "    ")
 	*events = append(*events,
 		Event{Kind: EventText, Text: text, Span: Span{Start: line.start, End: line.end}},
@@ -390,6 +402,7 @@ func (p *parser) closeIndentedCode(events *[]Event) {
 		return
 	}
 	p.inIndented = false
+	p.indentedBlankLines = 0
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockIndentedCode})
 }
 

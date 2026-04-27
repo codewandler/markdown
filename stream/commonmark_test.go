@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   208,
-		statusKnownGap:    93,
+		statusSupported:   214,
+		statusKnownGap:    87,
 		statusUnsupported: 351,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -216,6 +216,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	82:  expectHeadingLevels(1),
 	83:  expectHeadingLevels(2, 1),
 	84:  expectHeadingLevels(2, 2, 1),
+	85:  expectBlocks(BlockIndentedCode, 1, BlockThematicBreak, 1),
 	86:  expectHeadingLevels(2),
 	87:  expectParagraphText("Foo", "---"),
 	88:  expectBlocks(BlockParagraph, 2, BlockThematicBreak, 1),
@@ -238,9 +239,14 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	105: expectBlocks(BlockParagraph, 2, BlockThematicBreak, 1),
 	106: expectBlocks(BlockParagraph, 1),
 	107: expectBlocks(BlockIndentedCode, 1),
+	110: expectBlocks(BlockIndentedCode, 1),
+	111: expectBlocks(BlockIndentedCode, 1),
+	112: expectBlocks(BlockIndentedCode, 1),
 	113: expectParagraphText("Foo", "bar"),
 	114: expectBlocks(BlockIndentedCode, 1, BlockParagraph, 1),
+	115: expectBlocks(BlockHeading, 2, BlockIndentedCode, 2, BlockThematicBreak, 1),
 	116: expectBlocks(BlockIndentedCode, 1),
+	117: expectBlocks(BlockIndentedCode, 1),
 	118: expectBlocks(BlockIndentedCode, 1),
 	119: expectFencedCode("", "<", " >"),
 	120: expectFencedCode("", "<", " >"),

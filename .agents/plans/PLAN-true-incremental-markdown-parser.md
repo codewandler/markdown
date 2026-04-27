@@ -20,7 +20,7 @@ Production-target implementation plan. The repository currently has:
   paragraphs, and reset behavior
 - `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
   malformed/pathological inline delimiter input
-- exact CommonMark classification totals: `208` supported, `93` known gaps,
+- exact CommonMark classification totals: `214` supported, `87` known gaps,
   and `351` unsupported examples
 - complete ATX heading section coverage in the supported CommonMark corpus
 - expanded fenced-code, indented-code, and code-span coverage
@@ -42,9 +42,9 @@ Production-target implementation plan. The repository currently has:
 - hardened inline delimiter fallback so malformed delimiter-heavy paragraphs
   avoid repeated full-tail delimiter scans
 - expanded setext heading coverage for paragraph-boundary headings, thematic
-  break precedence, list/blockquote fallback, and escaped marker text; the
-  remaining setext known gap depends on preserving blank lines inside indented
-  code blocks
+  break precedence, list/blockquote fallback, and escaped marker text
+- expanded indented-code coverage with internal blank-line preservation and
+  trailing blank-line dropping at block close
 
 The next implementation turns must expand conformance, performance,
 responsiveness, memory, and agentsdk compatibility without weakening the
