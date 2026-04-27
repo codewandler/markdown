@@ -10,6 +10,25 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-04-28
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `244` supported,
+  `147` known gaps, and `261` unsupported examples.
+- Added structural assertions for 30 supported direct-link examples from the
+  CommonMark link section.
+- Added `InlineStyle.LinkTitle` so parser events can retain direct-link title
+  metadata even when a renderer ignores it.
+
+### Changed
+
+- Reworked direct inline-link parsing to support empty labels, empty
+  destinations, angle-bracketed destinations, escaped punctuation, balanced
+  raw parentheses, character references, and optional titles.
+- Reclassified the remaining CommonMark link examples as known gaps instead of
+  unsupported; reference-style links still require reference-definition state.
+
 ## [0.17.0] - 2026-04-27
 
 ### Added

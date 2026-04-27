@@ -782,20 +782,172 @@ func parseInline(text string, span Span) []Event {
 }
 
 func parseInlineLink(text string, span Span) (Event, string, bool) {
-	closeText := strings.Index(text, "](")
-	if closeText <= 0 {
+	closeText := matchingLinkLabelEnd(text)
+	if closeText < 0 || closeText+1 >= len(text) || text[closeText+1] != '(' {
 		return Event{}, text, false
 	}
-	closeURL := strings.IndexByte(text[closeText+2:], ')')
-	if closeURL < 0 {
+	label := decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeText]))
+	dest, title, end, ok := parseInlineLinkTail(text[closeText+2:])
+	if !ok {
 		return Event{}, text, false
 	}
-	label := text[1:closeText]
-	url := text[closeText+2 : closeText+2+closeURL]
-	if label == "" || strings.TrimSpace(url) == "" {
-		return Event{}, text, false
+	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title}, Span: span}, text[closeText+2+end:], true
+}
+
+func matchingLinkLabelEnd(text string) int {
+	if text == "" || text[0] != '[' {
+		return -1
 	}
-	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: url}, Span: span}, text[closeText+2+closeURL+1:], true
+	depth := 0
+	escaped := false
+	for i := 1; i < len(text); i++ {
+		c := text[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' {
+			escaped = true
+			continue
+		}
+		switch c {
+		case '[':
+			depth++
+		case ']':
+			if depth == 0 {
+				return i
+			}
+			depth--
+		}
+	}
+	return -1
+}
+
+func parseInlineLinkTail(text string) (string, string, int, bool) {
+	i := skipMarkdownSpace(text, 0)
+	dest, next, ok := parseInlineLinkDestination(text, i)
+	if !ok {
+		return "", "", 0, false
+	}
+	i = skipMarkdownSpace(text, next)
+	if i < len(text) && text[i] == ')' {
+		return dest, "", i + 1, true
+	}
+	title, next, ok := parseInlineLinkTitle(text, i)
+	if !ok {
+		return "", "", 0, false
+	}
+	i = skipMarkdownSpace(text, next)
+	if i >= len(text) || text[i] != ')' {
+		return "", "", 0, false
+	}
+	return dest, title, i + 1, true
+}
+
+func parseInlineLinkDestination(text string, start int) (string, int, bool) {
+	if start >= len(text) {
+		return "", start, false
+	}
+	if text[start] == '<' {
+		escaped := false
+		for i := start + 1; i < len(text); i++ {
+			c := text[i]
+			if c == '\n' {
+				return "", start, false
+			}
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+				continue
+			}
+			if c == '>' {
+				dest := decodeCharacterReferences(unescapeBackslashPunctuation(text[start+1 : i]))
+				return dest, i + 1, true
+			}
+		}
+		return "", start, false
+	}
+	if text[start] == ')' || isMarkdownSpace(text[start]) {
+		return "", start, true
+	}
+	escaped := false
+	depth := 0
+	for i := start; i < len(text); i++ {
+		c := text[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' {
+			escaped = true
+			continue
+		}
+		if isMarkdownSpace(c) {
+			if depth == 0 {
+				return decodeCharacterReferences(unescapeBackslashPunctuation(text[start:i])), i, true
+			}
+			return "", start, false
+		}
+		switch c {
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return decodeCharacterReferences(unescapeBackslashPunctuation(text[start:i])), i, true
+			}
+			depth--
+		case '<':
+			return "", start, false
+		}
+	}
+	return "", start, false
+}
+
+func parseInlineLinkTitle(text string, start int) (string, int, bool) {
+	if start >= len(text) {
+		return "", start, false
+	}
+	open := text[start]
+	close := open
+	if open == '(' {
+		close = ')'
+	} else if open != '"' && open != '\'' {
+		return "", start, false
+	}
+	escaped := false
+	for i := start + 1; i < len(text); i++ {
+		c := text[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' {
+			escaped = true
+			continue
+		}
+		if c == close {
+			title := decodeCharacterReferences(unescapeBackslashPunctuation(text[start+1 : i]))
+			return title, i + 1, true
+		}
+		if open == '(' && c == '(' {
+			return "", start, false
+		}
+	}
+	return "", start, false
+}
+
+func skipMarkdownSpace(text string, start int) int {
+	for start < len(text) && isMarkdownSpace(text[start]) {
+		start++
+	}
+	return start
+}
+
+func isMarkdownSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
 func parseCharacterReference(text string) (string, string, bool) {
@@ -1068,7 +1220,7 @@ func coalesceText(events []Event) []Event {
 }
 
 func sameStyle(a, b InlineStyle) bool {
-	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Code == b.Code && a.Link == b.Link
+	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle
 }
 
 func isEscapablePunctuation(c byte) bool {

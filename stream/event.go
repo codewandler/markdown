@@ -46,10 +46,11 @@ const (
 //
 // Renderers may ignore fields they do not support.
 type InlineStyle struct {
-	Emphasis bool
-	Strong   bool
-	Code     bool
-	Link     string
+	Emphasis  bool
+	Strong    bool
+	Code      bool
+	Link      string
+	LinkTitle string
 }
 
 // ListData describes a Markdown list represented by a list block event.
