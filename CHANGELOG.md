@@ -10,6 +10,22 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `113` supported,
+  `116` known gaps, and `423` unsupported examples.
+- Added structural assertions for additional code span edge cases, including
+  non-breaking-space spans, malformed spans, and code spans adjacent to
+  autolinks or literal text.
+
+### Changed
+
+- Treat unmatched backtick runs as literal runs instead of consuming one
+  backtick at a time, preventing invalid shorter code spans from being created
+  inside an unmatched longer run.
+
 ## [0.8.0] - 2026-04-27
 
 ### Added

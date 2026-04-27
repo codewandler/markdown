@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   104,
-		statusKnownGap:    125,
+		statusSupported:   113,
+		statusKnownGap:    116,
 		statusUnsupported: 423,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -227,11 +227,20 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	330: expectTextStyle("``", InlineStyle{Code: true}),
 	331: expectTextStyle(" `` ", InlineStyle{Code: true}),
 	332: expectTextStyle(" a", InlineStyle{Code: true}),
+	333: expectTextStyle(" b ", InlineStyle{Code: true}),
 	334: expectTextStyle("  ", InlineStyle{Code: true}),
 	335: expectTextStyle("foo bar   baz", InlineStyle{Code: true}),
 	336: expectTextStyle("foo ", InlineStyle{Code: true}),
 	337: expectTextStyle("foo   bar  baz", InlineStyle{Code: true}),
+	338: expectTextStyle("foo\\", InlineStyle{Code: true}),
 	339: expectTextStyle("foo`bar", InlineStyle{Code: true}),
+	340: expectTextStyle("foo `` bar", InlineStyle{Code: true}),
+	343: expectTextStyle("<a href=\"", InlineStyle{Code: true}),
+	345: expectTextStyle("<https://foo.bar.", InlineStyle{Code: true}),
+	346: expectTextStyle("https://foo.bar.`baz", InlineStyle{Link: "https://foo.bar.`baz"}),
+	347: expectParagraphText("```foo``"),
+	348: expectParagraphText("`foo"),
+	349: expectTextStyle("bar", InlineStyle{Code: true}),
 	594: expectTextStyle("http://foo.bar.baz", InlineStyle{Link: "http://foo.bar.baz"}),
 	595: expectTextStyle("https://foo.bar.baz/test?q=hello&id=22&boolean", InlineStyle{Link: "https://foo.bar.baz/test?q=hello&id=22&boolean"}),
 	596: expectTextStyle("irc://foo.bar:2233/baz", InlineStyle{Link: "irc://foo.bar:2233/baz"}),

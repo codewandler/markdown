@@ -633,6 +633,10 @@ func parseInline(text string, span Span) []Event {
 				text = rest
 				continue
 			}
+			n := countRun(text, '`')
+			events = append(events, Event{Kind: EventText, Text: text[:n], Span: span})
+			text = text[n:]
+			continue
 		}
 		if text[0] == '[' && linkPossible {
 			if ev, rest, ok := parseInlineLink(text, span); ok {
