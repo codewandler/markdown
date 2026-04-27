@@ -20,7 +20,7 @@ Production-target implementation plan. The repository currently has:
   paragraphs, and reset behavior
 - `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
   malformed/pathological inline delimiter input
-- exact CommonMark classification totals: `130` supported, `99` known gaps,
+- exact CommonMark classification totals: `148` supported, `81` known gaps,
   and `423` unsupported examples
 - complete ATX heading section coverage in the supported CommonMark corpus
 - expanded fenced-code, indented-code, and code-span coverage
@@ -30,6 +30,8 @@ Production-target implementation plan. The repository currently has:
 - expanded code-span edge-case coverage in the supported CommonMark corpus
 - expanded blockquote coverage for simple/lazy-continuation cases; nested and
   complex container interactions remain known gaps
+- expanded simple list/list-item coverage; nested and loose-list behavior
+  remains known gaps
 
 The next implementation turns must expand conformance, performance,
 responsiveness, memory, and agentsdk compatibility without weakening the

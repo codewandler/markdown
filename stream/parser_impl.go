@@ -205,8 +205,12 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 
 	if item, ok := listItem(line.text); ok {
 		p.ensureDocument(events)
+		if !p.inList && len(p.paragraph.lines) > 0 && item.data.Ordered && item.data.Start != 1 {
+			p.addParagraphLine(line)
+			return
+		}
 		p.closeParagraph(events)
-		if !p.inList || p.listData.Ordered != item.data.Ordered {
+		if !p.inList || p.listData.Ordered != item.data.Ordered || p.listData.Marker != item.data.Marker {
 			p.closeList(events)
 			p.inList = true
 			p.listData = item.data
@@ -542,6 +546,11 @@ func listItem(line string) (listItemData, bool) {
 		return listItemData{}, false
 	}
 	trimmed := line[indent:]
+	if len(trimmed) == 1 && strings.ContainsRune("-+*", rune(trimmed[0])) {
+		return listItemData{
+			data: ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true},
+		}, true
+	}
 	if len(trimmed) < 2 {
 		return listItemData{}, false
 	}
@@ -555,12 +564,21 @@ func listItem(line string) (listItemData, bool) {
 	for i < len(trimmed) && trimmed[i] >= '0' && trimmed[i] <= '9' {
 		i++
 	}
-	if i == 0 || i > 9 || i+1 >= len(trimmed) {
+	if i == 0 || i > 9 || i >= len(trimmed) {
 		return listItemData{}, false
 	}
 	marker := trimmed[i]
 	if marker != '.' && marker != ')' {
 		return listItemData{}, false
+	}
+	if i+1 == len(trimmed) {
+		start, err := strconv.Atoi(trimmed[:i])
+		if err != nil {
+			return listItemData{}, false
+		}
+		return listItemData{
+			data: ListData{Ordered: true, Start: start, Marker: string(marker), Tight: true},
+		}, true
 	}
 	if trimmed[i+1] != ' ' && trimmed[i+1] != '\t' {
 		return listItemData{}, false

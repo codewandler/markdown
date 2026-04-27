@@ -10,6 +10,23 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `148` supported,
+  `81` known gaps, and `423` unsupported examples.
+- Added structural assertions for simple list and list-item cases, including
+  empty list items, marker changes, ordered-list start values, and paragraph
+  interruption rules.
+
+### Changed
+
+- Added support for empty unordered and ordered list items.
+- Split lists when unordered markers or ordered delimiters change.
+- Prevented non-`1` ordered markers from interrupting an existing paragraph
+  outside a list.
+
 ## [0.10.0] - 2026-04-27
 
 ### Added

@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   130,
-		statusKnownGap:    99,
+		statusSupported:   148,
+		statusKnownGap:    81,
 		statusUnsupported: 423,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -238,6 +238,24 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	247: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
 	248: expectBlocks(BlockBlockquote, 1, BlockParagraph, 2),
 	249: expectBlocks(BlockBlockquote, 1, BlockParagraph, 2),
+	261: expectBlocks(BlockParagraph, 2),
+	265: expectOrderedList(123456789, 1),
+	266: expectParagraphText("1234567890. not ok"),
+	267: expectOrderedList(0, 1),
+	268: expectOrderedList(3, 1),
+	269: expectParagraphText("-1. not ok"),
+	272: expectBlocks(BlockIndentedCode, 2, BlockParagraph, 1),
+	275: expectBlocks(BlockParagraph, 2),
+	280: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1),
+	281: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 2),
+	282: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 2),
+	283: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 2),
+	284: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 0),
+	285: expectBlocks(BlockParagraph, 2),
+	301: expectBlocks(BlockList, 2, BlockListItem, 3),
+	302: expectBlocks(BlockList, 2, BlockListItem, 3),
+	304: expectBlocks(BlockParagraph, 1, BlockList, 0),
+	305: expectBlocks(BlockParagraph, 2, BlockList, 1, BlockListItem, 1),
 	322: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1),
 	328: expectTextStyle("foo", InlineStyle{Code: true}),
 	329: expectTextStyle("foo ` bar", InlineStyle{Code: true}),
@@ -350,6 +368,23 @@ func expectFencedCode(info string, parts ...string) func(*testing.T, []eventView
 			t.Fatalf("missing fenced code block info %q in %#v", info, events)
 		}
 		assertTextParts(t, events, parts...)
+	}
+}
+
+func expectOrderedList(start int, items int) func(*testing.T, []eventView) {
+	return func(t *testing.T, events []eventView) {
+		t.Helper()
+		found := false
+		for _, ev := range events {
+			if ev.Kind == EventEnterBlock && ev.Block == BlockList && ev.List != nil && ev.List.Ordered && ev.List.Start == start {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("missing ordered list start %d in %#v", start, events)
+		}
+		expectBlocks(BlockList, 1, BlockListItem, items)(t, events)
 	}
 }
 
