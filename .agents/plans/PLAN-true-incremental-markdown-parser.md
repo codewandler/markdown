@@ -20,7 +20,7 @@ Production-target implementation plan. The repository currently has:
   paragraphs, and reset behavior
 - `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
   malformed/pathological inline delimiter input
-- exact CommonMark classification totals: `262` supported, `172` known gaps,
+- exact CommonMark classification totals: `273` supported, `161` known gaps,
   and `218` unsupported examples
 - complete ATX heading section coverage in the supported CommonMark corpus
 - expanded fenced-code, indented-code, and code-span coverage
@@ -49,9 +49,14 @@ Production-target implementation plan. The repository currently has:
   destinations, escaped punctuation, balanced raw parentheses, character
   references, and optional link titles
 - pre-use link reference definitions are stored in parser state and used by
-  reference-style links once known; forward references, multiline definitions,
-  and container-scoped reference definitions remain known gaps because they
-  require more parser state without violating append-only streaming
+  reference-style links once known
+- multiline link reference definitions are held in bounded pending parser state
+  until a destination/title continuation proves whether the definition is valid
+  or must fall back to paragraph text
+- forward references, multiline titles that begin on the definition line,
+  multiline labels, and container-scoped reference definitions remain known
+  gaps because they require broader inline/container state without violating
+  append-only streaming
 - tab-stop indentation support for non-nested block recognition, including
   indented code, headings, and thematic breaks; nested tab cases remain tied to
   the container-stack work

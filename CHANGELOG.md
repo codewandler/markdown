@@ -10,6 +10,24 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-04-28
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `273` supported,
+  `161` known gaps, and `218` unsupported examples.
+- Added pending parser state for multiline link reference definitions with
+  destination and following-line title continuations.
+- Added structural assertions for 11 additional CommonMark link reference
+  definition examples.
+
+### Changed
+
+- Delay unresolved reference definitions only until the next line proves a
+  continuation, fallback paragraph, or completed definition.
+- Preserve append-only output while allowing already-known multiline
+  definitions to resolve later reference-style links.
+
 ## [0.21.0] - 2026-04-28
 
 ### Added

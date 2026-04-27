@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   262,
-		statusKnownGap:    172,
+		statusSupported:   273,
+		statusKnownGap:    161,
 		statusUnsupported: 218,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -283,12 +283,28 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	144: expectFencedCode(";", ""),
 	147: expectFencedCode("", "``` aaa"),
 	192: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	193: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "the title"}),
+	194: expectTextStyle("Foo*bar]", InlineStyle{Link: "my_(url)", LinkTitle: "title (with parens)"}),
+	195: expectTextStyle("Foo bar", InlineStyle{Link: "my url", LinkTitle: "title"}),
+	198: expectTextStyle("foo", InlineStyle{Link: "/url"}),
 	200: expectTextStyle("foo", InlineStyle{Link: ""}),
 	202: expectTextStyle("foo", InlineStyle{Link: "/url\\bar*baz", LinkTitle: "foo\"bar\\baz"}),
 	205: expectTextStyle("Foo", InlineStyle{Link: "/url"}),
 	206: expectTextStyle("αγω", InlineStyle{Link: "/φου"}),
 	207: expectBlocks(BlockDocument, 0),
+	209: expectParagraphText("[foo]: /url \"title\" ok"),
+	210: expectParagraphText("\"title\" ok"),
+	211: expectBlocks(BlockIndentedCode, 1, BlockParagraph, 1),
+	212: expectBlocks(BlockFencedCode, 1, BlockParagraph, 1),
+	213: expectTextParts("Foo", "[bar]: /baz", "[bar]"),
 	215: expectBlocks(BlockHeading, 1, BlockParagraph, 1),
+	216: expectTextStyle("foo", InlineStyle{Link: "/url"}),
+	217: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Link: "/foo-url", LinkTitle: "foo"})(t, events)
+		expectTextStyle("bar", InlineStyle{Link: "/bar-url", LinkTitle: "bar"})(t, events)
+		expectTextStyle("baz", InlineStyle{Link: "/baz-url"})(t, events)
+	},
 	219: expectBlocks(BlockParagraph, 2),
 	220: expectBlocks(BlockParagraph, 2),
 	221: expectBlocks(BlockParagraph, 2),

@@ -37,6 +37,7 @@ type parser struct {
 	paragraph paragraphState
 	fence     fenceState
 	refs      map[string]linkReference
+	refDef    linkReferenceDefinitionState
 
 	inBlockquote       bool
 	inList             bool
@@ -49,6 +50,15 @@ type parser struct {
 type linkReference struct {
 	dest  string
 	title string
+}
+
+type linkReferenceDefinitionState struct {
+	active  bool
+	label   string
+	dest    string
+	hasDest bool
+	title   string
+	lines   []lineInfo
 }
 
 type lineInfo struct {
@@ -115,6 +125,7 @@ func (p *parser) Flush() ([]Event, error) {
 		p.processLine(info, &events)
 		p.partial = nil
 	}
+	p.closePendingLinkReferenceDefinition(&events)
 	p.closeParagraph(&events)
 	p.closeIndentedCode(&events)
 	if p.fence.open {
@@ -173,6 +184,12 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		p.closeIndentedCode(events)
 	}
 
+	if p.refDef.active {
+		if p.continueLinkReferenceDefinition(line, events) {
+			return
+		}
+	}
+
 	if strings.TrimSpace(line.text) == "" {
 		p.closeParagraph(events)
 		p.closeIndentedCode(events)
@@ -182,13 +199,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	}
 
 	if len(p.paragraph.lines) == 0 && !p.inList && !p.inListItem {
-		if label, ref, ok := parseLinkReferenceDefinition(line.text); ok {
-			if p.refs == nil {
-				p.refs = make(map[string]linkReference)
-			}
-			if _, exists := p.refs[label]; !exists {
-				p.refs[label] = ref
-			}
+		if p.startLinkReferenceDefinition(line) {
 			return
 		}
 	}
@@ -392,6 +403,118 @@ func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) 
 	} else {
 		p.paragraph.lines = p.paragraph.lines[:0]
 	}
+}
+
+func (p *parser) startLinkReferenceDefinition(line lineInfo) bool {
+	label, text, rest, ok := parseLinkReferenceDefinitionStart(line.text)
+	if !ok {
+		return false
+	}
+	state := linkReferenceDefinitionState{
+		active: true,
+		label:  label,
+		lines:  []lineInfo{line},
+	}
+	dest, title, hasDest, hasTitle, pending, ok := parseLinkReferenceDefinitionTail(text, rest)
+	if !ok {
+		return false
+	}
+	state.dest = dest
+	state.hasDest = hasDest
+	state.title = title
+	p.refDef = state
+	if hasTitle {
+		p.finishLinkReferenceDefinition()
+		return true
+	}
+	if pending {
+		return true
+	}
+	p.finishLinkReferenceDefinition()
+	return true
+}
+
+func (p *parser) continueLinkReferenceDefinition(line lineInfo, events *[]Event) bool {
+	if strings.TrimSpace(line.text) == "" {
+		if !p.refDef.hasDest {
+			p.failLinkReferenceDefinition()
+		} else {
+			p.finishLinkReferenceDefinition()
+		}
+		return false
+	}
+
+	if !p.refDef.hasDest {
+		dest, title, hasDest, hasTitle, pending, ok := parseLinkReferenceDefinitionTail(line.text, 0)
+		if !ok || !hasDest {
+			p.failLinkReferenceDefinition()
+			return false
+		}
+		p.refDef.lines = append(p.refDef.lines, line)
+		p.refDef.dest = dest
+		p.refDef.hasDest = hasDest
+		p.refDef.title = title
+		if hasTitle {
+			p.finishLinkReferenceDefinition()
+			return true
+		}
+		if pending {
+			return true
+		}
+		p.finishLinkReferenceDefinition()
+		return true
+	}
+
+	title, next, ok := parseInlineLinkTitle(line.text, skipMarkdownSpace(line.text, 0))
+	if !ok {
+		p.finishLinkReferenceDefinition()
+		return false
+	}
+	if skipMarkdownSpace(line.text, next) != len(line.text) {
+		p.finishLinkReferenceDefinition()
+		return false
+	}
+	p.refDef.lines = append(p.refDef.lines, line)
+	p.refDef.title = title
+	p.finishLinkReferenceDefinition()
+	return true
+}
+
+func (p *parser) closePendingLinkReferenceDefinition(events *[]Event) {
+	if !p.refDef.active {
+		return
+	}
+	if !p.refDef.hasDest {
+		p.failLinkReferenceDefinition()
+		p.closeParagraph(events)
+		return
+	}
+	p.finishLinkReferenceDefinition()
+}
+
+func (p *parser) finishLinkReferenceDefinition() {
+	if !p.refDef.active {
+		return
+	}
+	if p.refDef.hasDest {
+		if p.refs == nil {
+			p.refs = make(map[string]linkReference)
+		}
+		if _, exists := p.refs[p.refDef.label]; !exists {
+			p.refs[p.refDef.label] = linkReference{dest: p.refDef.dest, title: p.refDef.title}
+		}
+	}
+	p.refDef = linkReferenceDefinitionState{}
+}
+
+func (p *parser) failLinkReferenceDefinition() {
+	if !p.refDef.active {
+		return
+	}
+	for _, line := range p.refDef.lines {
+		p.addParagraphLine(line)
+	}
+	p.refDef = linkReferenceDefinitionState{}
 }
 
 func (p *parser) emitThematicBreak(line lineInfo, events *[]Event) {
@@ -879,38 +1002,59 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 }
 
 func parseLinkReferenceDefinition(line string) (string, linkReference, bool) {
+	label, text, rest, ok := parseLinkReferenceDefinitionStart(line)
+	if !ok {
+		return "", linkReference{}, false
+	}
+	dest, title, hasDest, hasTitle, pending, ok := parseLinkReferenceDefinitionTail(text, rest)
+	if !ok || pending || !hasDest {
+		return "", linkReference{}, false
+	}
+	if !hasTitle {
+		title = ""
+	}
+	return label, linkReference{dest: dest, title: title}, true
+}
+
+func parseLinkReferenceDefinitionStart(line string) (string, string, int, bool) {
 	indent, indentBytes := leadingIndent(line)
 	if indent > 3 {
-		return "", linkReference{}, false
+		return "", "", 0, false
 	}
 	text := line[indentBytes:]
 	closeLabel := matchingLinkLabelEnd(text)
 	if closeLabel <= 0 || closeLabel+1 >= len(text) || text[closeLabel+1] != ':' {
-		return "", linkReference{}, false
+		return "", "", 0, false
 	}
 	label := normalizeReferenceLabel(decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeLabel])))
 	if label == "" {
-		return "", linkReference{}, false
+		return "", "", 0, false
 	}
-	i := skipMarkdownSpace(text, closeLabel+2)
+	return label, text, closeLabel + 2, true
+}
+
+func parseLinkReferenceDefinitionTail(text string, start int) (dest string, title string, hasDest bool, hasTitle bool, pending bool, ok bool) {
+	i := skipMarkdownSpace(text, start)
+	if i == len(text) {
+		return "", "", false, false, true, true
+	}
 	dest, next, ok := parseInlineLinkDestination(text, i)
 	if !ok || next == i {
-		return "", linkReference{}, false
+		return "", "", false, false, false, false
 	}
 	i = skipMarkdownSpace(text, next)
-	title := ""
 	if i < len(text) {
 		parsedTitle, next, ok := parseInlineLinkTitle(text, i)
 		if !ok {
-			return "", linkReference{}, false
+			return "", "", false, false, false, false
 		}
 		title = parsedTitle
 		i = skipMarkdownSpace(text, next)
 	}
 	if i != len(text) {
-		return "", linkReference{}, false
+		return "", "", false, false, false, false
 	}
-	return label, linkReference{dest: dest, title: title}, true
+	return dest, title, true, title != "", title == "", true
 }
 
 func normalizeReferenceLabel(label string) string {
