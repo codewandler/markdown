@@ -60,7 +60,8 @@ panic or emit events that must later be retracted.
 The parser test suite includes:
 
 - full CommonMark `0.31.2` corpus split-equivalence checks
-- supported/known-gap/unsupported CommonMark accounting
+- exact supported/known-gap/unsupported CommonMark accounting, currently
+  `65` supported, `164` known gaps, and `423` unsupported examples
 - event invariants for balanced block enter/exit ordering
 - responsiveness tests for stable streaming emission points
 - memory-retention checks for large partial lines, fenced code, paragraphs, and

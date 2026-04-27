@@ -10,6 +10,28 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-27
+
+### Added
+
+- Added exact CommonMark corpus classification totals as a regression gate:
+  `65` supported, `164` known gaps, and `423` unsupported examples.
+- Added structural CommonMark assertions for the complete ATX heading section
+  and expanded assertions for fenced code, indented code, and code spans.
+
+### Changed
+
+- Improved fenced-code parsing for opening indentation, closing indentation,
+  content indentation stripping, variable fence lengths, and unterminated
+  fences.
+- Grouped consecutive indented-code lines into a single indented-code block.
+- Preserved paragraph source text across paragraph-boundary inline parsing so
+  multiline code spans retain CommonMark-relevant whitespace.
+- Improved code span parsing for variable-length backtick delimiters,
+  multiline spans, and CommonMark whitespace normalization.
+- Added backslash escaping for ASCII punctuation in paragraph-boundary inline
+  parsing.
+
 ## [0.5.0] - 2026-04-27
 
 ### Added

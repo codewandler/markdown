@@ -39,6 +39,7 @@ type parser struct {
 	inList       bool
 	listData     ListData
 	inListItem   bool
+	inIndented   bool
 }
 
 type lineInfo struct {
@@ -61,6 +62,7 @@ type fenceState struct {
 	open   bool
 	marker byte
 	length int
+	indent int
 	info   string
 }
 
@@ -105,6 +107,7 @@ func (p *parser) Flush() ([]Event, error) {
 		p.partial = nil
 	}
 	p.closeParagraph(&events)
+	p.closeIndentedCode(&events)
 	if p.fence.open {
 		p.fence.open = false
 		events = append(events, Event{Kind: EventExitBlock, Block: BlockFencedCode})
@@ -143,14 +146,23 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		}
 		p.ensureDocument(events)
 		*events = append(*events,
-			Event{Kind: EventText, Text: line.text, Span: Span{Start: line.start, End: line.end}},
+			Event{Kind: EventText, Text: stripFenceIndent(line.text, p.fence.indent), Span: Span{Start: line.start, End: line.end}},
 			Event{Kind: EventLineBreak, Span: Span{Start: line.end, End: line.end}},
 		)
 		return
 	}
 
+	if p.inIndented {
+		if indentedCode(line.text) {
+			p.emitIndentedCodeLine(line, events)
+			return
+		}
+		p.closeIndentedCode(events)
+	}
+
 	if strings.TrimSpace(line.text) == "" {
 		p.closeParagraph(events)
+		p.closeIndentedCode(events)
 		p.closeListItem(events)
 		p.closeContainers(events)
 		return
@@ -214,10 +226,11 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 }
 
 func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
-	if marker, n, info, ok := openingFence(line.text); ok {
+	if marker, n, indent, info, ok := openingFence(line.text); ok {
 		p.ensureDocument(events)
 		p.closeParagraph(events)
-		p.fence = fenceState{open: true, marker: marker, length: n, info: info}
+		p.closeIndentedCode(events)
+		p.fence = fenceState{open: true, marker: marker, length: n, indent: indent, info: info}
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockFencedCode, Info: info, Span: Span{Start: line.start, End: line.end}})
 		return
 	}
@@ -242,15 +255,19 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 	}
 
 	if indentedCode(line.text) {
+		if len(p.paragraph.lines) > 0 {
+			inner := line
+			inner.text = strings.TrimPrefix(line.text, "    ")
+			p.addParagraphLine(inner)
+			return
+		}
 		p.ensureDocument(events)
 		p.closeParagraph(events)
-		text := strings.TrimPrefix(line.text, "    ")
-		*events = append(*events,
-			Event{Kind: EventEnterBlock, Block: BlockIndentedCode, Span: Span{Start: line.start, End: line.end}},
-			Event{Kind: EventText, Text: text, Span: Span{Start: line.start, End: line.end}},
-			Event{Kind: EventLineBreak, Span: Span{Start: line.end, End: line.end}},
-			Event{Kind: EventExitBlock, Block: BlockIndentedCode, Span: Span{Start: line.start, End: line.end}},
-		)
+		if !p.inIndented {
+			p.inIndented = true
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockIndentedCode, Span: Span{Start: line.start, End: line.end}})
+		}
+		p.emitIndentedCodeLine(line, events)
 		return
 	}
 
@@ -280,13 +297,14 @@ func (p *parser) closeParagraph(events *[]Event) {
 	start := p.paragraph.lines[0].span.Start
 	end := p.paragraph.lines[len(p.paragraph.lines)-1].span.End
 	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: Span{Start: start, End: end}})
+	var text strings.Builder
 	for i, line := range p.paragraph.lines {
 		if i > 0 {
-			prev := p.paragraph.lines[i-1]
-			*events = append(*events, Event{Kind: EventSoftBreak, Span: Span{Start: prev.span.End, End: line.span.Start}})
+			text.WriteByte('\n')
 		}
-		*events = append(*events, parseInline(strings.TrimSpace(line.text), line.span)...)
+		text.WriteString(line.text)
 	}
+	*events = append(*events, parseInline(text.String(), Span{Start: start, End: end})...)
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: Span{Start: start, End: end}})
 	clear(p.paragraph.lines)
 	if cap(p.paragraph.lines) > 1024 {
@@ -296,7 +314,24 @@ func (p *parser) closeParagraph(events *[]Event) {
 	}
 }
 
+func (p *parser) emitIndentedCodeLine(line lineInfo, events *[]Event) {
+	text := strings.TrimPrefix(line.text, "    ")
+	*events = append(*events,
+		Event{Kind: EventText, Text: text, Span: Span{Start: line.start, End: line.end}},
+		Event{Kind: EventLineBreak, Span: Span{Start: line.end, End: line.end}},
+	)
+}
+
+func (p *parser) closeIndentedCode(events *[]Event) {
+	if !p.inIndented {
+		return
+	}
+	p.inIndented = false
+	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockIndentedCode})
+}
+
 func (p *parser) closeContainers(events *[]Event) {
+	p.closeIndentedCode(events)
 	if p.inList {
 		p.closeListItem(events)
 		p.closeList(events)
@@ -328,7 +363,11 @@ func (p *parser) closeList(events *[]Event) {
 }
 
 func (p *parser) isClosingFence(line string) bool {
-	trimmed := strings.TrimSpace(line)
+	indent := leadingSpaces(line)
+	if indent > 3 {
+		return false
+	}
+	trimmed := line[indent:]
 	if len(trimmed) < p.fence.length {
 		return false
 	}
@@ -340,31 +379,39 @@ func (p *parser) isClosingFence(line string) bool {
 	return strings.TrimSpace(trimmed[p.fence.length:]) == ""
 }
 
-func openingFence(line string) (byte, int, string, bool) {
+func openingFence(line string) (byte, int, int, string, bool) {
 	indent := leadingSpaces(line)
 	if indent > 3 {
-		return 0, 0, "", false
+		return 0, 0, 0, "", false
 	}
 	trimmed := line[indent:]
 	if len(trimmed) < 3 {
-		return 0, 0, "", false
+		return 0, 0, 0, "", false
 	}
 	marker := trimmed[0]
 	if marker != '`' && marker != '~' {
-		return 0, 0, "", false
+		return 0, 0, 0, "", false
 	}
 	n := 0
 	for n < len(trimmed) && trimmed[n] == marker {
 		n++
 	}
 	if n < 3 {
-		return 0, 0, "", false
+		return 0, 0, 0, "", false
 	}
 	info := strings.TrimSpace(trimmed[n:])
 	if marker == '`' && strings.Contains(info, "`") {
-		return 0, 0, "", false
+		return 0, 0, 0, "", false
 	}
-	return marker, n, info, true
+	return marker, n, indent, info, true
+}
+
+func stripFenceIndent(line string, indent int) string {
+	n := 0
+	for n < len(line) && n < indent && line[n] == ' ' {
+		n++
+	}
+	return line[n:]
 }
 
 func heading(line string) (int, string, bool) {
@@ -506,6 +553,16 @@ func parseInline(text string, span Span) []Event {
 	linkPossible := strings.Contains(text, "](")
 	autolinkPossible := strings.Contains(text, ">")
 	for len(text) > 0 {
+		if text[0] == '\n' {
+			events = append(events, Event{Kind: EventSoftBreak, Span: span})
+			text = text[1:]
+			continue
+		}
+		if text[0] == '\\' && len(text) > 1 && isEscapablePunctuation(text[1]) {
+			events = append(events, Event{Kind: EventText, Text: text[1:2], Span: span})
+			text = text[2:]
+			continue
+		}
 		if strings.HasPrefix(text, "**") {
 			if end := strings.Index(text[2:], "**"); end >= 0 {
 				content := text[2 : 2+end]
@@ -543,10 +600,9 @@ func parseInline(text string, span Span) []Event {
 			}
 		}
 		if text[0] == '`' {
-			if end := strings.IndexByte(text[1:], '`'); end >= 0 {
-				content := text[1 : 1+end]
-				events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Code: true}, Span: span})
-				text = text[1+end+1:]
+			if ev, rest, ok := parseCodeSpan(text, span); ok {
+				events = append(events, ev)
+				text = rest
 				continue
 			}
 		}
@@ -593,6 +649,40 @@ func parseInlineLink(text string, span Span) (Event, string, bool) {
 	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: url}, Span: span}, text[closeText+2+closeURL+1:], true
 }
 
+func parseCodeSpan(text string, span Span) (Event, string, bool) {
+	n := countRun(text, '`')
+	for i := n; i < len(text); {
+		if text[i] != '`' {
+			i++
+			continue
+		}
+		closing := countRun(text[i:], '`')
+		if closing == n {
+			content := normalizeCodeSpan(text[n:i])
+			return Event{Kind: EventText, Text: content, Style: InlineStyle{Code: true}, Span: span}, text[i+closing:], true
+		}
+		i += closing
+	}
+	return Event{}, text, false
+}
+
+func countRun(text string, marker byte) int {
+	n := 0
+	for n < len(text) && text[n] == marker {
+		n++
+	}
+	return n
+}
+
+func normalizeCodeSpan(text string) string {
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.ReplaceAll(text, "\r", " ")
+	if len(text) >= 2 && text[0] == ' ' && text[len(text)-1] == ' ' && strings.Trim(text, " ") != "" {
+		text = text[1 : len(text)-1]
+	}
+	return text
+}
+
 func parseAutolink(text string, span Span) (Event, string, bool) {
 	end := strings.IndexByte(text, '>')
 	if end <= 1 {
@@ -607,7 +697,7 @@ func parseAutolink(text string, span Span) (Event, string, bool) {
 
 func nextInlineDelimiter(text string) int {
 	next := len(text)
-	for _, d := range []string{"**", "__", "*", "_", "`", "[", "<"} {
+	for _, d := range []string{"\n", "\\", "**", "__", "*", "_", "`", "[", "<"} {
 		if i := strings.Index(text, d); i >= 0 && i < next {
 			next = i
 		}
@@ -632,7 +722,7 @@ func coalesceText(events []Event) []Event {
 		out = append(out, current)
 	}
 	for _, ev := range events[1:] {
-		if sameStyle(current.Style, ev.Style) {
+		if current.Kind == EventText && ev.Kind == EventText && sameStyle(current.Style, ev.Style) {
 			if !merging {
 				builder.WriteString(current.Text)
 				merging = true
@@ -650,6 +740,10 @@ func coalesceText(events []Event) []Event {
 
 func sameStyle(a, b InlineStyle) bool {
 	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Code == b.Code && a.Link == b.Link
+}
+
+func isEscapablePunctuation(c byte) bool {
+	return strings.ContainsRune("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", rune(c))
 }
 
 func isAlphaNumeric(r rune) bool {

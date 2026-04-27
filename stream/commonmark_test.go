@@ -40,6 +40,14 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 	if counts[statusUnsupported] == 0 {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
+	wantCounts := map[corpusStatus]int{
+		statusSupported:   65,
+		statusKnownGap:    164,
+		statusUnsupported: 423,
+	}
+	if !reflect.DeepEqual(counts, wantCounts) {
+		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
+	}
 
 	names := make([]string, 0, len(sections))
 	for name := range sections {
@@ -147,17 +155,63 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	46:  expectParagraphText("--", "**", "__"),
 	62:  expectHeadingLevels(1, 2, 3, 4, 5, 6),
 	63:  expectParagraphText("####### foo"),
+	64:  expectBlocks(BlockParagraph, 2),
+	65:  expectParagraphText("## foo"),
+	66:  expectTextParts("foo ", "bar", "*baz*"),
+	67:  expectTextParts("foo"),
+	68:  expectHeadingLevels(3, 2, 1),
+	69:  expectBlocks(BlockIndentedCode, 1),
+	70:  expectParagraphText("foo", "# bar"),
+	71:  expectHeadingLevels(2, 3),
+	72:  expectHeadingLevels(1, 5),
+	73:  expectHeadingLevels(3),
+	74:  expectTextParts("foo ### b"),
+	75:  expectTextParts("foo#"),
+	76:  expectTextParts("foo ###", "foo ###", "foo #"),
+	77:  expectBlocks(BlockThematicBreak, 2, BlockHeading, 1),
+	78:  expectBlocks(BlockParagraph, 2, BlockHeading, 1),
+	79:  expectHeadingLevels(2, 1, 3),
+	107: expectBlocks(BlockIndentedCode, 1),
+	113: expectParagraphText("Foo", "bar"),
+	114: expectBlocks(BlockIndentedCode, 1, BlockParagraph, 1),
+	116: expectBlocks(BlockIndentedCode, 1),
+	118: expectBlocks(BlockIndentedCode, 1),
 	119: expectFencedCode("", "<", " >"),
 	120: expectFencedCode("", "<", " >"),
 	122: expectFencedCode("", "aaa", "~~~"),
 	123: expectFencedCode("", "aaa", "```"),
+	124: expectFencedCode("", "aaa", "```"),
+	125: expectFencedCode("", "aaa", "~~~"),
+	126: expectBlocks(BlockFencedCode, 1),
+	129: expectBlocks(BlockFencedCode, 1),
+	130: expectBlocks(BlockFencedCode, 1),
+	131: expectFencedCode("", "aaa"),
+	132: expectFencedCode("", "aaa"),
+	133: expectFencedCode("", "aaa", " aaa"),
+	134: expectBlocks(BlockIndentedCode, 1),
+	135: expectFencedCode("", "aaa"),
+	136: expectFencedCode("", "aaa"),
+	137: expectFencedCode("", "aaa", "    ```"),
+	140: expectBlocks(BlockParagraph, 2, BlockFencedCode, 1),
 	142: expectFencedCode("ruby", "def foo(x)", "return 3", "end"),
+	143: expectFencedCode("ruby startline=3 $%@#$", "def foo(x)", "return 3", "end"),
+	144: expectFencedCode(";", ""),
+	147: expectFencedCode("", "``` aaa"),
 	219: expectBlocks(BlockParagraph, 2),
 	220: expectBlocks(BlockParagraph, 2),
 	228: expectBlocks(BlockBlockquote, 1, BlockHeading, 1, BlockParagraph, 1),
 	243: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
 	322: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1),
 	328: expectTextStyle("foo", InlineStyle{Code: true}),
+	329: expectTextStyle("foo ` bar", InlineStyle{Code: true}),
+	330: expectTextStyle("``", InlineStyle{Code: true}),
+	331: expectTextStyle(" `` ", InlineStyle{Code: true}),
+	332: expectTextStyle(" a", InlineStyle{Code: true}),
+	334: expectTextStyle("  ", InlineStyle{Code: true}),
+	335: expectTextStyle("foo bar   baz", InlineStyle{Code: true}),
+	336: expectTextStyle("foo ", InlineStyle{Code: true}),
+	337: expectTextStyle("foo   bar  baz", InlineStyle{Code: true}),
+	339: expectTextStyle("foo`bar", InlineStyle{Code: true}),
 	594: expectTextStyle("http://foo.bar.baz", InlineStyle{Link: "http://foo.bar.baz"}),
 	595: expectTextStyle("https://foo.bar.baz/test?q=hello&id=22&boolean", InlineStyle{Link: "https://foo.bar.baz/test?q=hello&id=22&boolean"}),
 }
@@ -206,6 +260,13 @@ func expectParagraphText(parts ...string) func(*testing.T, []eventView) {
 		if got := countEnterBlocks(events)[BlockParagraph]; got == 0 {
 			t.Fatalf("expected paragraph, got %#v", events)
 		}
+		assertTextParts(t, events, parts...)
+	}
+}
+
+func expectTextParts(parts ...string) func(*testing.T, []eventView) {
+	return func(t *testing.T, events []eventView) {
+		t.Helper()
 		assertTextParts(t, events, parts...)
 	}
 }
