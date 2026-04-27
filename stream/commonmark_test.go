@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   65,
-		statusKnownGap:    164,
+		statusSupported:   87,
+		statusKnownGap:    142,
 		statusUnsupported: 423,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -153,6 +153,19 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	44:  expectParagraphText("+++"),
 	45:  expectParagraphText("==="),
 	46:  expectParagraphText("--", "**", "__"),
+	47:  expectBlocks(BlockThematicBreak, 3),
+	48:  expectBlocks(BlockIndentedCode, 1),
+	49:  expectParagraphText("Foo", "***"),
+	50:  expectBlocks(BlockThematicBreak, 1),
+	51:  expectBlocks(BlockThematicBreak, 1),
+	52:  expectBlocks(BlockThematicBreak, 1),
+	53:  expectBlocks(BlockThematicBreak, 1),
+	54:  expectBlocks(BlockThematicBreak, 1),
+	55:  expectBlocks(BlockParagraph, 3),
+	56:  expectTextStyle("-", InlineStyle{Emphasis: true}),
+	57:  expectBlocks(BlockList, 2, BlockListItem, 2, BlockThematicBreak, 1),
+	58:  expectBlocks(BlockParagraph, 2, BlockThematicBreak, 1),
+	60:  expectBlocks(BlockList, 2, BlockListItem, 2, BlockThematicBreak, 1),
 	62:  expectHeadingLevels(1, 2, 3, 4, 5, 6),
 	63:  expectParagraphText("####### foo"),
 	64:  expectBlocks(BlockParagraph, 2),
@@ -199,6 +212,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	147: expectFencedCode("", "``` aaa"),
 	219: expectBlocks(BlockParagraph, 2),
 	220: expectBlocks(BlockParagraph, 2),
+	221: expectBlocks(BlockParagraph, 2),
+	222: expectParagraphText("aaa", "bbb"),
+	223: expectParagraphText("aaa", "bbb", "ccc"),
+	224: expectParagraphText("aaa", "bbb"),
+	225: expectBlocks(BlockIndentedCode, 1, BlockParagraph, 1),
+	226: expectLineBreaks(1),
+	227: expectBlocks(BlockParagraph, 1, BlockHeading, 1),
 	228: expectBlocks(BlockBlockquote, 1, BlockHeading, 1, BlockParagraph, 1),
 	243: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
 	322: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1),
@@ -214,6 +234,8 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	339: expectTextStyle("foo`bar", InlineStyle{Code: true}),
 	594: expectTextStyle("http://foo.bar.baz", InlineStyle{Link: "http://foo.bar.baz"}),
 	595: expectTextStyle("https://foo.bar.baz/test?q=hello&id=22&boolean", InlineStyle{Link: "https://foo.bar.baz/test?q=hello&id=22&boolean"}),
+	648: expectSoftBreaks(1),
+	649: expectSoftBreaks(1),
 }
 
 func expectBlocks(pairs ...any) func(*testing.T, []eventView) {
@@ -297,6 +319,29 @@ func expectTextStyle(text string, style InlineStyle) func(*testing.T, []eventVie
 			}
 		}
 		t.Fatalf("missing styled text %q (%#v) in %#v", text, style, events)
+	}
+}
+
+func expectSoftBreaks(want int) func(*testing.T, []eventView) {
+	return expectEventKind(EventSoftBreak, want)
+}
+
+func expectLineBreaks(want int) func(*testing.T, []eventView) {
+	return expectEventKind(EventLineBreak, want)
+}
+
+func expectEventKind(kind EventKind, want int) func(*testing.T, []eventView) {
+	return func(t *testing.T, events []eventView) {
+		t.Helper()
+		got := 0
+		for _, ev := range events {
+			if ev.Kind == kind {
+				got++
+			}
+		}
+		if got != want {
+			t.Fatalf("event kind %s count mismatch: want %d, got %d in %#v", kind, want, got, events)
+		}
 	}
 }
 

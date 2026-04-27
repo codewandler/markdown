@@ -188,6 +188,15 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
 	}
 
+	if thematicBreak(line.text) {
+		p.ensureDocument(events)
+		p.closeParagraph(events)
+		p.closeListItem(events)
+		p.closeList(events)
+		p.emitThematicBreak(line, events)
+		return
+	}
+
 	if item, ok := listItem(line.text); ok {
 		p.ensureDocument(events)
 		p.closeParagraph(events)
@@ -247,17 +256,14 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 	if thematicBreak(line.text) {
 		p.ensureDocument(events)
 		p.closeParagraph(events)
-		*events = append(*events,
-			Event{Kind: EventEnterBlock, Block: BlockThematicBreak, Span: Span{Start: line.start, End: line.end}},
-			Event{Kind: EventExitBlock, Block: BlockThematicBreak, Span: Span{Start: line.start, End: line.end}},
-		)
+		p.emitThematicBreak(line, events)
 		return
 	}
 
 	if indentedCode(line.text) {
 		if len(p.paragraph.lines) > 0 {
 			inner := line
-			inner.text = strings.TrimPrefix(line.text, "    ")
+			inner.text = strings.TrimLeft(line.text, " \t")
 			p.addParagraphLine(inner)
 			return
 		}
@@ -283,8 +289,16 @@ func (p *parser) ensureDocument(events *[]Event) {
 }
 
 func (p *parser) addParagraphLine(line lineInfo) {
+	text := line.text
+	if len(p.paragraph.lines) == 0 {
+		if indent := leadingSpaces(text); indent <= 3 {
+			text = text[indent:]
+		}
+	} else {
+		text = strings.TrimLeft(text, " \t")
+	}
 	p.paragraph.lines = append(p.paragraph.lines, paragraphLine{
-		text: line.text,
+		text: text,
 		span: Span{Start: line.start, End: line.end},
 	})
 }
@@ -312,6 +326,13 @@ func (p *parser) closeParagraph(events *[]Event) {
 	} else {
 		p.paragraph.lines = p.paragraph.lines[:0]
 	}
+}
+
+func (p *parser) emitThematicBreak(line lineInfo, events *[]Event) {
+	*events = append(*events,
+		Event{Kind: EventEnterBlock, Block: BlockThematicBreak, Span: Span{Start: line.start, End: line.end}},
+		Event{Kind: EventExitBlock, Block: BlockThematicBreak, Span: Span{Start: line.start, End: line.end}},
+	)
 }
 
 func (p *parser) emitIndentedCodeLine(line lineInfo, events *[]Event) {
@@ -452,6 +473,9 @@ func closingATXSequence(text string) int {
 }
 
 func thematicBreak(line string) bool {
+	if leadingSpaces(line) > 3 {
+		return false
+	}
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
 		return false
@@ -554,7 +578,11 @@ func parseInline(text string, span Span) []Event {
 	autolinkPossible := strings.Contains(text, ">")
 	for len(text) > 0 {
 		if text[0] == '\n' {
-			events = append(events, Event{Kind: EventSoftBreak, Span: span})
+			if trimHardBreakMarker(events) {
+				events = append(events, Event{Kind: EventLineBreak, Span: span})
+			} else {
+				events = append(events, Event{Kind: EventSoftBreak, Span: span})
+			}
 			text = text[1:]
 			continue
 		}
@@ -681,6 +709,26 @@ func normalizeCodeSpan(text string) string {
 		text = text[1 : len(text)-1]
 	}
 	return text
+}
+
+func trimHardBreakMarker(events []Event) bool {
+	if len(events) == 0 {
+		return false
+	}
+	last := &events[len(events)-1]
+	if last.Kind != EventText || last.Style != (InlineStyle{}) {
+		return false
+	}
+	if strings.HasSuffix(last.Text, "\\") {
+		last.Text = strings.TrimSuffix(last.Text, "\\")
+		return true
+	}
+	trimmed := strings.TrimRight(last.Text, " ")
+	if len(last.Text)-len(trimmed) >= 2 {
+		last.Text = trimmed
+		return true
+	}
+	return false
 }
 
 func parseAutolink(text string, span Span) (Event, string, bool) {

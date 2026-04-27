@@ -10,6 +10,25 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `87` supported,
+  `142` known gaps, and `423` unsupported examples.
+- Added structural CommonMark assertions for all paragraph examples, blank
+  lines, soft line breaks, and additional thematic break cases.
+
+### Changed
+
+- Improved thematic break precedence over list item parsing for ambiguous
+  marker-only lines.
+- Enforced the CommonMark indentation limit for thematic breaks.
+- Normalized paragraph continuation indentation for paragraph-boundary inline
+  parsing.
+- Added hard line break event emission for two-space and backslash line break
+  markers inside finalized paragraphs.
+
 ## [0.6.0] - 2026-04-27
 
 ### Added
