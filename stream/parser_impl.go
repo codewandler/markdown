@@ -695,6 +695,15 @@ func parseInline(text string, span Span) []Event {
 				continue
 			}
 		}
+		if isInlineDelimiterByte(text[0]) {
+			n := 1
+			if text[0] == '*' || text[0] == '_' || text[0] == '\\' {
+				n = countRun(text, text[0])
+			}
+			events = append(events, Event{Kind: EventText, Text: text[:n], Span: span})
+			text = text[n:]
+			continue
+		}
 		next := nextInlineDelimiter(text)
 		if next <= 0 {
 			next = 1
@@ -948,13 +957,14 @@ func isEmailAutolink(target string) bool {
 }
 
 func nextInlineDelimiter(text string) int {
-	next := len(text)
-	for _, d := range []string{"\n", "\\", "**", "__", "*", "_", "`", "[", "<", "&"} {
-		if i := strings.Index(text, d); i >= 0 && i < next {
-			next = i
-		}
+	if i := strings.IndexAny(text, "\n\\*_`[<&"); i >= 0 {
+		return i
 	}
-	return next
+	return len(text)
+}
+
+func isInlineDelimiterByte(c byte) bool {
+	return c == '\n' || c == '\\' || c == '*' || c == '_' || c == '`' || c == '[' || c == '<' || c == '&'
 }
 
 func coalesceText(events []Event) []Event {

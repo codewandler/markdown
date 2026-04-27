@@ -39,6 +39,8 @@ Production-target implementation plan. The repository currently has:
 - entity and numeric character reference coverage for paragraph text,
   fenced-code info strings, code-span literal fallback, indented-code literal
   fallback, and delimiter-neutral decoded text
+- hardened inline delimiter fallback so malformed delimiter-heavy paragraphs
+  avoid repeated full-tail delimiter scans
 
 The next implementation turns must expand conformance, performance,
 responsiveness, memory, and agentsdk compatibility without weakening the

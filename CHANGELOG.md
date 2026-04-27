@@ -10,6 +10,15 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-04-27
+
+### Changed
+
+- Optimized inline delimiter fallback for malformed delimiter-heavy paragraphs.
+- Replaced repeated full-tail delimiter searches with a literal fallback for
+  delimiter bytes that are not accepted by the current inline parser.
+- Kept plain-text scanning on an optimized single-pass delimiter search.
+
 ## [0.14.0] - 2026-04-27
 
 ### Added
