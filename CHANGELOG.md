@@ -10,6 +10,16 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-04-28
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `255` supported,
+  `152` known gaps, and `245` unsupported examples.
+- Added structural assertions for the complete textual-content section.
+- Added structural assertions for the single CommonMark inlines and precedence
+  examples.
+
 ## [0.19.0] - 2026-04-28
 
 ### Added

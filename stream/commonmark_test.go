@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   250,
+		statusSupported:   255,
 		statusKnownGap:    152,
-		statusUnsupported: 250,
+		statusUnsupported: 245,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -140,13 +140,16 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Fenced code blocks",
 		"Hard line breaks",
 		"Indented code blocks",
+		"Inlines",
 		"Links",
 		"List items",
 		"Lists",
 		"Paragraphs",
+		"Precedence",
 		"Setext headings",
 		"Soft line breaks",
 		"Tabs",
+		"Textual content",
 		"Thematic breaks":
 		return statusKnownGap
 	default:
@@ -184,6 +187,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	38:  expectBlocks(BlockParagraph, 2, BlockList, 1, BlockListItem, 1),
 	39:  expectTextParts("foo\n\nbar"),
 	40:  expectTextParts("\tfoo"),
+	42:  expectBlocks(BlockList, 1, BlockListItem, 2),
 	43:  expectBlocks(BlockThematicBreak, 3),
 	44:  expectParagraphText("+++"),
 	45:  expectParagraphText("==="),
@@ -324,6 +328,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	304: expectBlocks(BlockParagraph, 1, BlockList, 0),
 	305: expectBlocks(BlockParagraph, 2, BlockList, 1, BlockListItem, 1),
 	322: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1),
+	327: expectTextStyle("hi", InlineStyle{Code: true}),
 	328: expectTextStyle("foo", InlineStyle{Code: true}),
 	329: expectTextStyle("foo ` bar", InlineStyle{Code: true}),
 	330: expectTextStyle("``", InlineStyle{Code: true}),
@@ -405,6 +410,9 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	647: expectTextParts("foo"),
 	648: expectSoftBreaks(1),
 	649: expectSoftBreaks(1),
+	650: expectParagraphText("hello $.;'there"),
+	651: expectParagraphText("Foo χρῆν"),
+	652: expectParagraphText("Multiple     spaces"),
 }
 
 func expectBlocks(pairs ...any) func(*testing.T, []eventView) {
