@@ -438,7 +438,7 @@ func openingFence(line string) (byte, int, int, string, bool) {
 	if n < 3 {
 		return 0, 0, 0, "", false
 	}
-	info := strings.TrimSpace(trimmed[n:])
+	info := unescapeBackslashPunctuation(strings.TrimSpace(trimmed[n:]))
 	if marker == '`' && strings.Contains(info, "`") {
 		return 0, 0, 0, "", false
 	}
@@ -624,7 +624,7 @@ func parseInline(text string, span Span) []Event {
 			continue
 		}
 		if strings.HasPrefix(text, "**") {
-			if end := strings.Index(text[2:], "**"); end >= 0 {
+			if end := findInlineCloser(text[2:], "**"); end >= 0 {
 				content := text[2 : 2+end]
 				events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Strong: true}, Span: span})
 				text = text[2+end+2:]
@@ -632,7 +632,7 @@ func parseInline(text string, span Span) []Event {
 			}
 		}
 		if strings.HasPrefix(text, "__") {
-			if end := strings.Index(text[2:], "__"); end >= 0 {
+			if end := findInlineCloser(text[2:], "__"); end >= 0 {
 				content := text[2 : 2+end]
 				events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Strong: true}, Span: span})
 				text = text[2+end+2:]
@@ -640,7 +640,7 @@ func parseInline(text string, span Span) []Event {
 			}
 		}
 		if strings.HasPrefix(text, "*") {
-			if end := strings.Index(text[1:], "*"); end >= 0 {
+			if end := findInlineCloser(text[1:], "*"); end >= 0 {
 				content := text[1 : 1+end]
 				if content != "" {
 					events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Emphasis: true}, Span: span})
@@ -650,7 +650,7 @@ func parseInline(text string, span Span) []Event {
 			}
 		}
 		if strings.HasPrefix(text, "_") {
-			if end := strings.Index(text[1:], "_"); end >= 0 {
+			if end := findInlineCloser(text[1:], "_"); end >= 0 {
 				content := text[1 : 1+end]
 				if content != "" {
 					events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Emphasis: true}, Span: span})
@@ -711,6 +711,27 @@ func parseInlineLink(text string, span Span) (Event, string, bool) {
 		return Event{}, text, false
 	}
 	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: url}, Span: span}, text[closeText+2+closeURL+1:], true
+}
+
+func findInlineCloser(text string, marker string) int {
+	escaped := false
+	for i := 0; i <= len(text)-len(marker); i++ {
+		if text[i] == '\n' {
+			return -1
+		}
+		if escaped {
+			escaped = false
+			continue
+		}
+		if text[i] == '\\' {
+			escaped = true
+			continue
+		}
+		if strings.HasPrefix(text[i:], marker) {
+			return i
+		}
+	}
+	return -1
 }
 
 func parseCodeSpan(text string, span Span) (Event, string, bool) {
@@ -881,6 +902,23 @@ func sameStyle(a, b InlineStyle) bool {
 
 func isEscapablePunctuation(c byte) bool {
 	return strings.ContainsRune("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", rune(c))
+}
+
+func unescapeBackslashPunctuation(text string) string {
+	if !strings.Contains(text, "\\") {
+		return text
+	}
+	var out strings.Builder
+	out.Grow(len(text))
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\\' && i+1 < len(text) && isEscapablePunctuation(text[i+1]) {
+			out.WriteByte(text[i+1])
+			i++
+			continue
+		}
+		out.WriteByte(text[i])
+	}
+	return out.String()
 }
 
 func isASCIIAlpha(c byte) bool {

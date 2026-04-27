@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   159,
-		statusKnownGap:    85,
-		statusUnsupported: 408,
+		statusSupported:   169,
+		statusKnownGap:    88,
+		statusUnsupported: 395,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -132,6 +132,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 	switch ex.Section {
 	case "ATX headings",
 		"Autolinks",
+		"Backslash escapes",
 		"Blank lines",
 		"Block quotes",
 		"Code spans",
@@ -150,6 +151,16 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 }
 
 var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
+	12:  expectTextParts("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"),
+	13:  expectTextParts("\\\t\\A\\a\\ \\3\\φ\\«"),
+	14:  expectTextParts("*not emphasized*", "<br/> not a tag", "[not a link](/foo)", "`not code`", "1. not a list", "* not a list", "# not a heading", "[foo]: /url \"not a reference\"", "&ouml; not a character entity"),
+	15:  expectTextParts("\\", "emphasis"),
+	16:  expectLineBreaks(1),
+	17:  expectTextStyle("\\[\\`", InlineStyle{Code: true}),
+	18:  expectBlocks(BlockIndentedCode, 1),
+	19:  expectFencedCode("", "\\[\\]"),
+	20:  expectTextStyle("https://example.com?find=\\*", InlineStyle{Link: "https://example.com?find=\\*"}),
+	24:  expectFencedCode("foo+bar", "foo"),
 	43:  expectBlocks(BlockThematicBreak, 3),
 	44:  expectParagraphText("+++"),
 	45:  expectParagraphText("==="),

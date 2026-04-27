@@ -10,6 +10,25 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `169` supported,
+  `88` known gaps, and `395` unsupported examples.
+- Added structural assertions for supported backslash-escape examples covering
+  paragraph text, code spans, indented code, fenced code, hard breaks, and
+  autolinks.
+
+### Changed
+
+- Reclassified backslash-escape examples as known gaps instead of unsupported
+  where full link-reference, inline-link title, or raw-HTML behavior is still
+  outside the current parser scope.
+- Unescape backslash-escaped ASCII punctuation in fenced-code info strings.
+- Prevent simple emphasis matching from crossing escaped delimiters or line
+  boundaries in the current paragraph-boundary inline parser.
+
 ## [0.12.0] - 2026-04-27
 
 ### Added
