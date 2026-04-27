@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   169,
-		statusKnownGap:    88,
-		statusUnsupported: 395,
+		statusSupported:   182,
+		statusKnownGap:    92,
+		statusUnsupported: 378,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -136,6 +136,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Blank lines",
 		"Block quotes",
 		"Code spans",
+		"Entity and numeric character references",
 		"Fenced code blocks",
 		"Hard line breaks",
 		"Indented code blocks",
@@ -161,6 +162,19 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	19:  expectFencedCode("", "\\[\\]"),
 	20:  expectTextStyle("https://example.com?find=\\*", InlineStyle{Link: "https://example.com?find=\\*"}),
 	24:  expectFencedCode("foo+bar", "foo"),
+	25:  expectTextParts("  & © Æ Ď", "¾ ℋ ⅆ", "∲ ≧̸"),
+	26:  expectTextParts("# Ӓ Ϡ �"),
+	27:  expectTextParts("\" ആ ಫ"),
+	28:  expectTextParts("&nbsp &x; &#; &#x;", "&#87654321;", "&#abcdef0;", "&ThisIsNotDefined; &hi?;"),
+	29:  expectTextParts("&copy"),
+	30:  expectTextParts("&MadeUpEntity;"),
+	34:  expectFencedCode("föö", "foo"),
+	35:  expectTextStyle("f&ouml;&ouml;", InlineStyle{Code: true}),
+	36:  expectTextParts("f&ouml;f&ouml;"),
+	37:  expectTextParts("*foo*", "foo"),
+	38:  expectBlocks(BlockParagraph, 2, BlockList, 1, BlockListItem, 1),
+	39:  expectTextParts("foo\n\nbar"),
+	40:  expectTextParts("\tfoo"),
 	43:  expectBlocks(BlockThematicBreak, 3),
 	44:  expectParagraphText("+++"),
 	45:  expectParagraphText("==="),

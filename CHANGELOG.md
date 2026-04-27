@@ -10,6 +10,26 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `182` supported,
+  `92` known gaps, and `378` unsupported examples.
+- Added structural assertions for supported entity and numeric character
+  reference examples.
+
+### Changed
+
+- Decode valid named, decimal numeric, and hexadecimal numeric character
+  references in paragraph-boundary inline text.
+- Decode character references in fenced-code info strings.
+- Keep decoded character references delimiter-neutral so references such as
+  `&#42;foo&#42;` do not create emphasis delimiters.
+- Reclassified entity/reference examples as known gaps where full link title,
+  link reference, or raw-HTML behavior remains outside the current parser
+  scope.
+
 ## [0.13.0] - 2026-04-27
 
 ### Added

@@ -2,9 +2,11 @@ package stream
 
 import (
 	"bytes"
+	"html"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 const releaseBufferCap = 64 * 1024
@@ -438,7 +440,7 @@ func openingFence(line string) (byte, int, int, string, bool) {
 	if n < 3 {
 		return 0, 0, 0, "", false
 	}
-	info := unescapeBackslashPunctuation(strings.TrimSpace(trimmed[n:]))
+	info := decodeCharacterReferences(unescapeBackslashPunctuation(strings.TrimSpace(trimmed[n:])))
 	if marker == '`' && strings.Contains(info, "`") {
 		return 0, 0, 0, "", false
 	}
@@ -686,6 +688,13 @@ func parseInline(text string, span Span) []Event {
 			}
 			autolinkPossible = strings.Contains(text[1:], ">")
 		}
+		if text[0] == '&' {
+			if decoded, rest, ok := parseCharacterReference(text); ok {
+				events = append(events, Event{Kind: EventText, Text: decoded, Span: span})
+				text = rest
+				continue
+			}
+		}
 		next := nextInlineDelimiter(text)
 		if next <= 0 {
 			next = 1
@@ -711,6 +720,91 @@ func parseInlineLink(text string, span Span) (Event, string, bool) {
 		return Event{}, text, false
 	}
 	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: url}, Span: span}, text[closeText+2+closeURL+1:], true
+}
+
+func parseCharacterReference(text string) (string, string, bool) {
+	end := strings.IndexByte(text, ';')
+	if end < 0 || end > 32 {
+		return "", text, false
+	}
+	candidate := text[:end+1]
+	decoded, ok := decodeCharacterReference(candidate)
+	if !ok {
+		return "", text, false
+	}
+	return decoded, text[end+1:], true
+}
+
+func decodeCharacterReferences(text string) string {
+	if !strings.Contains(text, "&") {
+		return text
+	}
+	var out strings.Builder
+	out.Grow(len(text))
+	for len(text) > 0 {
+		i := strings.IndexByte(text, '&')
+		if i < 0 {
+			out.WriteString(text)
+			break
+		}
+		out.WriteString(text[:i])
+		decoded, rest, ok := parseCharacterReference(text[i:])
+		if !ok {
+			out.WriteByte('&')
+			text = text[i+1:]
+			continue
+		}
+		out.WriteString(decoded)
+		text = rest
+	}
+	return out.String()
+}
+
+func decodeCharacterReference(candidate string) (string, bool) {
+	if strings.HasPrefix(candidate, "&#x") || strings.HasPrefix(candidate, "&#X") {
+		return decodeNumericCharacterReference(candidate[3:len(candidate)-1], 16)
+	}
+	if strings.HasPrefix(candidate, "&#") {
+		return decodeNumericCharacterReference(candidate[2:len(candidate)-1], 10)
+	}
+	if !validNamedCharacterReference(candidate) {
+		return "", false
+	}
+	decoded := html.UnescapeString(candidate)
+	if decoded == candidate {
+		return "", false
+	}
+	return decoded, true
+}
+
+func validNamedCharacterReference(candidate string) bool {
+	if len(candidate) < 3 || candidate[0] != '&' || candidate[len(candidate)-1] != ';' {
+		return false
+	}
+	if !isASCIIAlpha(candidate[1]) {
+		return false
+	}
+	for i := 2; i < len(candidate)-1; i++ {
+		if !isASCIIAlphaNumeric(candidate[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func decodeNumericCharacterReference(digits string, base int) (string, bool) {
+	if digits == "" {
+		return "", false
+	}
+	value, err := strconv.ParseInt(digits, base, 32)
+	if err != nil || value > utf8.MaxRune {
+		return "", false
+	}
+	r := rune(value)
+	if r == 0 || !utf8.ValidRune(r) {
+		return "\uFFFD", true
+	}
+	return string(r), true
 }
 
 func findInlineCloser(text string, marker string) int {
@@ -855,7 +949,7 @@ func isEmailAutolink(target string) bool {
 
 func nextInlineDelimiter(text string) int {
 	next := len(text)
-	for _, d := range []string{"\n", "\\", "**", "__", "*", "_", "`", "[", "<"} {
+	for _, d := range []string{"\n", "\\", "**", "__", "*", "_", "`", "[", "<", "&"} {
 		if i := strings.Index(text, d); i >= 0 && i < next {
 			next = i
 		}
