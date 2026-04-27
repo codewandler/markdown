@@ -10,6 +10,20 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-27
+
+### Added
+
+- Added a pinned CommonMark `0.31.2` JSON corpus under
+  `internal/commonmarktests`.
+- Added a CommonMark corpus loader with fixture validation.
+- Added parser tests that run split-equivalence across the full CommonMark
+  corpus.
+- Added explicit CommonMark example classification as `supported`,
+  `known_gap`, or `unsupported`.
+- Added structural parser assertions for the currently supported CommonMark
+  examples.
+
 ## [0.3.0] - 2026-04-27
 
 ### Changed

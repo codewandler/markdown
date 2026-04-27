@@ -4,18 +4,21 @@
 
 Production-target implementation plan. The repository currently has:
 
-- an initial `stream` parser and event model that must be replaced before
-  production use
+- a production-oriented `stream` parser foundation for the initial supported
+  subset
 - a low-level terminal renderer
 - configurable terminal code-block layout
 - a dependency-free Go highlighter
 - an optional Chroma highlighter adapter in a submodule
 - one runnable example module using local `replace` directives
+- a pinned CommonMark `0.31.2` corpus loader
+- full-corpus parser split-equivalence tests with explicit
+  supported/known-gap/unsupported accounting
 
-The next implementation turn must replace the initial parser with a production
-quality incremental parser foundation and add the conformance, performance, and
-compatibility harness needed to prevent regressions. No shortcuts, undocumented
-workarounds, or "good enough for demo" behavior are acceptable.
+The next implementation turns must expand conformance, performance,
+responsiveness, memory, and agentsdk compatibility without weakening the
+append-only streaming contract. No shortcuts, undocumented workarounds, or
+"good enough for demo" behavior are acceptable.
 
 ## Outcome
 
@@ -637,6 +640,8 @@ Acceptance:
 - benchmarks run
 
 ### Step 4: CommonMark Corpus Harness
+
+Status: implemented in `v0.4.0`.
 
 Files:
 

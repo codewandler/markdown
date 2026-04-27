@@ -45,8 +45,11 @@ CommonMark conformance should be reached in layers:
    they are stable or when `Flush` is called.
 3. Start with paragraph-boundary inline parsing so supported output is correct
    before attempting an incremental inline delimiter stack.
-4. Add selected CommonMark examples as structural event tests.
-5. Add split-fuzz tests that feed the same Markdown through every chunk
+4. Use the pinned CommonMark `0.31.2` JSON corpus for parser stability and
+   explicit supported/known-gap/unsupported accounting.
+5. Add structural event assertions for examples the current parser explicitly
+   supports.
+6. Add split-fuzz tests that feed the same Markdown through every chunk
    boundary and compare the final event sequence.
 
 The parser is allowed to be conservative while streaming. It is not allowed to
