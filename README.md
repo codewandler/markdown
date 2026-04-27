@@ -66,6 +66,8 @@ The parser test suite includes:
 - responsiveness tests for stable streaming emission points
 - memory-retention checks for large partial lines, fenced code, paragraphs, and
   reset behavior
+- focused parser tests for pending link-reference-definition continuation,
+  fallback, flush, and split-equivalence behavior
 - `-benchmem` benchmarks for long streams, tiny chunks, corpus parsing, and
   malformed delimiter-heavy input
 

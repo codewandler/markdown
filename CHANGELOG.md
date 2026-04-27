@@ -10,6 +10,15 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-04-28
+
+### Added
+
+- Added parser-level regression tests for pending link reference definitions,
+  invalid fallback to paragraph text, flush-only definitions, and next-line
+  reference resolution.
+- Added split-equivalence coverage for multiline link reference definitions.
+
 ## [0.22.0] - 2026-04-28
 
 ### Added

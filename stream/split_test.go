@@ -15,6 +15,7 @@ func TestSplitEquivalence(t *testing.T) {
 		"> quote\n\n",
 		"---\n",
 		"A **strong** and `code`\n",
+		"[foo]:\n/url\n  \"title\"\n\n[foo]\n",
 	}
 	for _, sample := range samples {
 		want := viewEvents(parseAll(t, sample))

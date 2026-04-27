@@ -173,6 +173,30 @@ func TestInlineSubset(t *testing.T) {
 	assertContains(t, got, eventView{Kind: EventText, Text: "link", Style: InlineStyle{Link: "https://example.com"}})
 }
 
+func TestLinkReferenceDefinitions(t *testing.T) {
+	t.Run("multiline definition resolves later reference", func(t *testing.T) {
+		events := viewEvents(parseAll(t, "[foo]:\n/url\n  \"title\"\n\n[foo]\n"))
+		assertContains(t, events, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "/url", LinkTitle: "title"}})
+	})
+
+	t.Run("invalid pending definition falls back to paragraph text", func(t *testing.T) {
+		events := viewEvents(parseAll(t, "[foo]:\n\n[foo]\n"))
+		assertContains(t, events, eventView{Kind: EventText, Text: "[foo]:"})
+		assertContains(t, events, eventView{Kind: EventText, Text: "[foo]"})
+	})
+
+	t.Run("definition at flush emits no document events", func(t *testing.T) {
+		if got := viewEvents(parseAll(t, "[foo]:\n/url")); len(got) != 0 {
+			t.Fatalf("expected definition-only document to emit no events, got %#v", got)
+		}
+	})
+
+	t.Run("next non-title line resolves after pending destination", func(t *testing.T) {
+		events := viewEvents(parseAll(t, "[foo]: /url\n[foo]\n"))
+		assertContains(t, events, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "/url"}})
+	})
+}
+
 func parseAll(t *testing.T, in string) []Event {
 	t.Helper()
 	p := NewParser()

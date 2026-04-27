@@ -18,6 +18,8 @@ Production-target implementation plan. The repository currently has:
 - parser responsiveness tests
 - parser memory-retention tests for large partial lines, fenced code,
   paragraphs, and reset behavior
+- focused link-reference-definition tests for pending continuation, fallback,
+  flush-only definitions, and split equivalence
 - `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
   malformed/pathological inline delimiter input
 - exact CommonMark classification totals: `273` supported, `161` known gaps,
