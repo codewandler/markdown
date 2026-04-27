@@ -10,6 +10,23 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-04-28
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `262` supported,
+  `172` known gaps, and `218` unsupported examples.
+- Added parser state for pre-use link reference definitions.
+- Added structural assertions for supported link reference definition examples.
+
+### Changed
+
+- Resolve reference-style links from definitions that have already appeared in
+  the stream.
+- Reclassified remaining link reference definition examples as known gaps where
+  they require forward references, multiline definitions, container-scoped
+  definitions, or broader inline/link behavior.
+
 ## [0.20.0] - 2026-04-28
 
 ### Added

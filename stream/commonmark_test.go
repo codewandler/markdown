@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   255,
-		statusKnownGap:    152,
-		statusUnsupported: 245,
+		statusSupported:   262,
+		statusKnownGap:    172,
+		statusUnsupported: 218,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -141,6 +141,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Hard line breaks",
 		"Indented code blocks",
 		"Inlines",
+		"Link reference definitions",
 		"Links",
 		"List items",
 		"Lists",
@@ -281,6 +282,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	143: expectFencedCode("ruby startline=3 $%@#$", "def foo(x)", "return 3", "end"),
 	144: expectFencedCode(";", ""),
 	147: expectFencedCode("", "``` aaa"),
+	192: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	200: expectTextStyle("foo", InlineStyle{Link: ""}),
+	202: expectTextStyle("foo", InlineStyle{Link: "/url\\bar*baz", LinkTitle: "foo\"bar\\baz"}),
+	205: expectTextStyle("Foo", InlineStyle{Link: "/url"}),
+	206: expectTextStyle("αγω", InlineStyle{Link: "/φου"}),
+	207: expectBlocks(BlockDocument, 0),
+	215: expectBlocks(BlockHeading, 1, BlockParagraph, 1),
 	219: expectBlocks(BlockParagraph, 2),
 	220: expectBlocks(BlockParagraph, 2),
 	221: expectBlocks(BlockParagraph, 2),

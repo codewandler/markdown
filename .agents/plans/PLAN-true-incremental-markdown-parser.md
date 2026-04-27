@@ -20,8 +20,8 @@ Production-target implementation plan. The repository currently has:
   paragraphs, and reset behavior
 - `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
   malformed/pathological inline delimiter input
-- exact CommonMark classification totals: `255` supported, `152` known gaps,
-  and `245` unsupported examples
+- exact CommonMark classification totals: `262` supported, `172` known gaps,
+  and `218` unsupported examples
 - complete ATX heading section coverage in the supported CommonMark corpus
 - expanded fenced-code, indented-code, and code-span coverage
 - complete paragraph, blank-line, and soft-line-break coverage in the
@@ -47,8 +47,11 @@ Production-target implementation plan. The repository currently has:
   trailing blank-line dropping at block close
 - direct inline link coverage with empty labels/destinations, angle-bracketed
   destinations, escaped punctuation, balanced raw parentheses, character
-  references, and optional link titles; reference-style links remain a known
-  gap until reference definitions are represented in parser state
+  references, and optional link titles
+- pre-use link reference definitions are stored in parser state and used by
+  reference-style links once known; forward references, multiline definitions,
+  and container-scoped reference definitions remain known gaps because they
+  require more parser state without violating append-only streaming
 - tab-stop indentation support for non-nested block recognition, including
   indented code, headings, and thematic breaks; nested tab cases remain tied to
   the container-stack work

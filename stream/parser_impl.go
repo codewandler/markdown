@@ -36,6 +36,7 @@ type parser struct {
 
 	paragraph paragraphState
 	fence     fenceState
+	refs      map[string]linkReference
 
 	inBlockquote       bool
 	inList             bool
@@ -43,6 +44,11 @@ type parser struct {
 	inListItem         bool
 	inIndented         bool
 	indentedBlankLines int
+}
+
+type linkReference struct {
+	dest  string
+	title string
 }
 
 type lineInfo struct {
@@ -175,6 +181,18 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		return
 	}
 
+	if len(p.paragraph.lines) == 0 && !p.inList && !p.inListItem {
+		if label, ref, ok := parseLinkReferenceDefinition(line.text); ok {
+			if p.refs == nil {
+				p.refs = make(map[string]linkReference)
+			}
+			if _, exists := p.refs[label]; !exists {
+				p.refs[label] = ref
+			}
+			return
+		}
+	}
+
 	if content, ok := blockquoteContent(line.text); ok {
 		p.ensureDocument(events)
 		if !p.inBlockquote {
@@ -269,9 +287,10 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 	if level, text, ok := heading(line.text); ok {
 		p.ensureDocument(events)
 		p.closeParagraph(events)
-		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: Span{Start: line.start, End: line.end}})
-		*events = append(*events, parseInline(text, Span{Start: line.start, End: line.end})...)
-		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: Span{Start: line.start, End: line.end}})
+		span := Span{Start: line.start, End: line.end}
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: span})
+		*events = append(*events, p.parseInline(text, span)...)
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: span})
 		return
 	}
 
@@ -340,7 +359,7 @@ func (p *parser) closeParagraph(events *[]Event) {
 		}
 		text.WriteString(line.text)
 	}
-	*events = append(*events, parseInline(text.String(), Span{Start: start, End: end})...)
+	*events = append(*events, p.parseInline(text.String(), Span{Start: start, End: end})...)
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: Span{Start: start, End: end}})
 	clear(p.paragraph.lines)
 	if cap(p.paragraph.lines) > 1024 {
@@ -365,7 +384,7 @@ func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) 
 		}
 		text.WriteString(line.text)
 	}
-	*events = append(*events, parseInline(text.String(), Span{Start: start, End: end})...)
+	*events = append(*events, p.parseInline(text.String(), Span{Start: start, End: end})...)
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: Span{Start: start, End: end}})
 	clear(p.paragraph.lines)
 	if cap(p.paragraph.lines) > 1024 {
@@ -699,7 +718,11 @@ func stripIndentColumns(line string, columns int) string {
 	return ""
 }
 
-func parseInline(text string, span Span) []Event {
+func (p *parser) parseInline(text string, span Span) []Event {
+	return parseInline(text, span, p.refs)
+}
+
+func parseInline(text string, span Span, refs map[string]linkReference) []Event {
 	if text == "" {
 		return []Event{{Kind: EventText, Text: "", Span: span}}
 	}
@@ -776,6 +799,13 @@ func parseInline(text string, span Span) []Event {
 			}
 			linkPossible = strings.Contains(text[1:], "](")
 		}
+		if text[0] == '[' && len(refs) > 0 {
+			if ev, rest, ok := parseReferenceLink(text, span, refs); ok {
+				events = append(events, ev)
+				text = rest
+				continue
+			}
+		}
 		if text[0] == '<' && autolinkPossible {
 			if ev, rest, ok := parseAutolink(text, span); ok {
 				events = append(events, ev)
@@ -821,6 +851,74 @@ func parseInlineLink(text string, span Span) (Event, string, bool) {
 		return Event{}, text, false
 	}
 	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title}, Span: span}, text[closeText+2+end:], true
+}
+
+func parseReferenceLink(text string, span Span, refs map[string]linkReference) (Event, string, bool) {
+	closeLabel := matchingLinkLabelEnd(text)
+	if closeLabel <= 0 {
+		return Event{}, text, false
+	}
+	labelText := decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeLabel]))
+	refLabel := labelText
+	end := closeLabel + 1
+	if end < len(text) && text[end] == '[' {
+		closeRef := matchingLinkLabelEnd(text[end:])
+		if closeRef < 0 {
+			return Event{}, text, false
+		}
+		if closeRef > 1 {
+			refLabel = decodeCharacterReferences(unescapeBackslashPunctuation(text[end+1 : end+closeRef]))
+		}
+		end += closeRef + 1
+	}
+	ref, ok := refs[normalizeReferenceLabel(refLabel)]
+	if !ok {
+		return Event{}, text, false
+	}
+	return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end:], true
+}
+
+func parseLinkReferenceDefinition(line string) (string, linkReference, bool) {
+	indent, indentBytes := leadingIndent(line)
+	if indent > 3 {
+		return "", linkReference{}, false
+	}
+	text := line[indentBytes:]
+	closeLabel := matchingLinkLabelEnd(text)
+	if closeLabel <= 0 || closeLabel+1 >= len(text) || text[closeLabel+1] != ':' {
+		return "", linkReference{}, false
+	}
+	label := normalizeReferenceLabel(decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeLabel])))
+	if label == "" {
+		return "", linkReference{}, false
+	}
+	i := skipMarkdownSpace(text, closeLabel+2)
+	dest, next, ok := parseInlineLinkDestination(text, i)
+	if !ok || next == i {
+		return "", linkReference{}, false
+	}
+	i = skipMarkdownSpace(text, next)
+	title := ""
+	if i < len(text) {
+		parsedTitle, next, ok := parseInlineLinkTitle(text, i)
+		if !ok {
+			return "", linkReference{}, false
+		}
+		title = parsedTitle
+		i = skipMarkdownSpace(text, next)
+	}
+	if i != len(text) {
+		return "", linkReference{}, false
+	}
+	return label, linkReference{dest: dest, title: title}, true
+}
+
+func normalizeReferenceLabel(label string) string {
+	fields := strings.Fields(label)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.ToLower(strings.Join(fields, " "))
 }
 
 func matchingLinkLabelEnd(text string) int {
@@ -931,6 +1029,9 @@ func parseInlineLinkDestination(text string, start int) (string, int, bool) {
 		case '<':
 			return "", start, false
 		}
+	}
+	if depth == 0 {
+		return decodeCharacterReferences(unescapeBackslashPunctuation(text[start:])), len(text), true
 	}
 	return "", start, false
 }
