@@ -55,6 +55,19 @@ CommonMark conformance should be reached in layers:
 The parser is allowed to be conservative while streaming. It is not allowed to
 panic or emit events that must later be retracted.
 
+## Quality Gates
+
+The parser test suite includes:
+
+- full CommonMark `0.31.2` corpus split-equivalence checks
+- supported/known-gap/unsupported CommonMark accounting
+- event invariants for balanced block enter/exit ordering
+- responsiveness tests for stable streaming emission points
+- memory-retention checks for large partial lines, fenced code, paragraphs, and
+  reset behavior
+- `-benchmem` benchmarks for long streams, tiny chunks, corpus parsing, and
+  malformed delimiter-heavy input
+
 ## Renderer Strategy
 
 The terminal renderer should be faithful to parser semantics. CommonMark

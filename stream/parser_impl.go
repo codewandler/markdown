@@ -105,11 +105,11 @@ func (p *parser) Flush() ([]Event, error) {
 		p.partial = nil
 	}
 	p.closeParagraph(&events)
-	p.closeContainers(&events)
 	if p.fence.open {
 		p.fence.open = false
 		events = append(events, Event{Kind: EventExitBlock, Block: BlockFencedCode})
 	}
+	p.closeContainers(&events)
 	if p.started {
 		events = append(events, Event{Kind: EventExitBlock, Block: BlockDocument})
 	}
@@ -288,6 +288,7 @@ func (p *parser) closeParagraph(events *[]Event) {
 		*events = append(*events, parseInline(strings.TrimSpace(line.text), line.span)...)
 	}
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: Span{Start: start, End: end}})
+	clear(p.paragraph.lines)
 	if cap(p.paragraph.lines) > 1024 {
 		p.paragraph.lines = nil
 	} else {
@@ -502,6 +503,8 @@ func parseInline(text string, span Span) []Event {
 		return []Event{{Kind: EventText, Text: "", Span: span}}
 	}
 	var events []Event
+	linkPossible := strings.Contains(text, "](")
+	autolinkPossible := strings.Contains(text, ">")
 	for len(text) > 0 {
 		if strings.HasPrefix(text, "**") {
 			if end := strings.Index(text[2:], "**"); end >= 0 {
@@ -547,19 +550,21 @@ func parseInline(text string, span Span) []Event {
 				continue
 			}
 		}
-		if text[0] == '[' {
+		if text[0] == '[' && linkPossible {
 			if ev, rest, ok := parseInlineLink(text, span); ok {
 				events = append(events, ev)
 				text = rest
 				continue
 			}
+			linkPossible = strings.Contains(text[1:], "](")
 		}
-		if text[0] == '<' {
+		if text[0] == '<' && autolinkPossible {
 			if ev, rest, ok := parseAutolink(text, span); ok {
 				events = append(events, ev)
 				text = rest
 				continue
 			}
+			autolinkPossible = strings.Contains(text[1:], ">")
 		}
 		next := nextInlineDelimiter(text)
 		if next <= 0 {
@@ -615,14 +620,31 @@ func coalesceText(events []Event) []Event {
 		return events
 	}
 	out := events[:0]
-	for _, ev := range events {
-		if len(out) > 0 && sameStyle(out[len(out)-1].Style, ev.Style) {
-			out[len(out)-1].Text += ev.Text
-			out[len(out)-1].Span.End = ev.Span.End
+	current := events[0]
+	var builder strings.Builder
+	merging := false
+	flush := func() {
+		if merging {
+			current.Text = builder.String()
+			builder.Reset()
+			merging = false
+		}
+		out = append(out, current)
+	}
+	for _, ev := range events[1:] {
+		if sameStyle(current.Style, ev.Style) {
+			if !merging {
+				builder.WriteString(current.Text)
+				merging = true
+			}
+			builder.WriteString(ev.Text)
+			current.Span.End = ev.Span.End
 			continue
 		}
-		out = append(out, ev)
+		flush()
+		current = ev
 	}
+	flush()
 	return out
 }
 

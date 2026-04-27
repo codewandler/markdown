@@ -14,6 +14,12 @@ Production-target implementation plan. The repository currently has:
 - a pinned CommonMark `0.31.2` corpus loader
 - full-corpus parser split-equivalence tests with explicit
   supported/known-gap/unsupported accounting
+- parser event invariant tests
+- parser responsiveness tests
+- parser memory-retention tests for large partial lines, fenced code,
+  paragraphs, and reset behavior
+- `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
+  malformed/pathological inline delimiter input
 
 The next implementation turns must expand conformance, performance,
 responsiveness, memory, and agentsdk compatibility without weakening the
@@ -388,6 +394,8 @@ Inline parser constraints:
 
 ## Memory Efficiency Plan
 
+Status: initial retention test coverage implemented in `v0.5.0`.
+
 Parser must avoid retaining emitted content.
 
 Rules:
@@ -411,8 +419,10 @@ Benchmarks:
 - `BenchmarkParserLongFence`
 - `BenchmarkParserLongParagraph`
 - `BenchmarkParserTinyChunks`
-- `BenchmarkParserManySmallBlocks`
-- `BenchmarkTerminalLongFence`
+- `BenchmarkParserCommonMarkCorpus`
+- `BenchmarkParserCommonMarkCorpusTinyChunks`
+- `BenchmarkParserMalformedInlineDelimiters`
+- `BenchmarkParserPathologicalInlineDelimiters`
 
 Benchmark expectations:
 
@@ -426,6 +436,8 @@ Memory regressions are release blockers. If benchmarks show retained memory
 growing with emitted fenced-code output, fix the parser before adding features.
 
 ## Responsiveness Plan
+
+Status: initial responsiveness test coverage implemented in `v0.5.0`.
 
 Responsiveness target by construct:
 
@@ -446,6 +458,8 @@ Measure responsiveness with tests:
   event is emitted
 - write heading without newline; assert no heading event until newline or flush
 - write paragraph without blank line; assert no paragraph text until flush
+- write an interrupting block after a paragraph; assert the paragraph finalizes
+  at the interruption point
 
 ## Conformance Plan
 
@@ -679,7 +693,35 @@ Acceptance:
 
 - `go test ./terminal` passes
 
-### Step 6: Adapter And Example Verification
+### Step 6: Parser Hardening
+
+Status: implemented in `v0.5.0`.
+
+Files:
+
+- `stream/invariant_test.go`
+- `stream/memory_test.go`
+- `stream/responsiveness_test.go`
+- `stream/bench_test.go`
+
+Work:
+
+- assert balanced block enter/exit events
+- assert document enter/exit ordering
+- assert no events after flush
+- assert reset returns the parser to clean behavior
+- assert fenced code, paragraph boundary, block interruption, and incomplete
+  line responsiveness
+- assert large completed content is not retained in parser state
+- add `-benchmem` coverage for corpus, tiny-chunk, long-stream, and malformed
+  delimiter-heavy input
+
+Acceptance:
+
+- `go test ./stream` passes
+- `go test ./stream -bench BenchmarkParser -benchmem` runs
+
+### Step 7: Adapter And Example Verification
 
 Commands:
 

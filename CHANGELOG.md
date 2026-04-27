@@ -10,6 +10,33 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-27
+
+### Added
+
+- Added parser memory-retention tests for large completed partial lines,
+  emitted fenced-code lines, repeated completed paragraphs, and `Reset`.
+- Added parser event invariant tests for balanced block enter/exit events,
+  document ordering, no events after flush, and reset behavior.
+- Added CommonMark-corpus event invariant coverage.
+- Added responsiveness tests for fenced-code line emission, paragraph boundary
+  emission, interrupting blocks, and incomplete-line buffering.
+- Added `-benchmem` benchmark coverage for the CommonMark corpus, tiny-chunk
+  corpus parsing, malformed inline delimiters, and pathological delimiter
+  inputs.
+
+### Changed
+
+- Cleared closed paragraph backing storage before reuse so completed paragraph
+  text is not retained by parser state.
+- Reduced repeated failed inline link/autolink scans and replaced text
+  coalescing with builder-backed run coalescing.
+
+### Fixed
+
+- Fixed flush ordering for unfinished fenced-code blocks inside containers so
+  child blocks close before blockquotes/lists.
+
 ## [0.4.0] - 2026-04-27
 
 ### Added
