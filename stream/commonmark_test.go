@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   273,
+		statusSupported:   285,
 		statusKnownGap:    161,
-		statusUnsupported: 218,
+		statusUnsupported: 206,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -292,6 +292,23 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	205: expectTextStyle("Foo", InlineStyle{Link: "/url"}),
 	206: expectTextStyle("αγω", InlineStyle{Link: "/φου"}),
 	207: expectBlocks(BlockDocument, 0),
+	350: expectTextStyle("foo bar", InlineStyle{Emphasis: true}),
+	355: expectTextStyle("bar", InlineStyle{Emphasis: true}),
+	357: expectTextStyle("foo bar", InlineStyle{Emphasis: true}),
+	364: expectTextStyle("(bar)", InlineStyle{Emphasis: true}),
+	378: expectTextStyle("foo bar", InlineStyle{Strong: true}),
+	381: expectTextStyle("bar", InlineStyle{Strong: true}),
+	382: expectTextStyle("foo bar", InlineStyle{Strong: true}),
+	390: expectTextStyle("(bar)", InlineStyle{Strong: true}),
+	393: expectTextStyle("foo", InlineStyle{Emphasis: true, Strong: true}),
+	395: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo \"", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle("\" foo", InlineStyle{Strong: true})(t, events)
+	},
+	396: expectTextStyle("foo", InlineStyle{Strong: true}),
+	399: expectTextStyle("foo", InlineStyle{Emphasis: true, Strong: true}),
 	209: expectParagraphText("[foo]: /url \"title\" ok"),
 	210: expectParagraphText("\"title\" ok"),
 	211: expectBlocks(BlockIndentedCode, 1, BlockParagraph, 1),

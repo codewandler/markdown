@@ -849,74 +849,75 @@ func parseInline(text string, span Span, refs map[string]linkReference) []Event 
 	if text == "" {
 		return []Event{{Kind: EventText, Text: "", Span: span}}
 	}
-	var events []Event
+	tokens := tokenizeInline(text, span, refs)
+	tokens = resolveEmphasis(tokens)
+	return coalesceInlineTokens(tokens, span)
+}
+
+type inlineTokenKind int
+
+const (
+	inlineTokenText inlineTokenKind = iota
+	inlineTokenSoftBreak
+	inlineTokenLineBreak
+	inlineTokenDelimiter
+)
+
+type inlineToken struct {
+	kind  inlineTokenKind
+	text  string
+	style InlineStyle
+	delim byte
+	run   int
+	open  bool
+	close bool
+}
+
+func tokenizeInline(text string, span Span, refs map[string]linkReference) []inlineToken {
+	var tokens []inlineToken
+	var prevSource string
 	linkPossible := strings.Contains(text, "](")
 	autolinkPossible := strings.Contains(text, ">")
 	for len(text) > 0 {
 		if text[0] == '\n' {
-			if trimHardBreakMarker(events) {
-				events = append(events, Event{Kind: EventLineBreak, Span: span})
+			if trimHardBreakMarkerTokens(&tokens) {
+				tokens = append(tokens, inlineToken{kind: inlineTokenLineBreak})
 			} else {
-				events = append(events, Event{Kind: EventSoftBreak, Span: span})
+				tokens = append(tokens, inlineToken{kind: inlineTokenSoftBreak})
 			}
+			prevSource = "\n"
 			text = text[1:]
 			continue
 		}
 		if text[0] == '\\' && len(text) > 1 && isEscapablePunctuation(text[1]) {
-			events = append(events, Event{Kind: EventText, Text: text[1:2], Span: span})
+			tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[1:2]})
+			prevSource = text[:2]
 			text = text[2:]
 			continue
 		}
-		if strings.HasPrefix(text, "**") {
-			if end := findInlineCloser(text[2:], "**"); end >= 0 {
-				content := text[2 : 2+end]
-				events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Strong: true}, Span: span})
-				text = text[2+end+2:]
-				continue
-			}
-		}
-		if strings.HasPrefix(text, "__") {
-			if end := findInlineCloser(text[2:], "__"); end >= 0 {
-				content := text[2 : 2+end]
-				events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Strong: true}, Span: span})
-				text = text[2+end+2:]
-				continue
-			}
-		}
-		if strings.HasPrefix(text, "*") {
-			if end := findInlineCloser(text[1:], "*"); end >= 0 {
-				content := text[1 : 1+end]
-				if content != "" {
-					events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Emphasis: true}, Span: span})
-					text = text[1+end+1:]
-					continue
-				}
-			}
-		}
-		if strings.HasPrefix(text, "_") {
-			if end := findInlineCloser(text[1:], "_"); end >= 0 {
-				content := text[1 : 1+end]
-				if content != "" {
-					events = append(events, Event{Kind: EventText, Text: content, Style: InlineStyle{Emphasis: true}, Span: span})
-					text = text[1+end+1:]
-					continue
-				}
-			}
+		if text[0] == '\\' {
+			tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:1]})
+			prevSource = text[:1]
+			text = text[1:]
+			continue
 		}
 		if text[0] == '`' {
 			if ev, rest, ok := parseCodeSpan(text, span); ok {
-				events = append(events, ev)
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
 			}
 			n := countRun(text, '`')
-			events = append(events, Event{Kind: EventText, Text: text[:n], Span: span})
+			tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:n]})
+			prevSource = text[:n]
 			text = text[n:]
 			continue
 		}
 		if text[0] == '[' && linkPossible {
 			if ev, rest, ok := parseInlineLink(text, span); ok {
-				events = append(events, ev)
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
 			}
@@ -924,14 +925,16 @@ func parseInline(text string, span Span, refs map[string]linkReference) []Event 
 		}
 		if text[0] == '[' && len(refs) > 0 {
 			if ev, rest, ok := parseReferenceLink(text, span, refs); ok {
-				events = append(events, ev)
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
 			}
 		}
 		if text[0] == '<' && autolinkPossible {
 			if ev, rest, ok := parseAutolink(text, span); ok {
-				events = append(events, ev)
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
 			}
@@ -939,17 +942,17 @@ func parseInline(text string, span Span, refs map[string]linkReference) []Event 
 		}
 		if text[0] == '&' {
 			if decoded, rest, ok := parseCharacterReference(text); ok {
-				events = append(events, Event{Kind: EventText, Text: decoded, Span: span})
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: decoded})
+				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
 			}
 		}
 		if isInlineDelimiterByte(text[0]) {
-			n := 1
-			if text[0] == '*' || text[0] == '_' || text[0] == '\\' {
-				n = countRun(text, text[0])
-			}
-			events = append(events, Event{Kind: EventText, Text: text[:n], Span: span})
+			n := countRun(text, text[0])
+			open, close := emphasisDelimRun(prevSource, text[n:], text[0], n)
+			tokens = append(tokens, inlineToken{kind: inlineTokenDelimiter, text: text[:n], delim: text[0], run: n, open: open, close: close})
+			prevSource = text[:n]
 			text = text[n:]
 			continue
 		}
@@ -957,8 +960,124 @@ func parseInline(text string, span Span, refs map[string]linkReference) []Event 
 		if next <= 0 {
 			next = 1
 		}
-		events = append(events, Event{Kind: EventText, Text: text[:next], Span: span})
+		tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:next]})
+		prevSource = text[:next]
 		text = text[next:]
+	}
+	return tokens
+}
+
+func resolveEmphasis(tokens []inlineToken) []inlineToken {
+	if len(tokens) == 0 {
+		return tokens
+	}
+	pairs := make(map[int]int)
+	var stack []int
+	for i := range tokens {
+		tok := tokens[i]
+		if tok.kind != inlineTokenDelimiter {
+			continue
+		}
+		if tok.close {
+			for j := len(stack) - 1; j >= 0; j-- {
+				openIdx := stack[j]
+				openTok := tokens[openIdx]
+				if openTok.delim != tok.delim || !openTok.open {
+					continue
+				}
+				pairs[openIdx] = i
+				pairs[i] = openIdx
+				stack = append(stack[:j], stack[j+1:]...)
+				break
+			}
+		}
+		if tok.open {
+			stack = append(stack, i)
+		}
+	}
+
+	var out []inlineToken
+	var emitRange func(start, end int, style InlineStyle)
+	emitText := func(text string, style InlineStyle) {
+		if text == "" {
+			return
+		}
+		out = append(out, inlineToken{kind: inlineTokenText, text: text, style: style})
+	}
+	emitRange = func(start, end int, style InlineStyle) {
+		for i := start; i < end; {
+			tok := tokens[i]
+			if tok.kind == inlineTokenDelimiter {
+				if closeIdx, ok := pairs[i]; ok && closeIdx > i && closeIdx < end {
+					openCount := tok.run
+					closeCount := tokens[closeIdx].run
+					use := openCount
+					if closeCount < use {
+						use = closeCount
+					}
+					emitText(tok.text[:openCount-use], style)
+					emitRange(i+1, closeIdx, applyDelimiterStyle(style, use))
+					emitText(tokens[closeIdx].text[use:], style)
+					i = closeIdx + 1
+					continue
+				}
+				emitText(tok.text, style)
+				i++
+				continue
+			}
+			switch tok.kind {
+			case inlineTokenText:
+				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: mergeInlineStyles(style, tok.style)})
+			case inlineTokenSoftBreak:
+				out = append(out, inlineToken{kind: inlineTokenSoftBreak})
+			case inlineTokenLineBreak:
+				out = append(out, inlineToken{kind: inlineTokenLineBreak})
+			}
+			i++
+		}
+	}
+	emitRange(0, len(tokens), InlineStyle{})
+	return out
+}
+
+func applyDelimiterStyle(style InlineStyle, count int) InlineStyle {
+	out := style
+	for count >= 2 {
+		out.Strong = true
+		count -= 2
+	}
+	if count == 1 {
+		out.Emphasis = true
+	}
+	return out
+}
+
+func mergeInlineStyles(base, add InlineStyle) InlineStyle {
+	out := base
+	out.Emphasis = out.Emphasis || add.Emphasis
+	out.Strong = out.Strong || add.Strong
+	out.Code = out.Code || add.Code
+	if add.Link != "" {
+		out.Link = add.Link
+		out.LinkTitle = add.LinkTitle
+	}
+	return out
+}
+
+func coalesceInlineTokens(tokens []inlineToken, span Span) []Event {
+	if len(tokens) == 0 {
+		return nil
+	}
+	var events []Event
+	for _, tok := range tokens {
+		switch tok.kind {
+		case inlineTokenText:
+			events = append(events, Event{Kind: EventText, Text: tok.text, Style: tok.style, Span: span})
+		case inlineTokenSoftBreak:
+			events = append(events, Event{Kind: EventSoftBreak, Span: span})
+		case inlineTokenLineBreak:
+			events = append(events, Event{Kind: EventLineBreak, Span: span})
+		}
 	}
 	return coalesceText(events)
 }
@@ -1362,6 +1481,86 @@ func normalizeCodeSpan(text string) string {
 		text = text[1 : len(text)-1]
 	}
 	return text
+}
+
+func trimHardBreakMarkerTokens(tokens *[]inlineToken) bool {
+	if len(*tokens) == 0 {
+		return false
+	}
+	last := &(*tokens)[len(*tokens)-1]
+	if last.kind != inlineTokenText || last.style != (InlineStyle{}) {
+		return false
+	}
+	if strings.HasSuffix(last.text, "\\") {
+		last.text = strings.TrimSuffix(last.text, "\\")
+		return true
+	}
+	trimmed := strings.TrimRight(last.text, " ")
+	if len(last.text)-len(trimmed) >= 2 {
+		last.text = trimmed
+		return true
+	}
+	return false
+}
+
+func emphasisDelimRun(prevSource, nextSource string, marker byte, runLen int) (bool, bool) {
+	prevRune, _ := lastRune(prevSource)
+	nextRune, _ := firstRune(nextSource)
+	left := isLeftFlanking(prevRune, nextRune)
+	right := isRightFlanking(prevRune, nextRune)
+	if marker == '*' {
+		return left, right
+	}
+	if marker == '_' {
+		open := left && (!right || isPunctuationRune(prevRune))
+		close := right && (!left || isPunctuationRune(nextRune))
+		return open, close
+	}
+	return false, false
+}
+
+func firstRune(text string) (rune, bool) {
+	if text == "" {
+		return 0, false
+	}
+	r, _ := utf8.DecodeRuneInString(text)
+	return r, true
+}
+
+func lastRune(text string) (rune, bool) {
+	if text == "" {
+		return 0, false
+	}
+	r, _ := utf8.DecodeLastRuneInString(text)
+	return r, true
+}
+
+func isLeftFlanking(prev, next rune) bool {
+	if next == 0 || isSpaceOrControlRune(next) {
+		return false
+	}
+	if isPunctuationRune(next) && !isSpaceOrControlRune(prev) && !isPunctuationRune(prev) {
+		return false
+	}
+	return true
+}
+
+func isRightFlanking(prev, next rune) bool {
+	if prev == 0 || isSpaceOrControlRune(prev) {
+		return false
+	}
+	if isPunctuationRune(prev) && !isSpaceOrControlRune(next) && !isPunctuationRune(next) {
+		return false
+	}
+	return true
+}
+
+func isSpaceOrControlRune(r rune) bool {
+	return r == 0 || unicode.IsSpace(r) || unicode.IsControl(r)
+}
+
+func isPunctuationRune(r rune) bool {
+	return unicode.IsPunct(r) || unicode.IsSymbol(r)
 }
 
 func trimHardBreakMarker(events []Event) bool {

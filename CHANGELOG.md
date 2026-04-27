@@ -10,6 +10,24 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-04-28
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `285` supported,
+  `161` known gaps, and `206` unsupported examples.
+- Added simple emphasis and strong-emphasis support for balanced `*` and `_`
+  delimiters.
+- Added structural assertions for supported emphasis and strong-emphasis
+  examples.
+
+### Changed
+
+- Reworked inline tokenization so emphasis is resolved from delimiter runs
+  instead of literal fallback text.
+- Fixed hard line break handling for escaped trailing backslashes in the new
+  inline tokenizer path.
+
 ## [0.23.0] - 2026-04-28
 
 ### Added

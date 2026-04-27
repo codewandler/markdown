@@ -173,6 +173,55 @@ func TestInlineSubset(t *testing.T) {
 	assertContains(t, got, eventView{Kind: EventText, Text: "link", Style: InlineStyle{Link: "https://example.com"}})
 }
 
+func TestEmphasisSubset(t *testing.T) {
+	tests := []struct {
+		name  string
+		in    string
+		check func(*testing.T, []eventView)
+	}{
+		{
+			name: "single star",
+			in:   "*foo*\n",
+			check: func(t *testing.T, events []eventView) {
+				assertContains(t, events, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Emphasis: true}})
+			},
+		},
+		{
+			name: "single underscore",
+			in:   "_foo bar_\n",
+			check: func(t *testing.T, events []eventView) {
+				assertContains(t, events, eventView{Kind: EventText, Text: "foo bar", Style: InlineStyle{Emphasis: true}})
+			},
+		},
+		{
+			name: "double star",
+			in:   "**foo bar**\n",
+			check: func(t *testing.T, events []eventView) {
+				assertContains(t, events, eventView{Kind: EventText, Text: "foo bar", Style: InlineStyle{Strong: true}})
+			},
+		},
+		{
+			name: "double underscore",
+			in:   "__foo bar__\n",
+			check: func(t *testing.T, events []eventView) {
+				assertContains(t, events, eventView{Kind: EventText, Text: "foo bar", Style: InlineStyle{Strong: true}})
+			},
+		},
+		{
+			name: "nested triple stars",
+			in:   "***foo***\n",
+			check: func(t *testing.T, events []eventView) {
+				assertContains(t, events, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Emphasis: true, Strong: true}})
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.check(t, viewEvents(parseAll(t, tt.in)))
+		})
+	}
+}
+
 func TestLinkReferenceDefinitions(t *testing.T) {
 	t.Run("multiline definition resolves later reference", func(t *testing.T) {
 		events := viewEvents(parseAll(t, "[foo]:\n/url\n  \"title\"\n\n[foo]\n"))

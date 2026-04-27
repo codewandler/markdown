@@ -22,8 +22,8 @@ Production-target implementation plan. The repository currently has:
   flush-only definitions, and split equivalence
 - `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
   malformed/pathological inline delimiter input
-- exact CommonMark classification totals: `273` supported, `161` known gaps,
-  and `218` unsupported examples
+- exact CommonMark classification totals: `285` supported, `161` known gaps,
+  and `206` unsupported examples
 - complete ATX heading section coverage in the supported CommonMark corpus
 - expanded fenced-code, indented-code, and code-span coverage
 - complete paragraph, blank-line, and soft-line-break coverage in the
@@ -50,6 +50,9 @@ Production-target implementation plan. The repository currently has:
 - direct inline link coverage with empty labels/destinations, angle-bracketed
   destinations, escaped punctuation, balanced raw parentheses, character
   references, and optional link titles
+- simple emphasis and strong emphasis coverage for balanced `*` and `_`
+  delimiters, including nested emphasis/strong combinations and common
+  punctuation-adjacent forms
 - pre-use link reference definitions are stored in parser state and used by
   reference-style links once known
 - multiline link reference definitions are held in bounded pending parser state
