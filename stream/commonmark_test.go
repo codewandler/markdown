@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   182,
-		statusKnownGap:    92,
-		statusUnsupported: 378,
+		statusSupported:   208,
+		statusKnownGap:    93,
+		statusUnsupported: 351,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -143,6 +143,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"List items",
 		"Lists",
 		"Paragraphs",
+		"Setext headings",
 		"Soft line breaks",
 		"Thematic breaks":
 		return statusKnownGap
@@ -210,6 +211,32 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	77:  expectBlocks(BlockThematicBreak, 2, BlockHeading, 1),
 	78:  expectBlocks(BlockParagraph, 2, BlockHeading, 1),
 	79:  expectHeadingLevels(2, 1, 3),
+	80:  expectHeadingLevels(1, 2),
+	81:  expectHeadingLevels(1),
+	82:  expectHeadingLevels(1),
+	83:  expectHeadingLevels(2, 1),
+	84:  expectHeadingLevels(2, 2, 1),
+	86:  expectHeadingLevels(2),
+	87:  expectParagraphText("Foo", "---"),
+	88:  expectBlocks(BlockParagraph, 2, BlockThematicBreak, 1),
+	89:  expectHeadingLevels(2),
+	90:  expectHeadingLevels(2),
+	91:  expectBlocks(BlockHeading, 2, BlockParagraph, 2),
+	92:  expectBlocks(BlockBlockquote, 1, BlockParagraph, 1, BlockThematicBreak, 1),
+	93:  expectBlocks(BlockBlockquote, 1, BlockParagraph, 1),
+	94:  expectBlocks(BlockList, 1, BlockListItem, 1, BlockThematicBreak, 1),
+	95:  expectHeadingLevels(2),
+	96:  expectBlocks(BlockThematicBreak, 1, BlockHeading, 2, BlockParagraph, 1),
+	97:  expectParagraphText("===="),
+	98:  expectBlocks(BlockThematicBreak, 2),
+	99:  expectBlocks(BlockList, 1, BlockListItem, 1, BlockThematicBreak, 1),
+	100: expectBlocks(BlockIndentedCode, 1, BlockThematicBreak, 1),
+	101: expectBlocks(BlockBlockquote, 1, BlockParagraph, 1, BlockThematicBreak, 1),
+	102: expectHeadingLevels(2),
+	103: expectBlocks(BlockParagraph, 2, BlockHeading, 1),
+	104: expectBlocks(BlockParagraph, 2, BlockThematicBreak, 1),
+	105: expectBlocks(BlockParagraph, 2, BlockThematicBreak, 1),
+	106: expectBlocks(BlockParagraph, 1),
 	107: expectBlocks(BlockIndentedCode, 1),
 	113: expectParagraphText("Foo", "bar"),
 	114: expectBlocks(BlockIndentedCode, 1, BlockParagraph, 1),

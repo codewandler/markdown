@@ -10,6 +10,23 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-04-27
+
+### Added
+
+- Expanded exact CommonMark corpus classification totals to `208` supported,
+  `93` known gaps, and `351` unsupported examples.
+- Added structural assertions for 26 supported setext-heading examples.
+
+### Changed
+
+- Added paragraph-boundary setext heading recognition for `=` and `-`
+  underline markers.
+- Preserved list and blockquote fallback behavior around setext-like marker
+  lines.
+- Kept the indented-code blank-line interaction as a known gap until indented
+  code preserves internal blank lines.
+
 ## [0.15.0] - 2026-04-27
 
 ### Changed

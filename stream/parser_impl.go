@@ -196,6 +196,11 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		p.closeBlockquote(line, events)
 	}
 
+	if level, ok := setextHeading(line.text); ok && len(p.paragraph.lines) > 0 && !p.inList && !p.inListItem {
+		p.closeSetextHeading(level, Span{Start: line.start, End: line.end}, events)
+		return
+	}
+
 	if thematicBreak(line.text) {
 		p.ensureDocument(events)
 		p.closeParagraph(events)
@@ -332,6 +337,31 @@ func (p *parser) closeParagraph(events *[]Event) {
 	}
 	*events = append(*events, parseInline(text.String(), Span{Start: start, End: end})...)
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: Span{Start: start, End: end}})
+	clear(p.paragraph.lines)
+	if cap(p.paragraph.lines) > 1024 {
+		p.paragraph.lines = nil
+	} else {
+		p.paragraph.lines = p.paragraph.lines[:0]
+	}
+}
+
+func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) {
+	if len(p.paragraph.lines) == 0 {
+		return
+	}
+	p.ensureDocument(events)
+	start := p.paragraph.lines[0].span.Start
+	end := underline.End
+	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: Span{Start: start, End: end}})
+	var text strings.Builder
+	for i, line := range p.paragraph.lines {
+		if i > 0 {
+			text.WriteByte('\n')
+		}
+		text.WriteString(line.text)
+	}
+	*events = append(*events, parseInline(text.String(), Span{Start: start, End: end})...)
+	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: Span{Start: start, End: end}})
 	clear(p.paragraph.lines)
 	if cap(p.paragraph.lines) > 1024 {
 		p.paragraph.lines = nil
@@ -519,6 +549,30 @@ func thematicBreak(line string) bool {
 		count++
 	}
 	return count >= 3
+}
+
+func setextHeading(line string) (int, bool) {
+	indent := leadingSpaces(line)
+	if indent > 3 {
+		return 0, false
+	}
+	trimmed := strings.TrimSpace(line[indent:])
+	if trimmed == "" {
+		return 0, false
+	}
+	marker := trimmed[0]
+	if marker != '=' && marker != '-' {
+		return 0, false
+	}
+	for i := 1; i < len(trimmed); i++ {
+		if trimmed[i] != marker {
+			return 0, false
+		}
+	}
+	if marker == '=' {
+		return 1, true
+	}
+	return 2, true
 }
 
 func indentedCode(line string) bool {
