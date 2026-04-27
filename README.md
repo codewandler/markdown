@@ -1,6 +1,6 @@
 # markdown
 
-Experimental Markdown parsing and rendering primitives for Codewandler projects.
+Markdown parsing and rendering primitives for Codewandler projects.
 
 This is a rewrite of the streaming Markdown model, not a clone of
 `agentsdk/markdown`. The agentsdk package is useful problem context, but this
@@ -13,7 +13,7 @@ AI-agent output.
 
 The parser emits structured events. Renderers consume those events. The first
 renderer target is terminal output. Browser and DOM rendering are intentionally
-out of scope for the first proof of concept.
+out of scope for the initial product path.
 
 ## Design Direction
 
@@ -54,15 +54,9 @@ panic or emit events that must later be retracted.
 
 ## Renderer Strategy
 
-The terminal renderer should be faithful to parser semantics, but terminal
-output cannot directly be CommonMark-conformant in the same way expected HTML
-can be. To make conformance measurable, the project should eventually include a
-small reference HTML renderer over the same parser events.
-
-That gives us two renderer tracks:
-
-- `html`: reference renderer used by CommonMark examples and conformance tests.
-- `terminal`: product renderer used for streaming agent output.
+The terminal renderer should be faithful to parser semantics. CommonMark
+conformance is measured at the parser/event level with the official CommonMark
+example corpus plus terminal behavior tests for the supported subset.
 
 Renderer-specific extras should be internal render operations, not parser
 events. For example, the terminal renderer may lower a blockquote event into
@@ -81,6 +75,10 @@ adding Chroma to the core module. Its hybrid highlighter keeps Go code on the
 core renderer's fast stdlib path and falls back to Chroma for non-Go fences
 such as Rust and JavaScript.
 
+HTML rendering is out of scope for the terminal-first product path. If added
+later, it must be a valid incremental HTML renderer over parser events rather
+than a whole-document rerender helper.
+
 Fenced-code markers are parser metadata and are not rendered literally by the
 terminal renderer. Code blocks render with a configurable left prefix; by
 default that is four spaces, a thin border, and one space before the highlighted
@@ -89,7 +87,6 @@ code.
 ## Packages
 
 - `stream`: incremental parser API and canonical event model.
-- `html`: planned reference renderer for CommonMark conformance tests.
 - `terminal`: terminal renderer over `stream.Event`.
 - `adapters/chroma`: optional Chroma-backed code highlighting adapter.
 - `examples/stream-readme`: separate example module that uses the core module
@@ -109,5 +106,5 @@ go run . -code-indent 2 -code-border=false
 ```
 
 The example demonstrates the event pipeline, terminal renderer, fast Go
-highlighting, and Chroma fallback for the Rust fence. It is not the finished
-CommonMark implementation.
+highlighting, and Chroma fallback for the Rust fence. It is a usage example,
+not a conformance substitute.

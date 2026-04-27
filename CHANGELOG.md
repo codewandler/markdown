@@ -10,6 +10,23 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-27
+
+### Changed
+
+- Re-centered the product plan on terminal rendering as the primary use case.
+- Moved HTML rendering to the end of the roadmap and documented that any future
+  HTML renderer must produce valid HTML incrementally instead of rerendering an
+  accumulated document.
+- Reworked the CommonMark conformance plan to use the official CommonMark
+  example corpus for parser/event and terminal behavior tests.
+
+### Removed
+
+- Removed the initial whole-event `html` renderer package because it was out of
+  scope for the terminal-first product path and did not satisfy the future
+  incremental HTML renderer requirement.
+
 ## [0.2.0] - 2026-04-27
 
 ### Added

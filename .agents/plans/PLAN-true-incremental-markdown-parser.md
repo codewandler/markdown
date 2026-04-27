@@ -27,8 +27,8 @@ incoming chunks
   -> stream.Parser
   -> append-only Markdown events
   -> renderers
-      -> html reference renderer for conformance
       -> terminal product renderer
+      -> future incremental HTML renderer, out of current scope
 ```
 
 The parser owns Markdown semantics. Renderers own presentation. Terminal
@@ -45,8 +45,8 @@ must not leak back into parser events.
 4. **Performance**: each byte is scanned a bounded number of times; no
    accumulated-document reparsing.
 5. **Responsiveness**: stable constructs emit as soon as correctness permits.
-6. **CommonMark conformance**: supported behavior is tested against selected
-   CommonMark examples through reference HTML.
+6. **CommonMark conformance**: supported behavior is tested against the
+   official CommonMark example corpus at the parser/event and terminal levels.
 7. **agentsdk compatibility**: integration preserves current public APIs long
    enough for a safe migration.
 
@@ -58,8 +58,9 @@ The project is not complete until these criteria are met:
   chunk-split input.
 - Unsupported features are documented and tested as literal fallback or
   explicit non-support; no silent accidental behavior.
-- CommonMark compatibility is proven for the supported subset using reference
-  HTML tests, not visual terminal snapshots.
+- CommonMark compatibility is proven for the supported subset using the
+  official CommonMark example corpus, structural parser assertions, split
+  tests, and terminal behavior tests.
 - Performance claims are backed by `-benchmem` benchmarks.
 - Memory behavior for long streams is measured and has regression tests or
   benchmarks.
@@ -143,12 +144,13 @@ core product is correct and measured.
 
 ### HTML Handling
 
-Implement HTML blocks/inlines as literal passthrough events for the first
-production pass.
+HTML rendering is out of scope for the terminal-first product path.
 
-Terminal renderer should show raw HTML text. The future HTML reference renderer
-should pass through supported raw HTML unchanged where CommonMark expects that.
-No sanitization belongs in the parser.
+Terminal renderer should show raw HTML source text for raw HTML constructs.
+If/when an HTML renderer is added, it must be a real incremental renderer over
+parser events that emits valid HTML as the stream advances. It must not be a
+whole-document rerender helper and must not become the primary conformance
+mechanism for terminal rendering.
 
 ### `agentsdk/markdown.Buffer`
 
@@ -166,6 +168,7 @@ Migration strategy:
 ## Non-goals
 
 - DOM/browser rendering.
+- HTML rendering in the current product path.
 - Glamour or any all-in-one Markdown terminal renderer.
 - Full CommonMark in the first implementation turn if it would compromise
   correctness of the supported subset.
@@ -188,8 +191,6 @@ github.com/codewandler/markdown
     paragraph-boundary inline parser
     split tests
     benchmarks
-  html
-    minimal reference renderer for supported CommonMark subset
   terminal
     renderer over stream.Event
     configurable code block layout
@@ -445,7 +446,10 @@ Measure responsiveness with tests:
 
 ## Conformance Plan
 
-Add conformance in layers.
+Add conformance in layers. The official CommonMark repository says the spec
+contains embedded examples that serve as conformance tests, and its
+`test/spec_tests.py --dump-tests` command emits the raw tests as JSON. Use that
+test data as the corpus.
 
 ### Structural Event Tests
 
@@ -479,40 +483,46 @@ For every short sample:
 Normalization should ignore source spans only if source spans make split tests
 too brittle. Preferred: source spans should still match.
 
-### Reference HTML Renderer
+### CommonMark Corpus Ingestion
 
-Add package:
+Add a corpus import path that does not make HTML rendering part of the product:
 
 ```text
-html/renderer.go
+internal/commonmarktests
+  testdata/commonmark-0.31.2.json
+  loader.go
 ```
 
-API:
+Source:
 
-```go
-func Render(events []stream.Event) string
-```
+- official repository: `commonmark/commonmark-spec`
+- generated with: `python3 test/spec_tests.py --dump-tests`
+- current latest spec version from `spec.commonmark.org`: `0.31.2`
 
-Use it only for tests and reference behavior. It should support the same subset
-as the parser.
+Use cases:
 
-HTML renderer rules:
+- split-fuzz every example, including unsupported examples
+- classify examples by section
+- assert supported sections structurally
+- assert unsupported sections degrade consistently according to documented
+  fallback behavior
+- track pass/skip/unsupported counts in test output or a generated report
 
-- escape text
-- `<p>`, `<h1>` ... `<h6>`
-- `<pre><code class="language-x">`
-- `<blockquote>`
-- `<ul>`, `<ol start="n">`, `<li>`
-- `<em>`, `<strong>`, `<code>`, `<a href="">`
-- raw HTML passthrough for HTML events
+The JSON includes expected HTML. For now, do not compare against that HTML as a
+product requirement. It can still help classify examples and identify expected
+semantics during parser development.
 
-### CommonMark Examples
+### Future Incremental HTML Renderer
 
-Do not import the full spec on day one. Start with selected examples copied
-into tests with comments naming the CommonMark feature and expected HTML.
+Move HTML rendering to the end of the roadmap.
 
-Feature coverage should grow with parser support. Features are not considered
-supported until both structural event tests and reference HTML tests exist.
+Requirements if implemented:
+
+- consumes parser events incrementally
+- emits valid HTML incrementally
+- never rerenders the accumulated document on every write
+- has its own conformance and streaming tests
+- is not required for terminal rendering or agentsdk integration
 
 ## Terminal Renderer Plan
 
@@ -626,21 +636,27 @@ Acceptance:
 - split tests pass
 - benchmarks run
 
-### Step 4: HTML Reference Renderer
+### Step 4: CommonMark Corpus Harness
 
 Files:
 
-- `html/renderer.go`
-- `html/renderer_test.go`
+- `internal/commonmarktests/loader.go`
+- `internal/commonmarktests/testdata/commonmark-0.31.2.json`
+- `stream/commonmark_test.go`
 
 Work:
 
-- render supported event subset to HTML
-- add selected expected HTML tests
+- import official CommonMark JSON examples
+- classify by section and supported status
+- run split-equivalence over all examples
+- assert structural expectations for supported sections
+- report skipped/unsupported sections explicitly
 
 Acceptance:
 
-- `go test ./html ./stream` passes
+- `go test ./stream` passes
+- unsupported CommonMark sections have explicit status
+- terminal-first conformance does not depend on an HTML renderer
 
 ### Step 5: Terminal Tests
 
@@ -683,7 +699,7 @@ The first production release is done when:
 - fenced code streams line-by-line before closing fence
 - long-fence benchmark shows no retained parser growth with emitted content
 - paragraph buffering behavior is documented and benchmarked
-- minimal HTML renderer validates selected CommonMark examples
+- official CommonMark corpus is loaded and used for split/corpus tests
 - terminal renderer consumes events without parsing Markdown
 - Chroma adapter remains outside core dependency graph
 - single example module runs
@@ -724,7 +740,7 @@ Mitigation:
 
 - document supported subset in tests
 - mark unsupported examples explicitly
-- use reference HTML renderer for conformance evidence
+- use the official CommonMark example corpus for pass/unsupported accounting
 
 ### Risk: Paragraph buffering hurts perceived latency
 
@@ -767,7 +783,8 @@ All previously open questions are resolved for the next implementation pass:
 1. Source positions: include them now.
 2. Long paragraph latency: conformant baseline buffers until boundary or flush.
 3. GFM: defer until CommonMark subset is stable.
-4. HTML: literal passthrough events; terminal renders raw text.
+4. HTML: terminal renders raw source text; full incremental valid HTML is a
+   future renderer project.
 5. `agentsdk/markdown.Buffer`: keep source-compatible during migration.
 
 ## Engineering Principle
