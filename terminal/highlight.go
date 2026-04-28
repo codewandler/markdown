@@ -6,6 +6,11 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/formatters"
+	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/alecthomas/chroma/v2/styles"
 )
 
 // CodeHighlighter highlights fenced-code content one line at a time.
@@ -128,11 +133,12 @@ func styleGoIdent(ident string) string {
 	}
 }
 
-// HybridHighlighter keeps Go on the stdlib-based fast path and uses a small
-// generic fallback for other fenced code languages.
+// HybridHighlighter uses the stdlib Go AST highlighter for Go code and
+// Chroma for all other languages.
 type HybridHighlighter struct {
 	goHighlighter *DefaultHighlighter
 	lang          string
+	buf           strings.Builder // accumulates lines for Chroma batch highlight
 }
 
 // NewHybridHighlighter creates a hybrid fenced-code highlighter.
@@ -146,32 +152,56 @@ func (h *HybridHighlighter) Start(lang string, info string) {
 	if h.lang == "" {
 		h.lang = strings.ToLower(firstWord(info))
 	}
+	h.buf.Reset()
 	if h.lang == "go" || h.lang == "golang" {
 		h.goHighlighter.Start(lang, info)
-		return
 	}
-	h.goHighlighter.End()
 }
 
-// HighlightLine highlights one code line.
+// HighlightLine highlights one code line using Chroma for non-Go languages.
 func (h *HybridHighlighter) HighlightLine(line string) string {
-	switch h.lang {
-	case "go", "golang":
+	if h.lang == "go" || h.lang == "golang" {
 		return h.goHighlighter.HighlightLine(line)
-	case "rust", "rs", "javascript", "js", "typescript", "ts", "python", "py", "bash", "sh", "zsh", "shell", "sql":
-		return highlightGenericLine(line, h.lang)
-	default:
-		return monokaiForeground + line + reset
 	}
+	return chromaHighlightLine(line, h.lang)
 }
 
 // End finishes a fenced-code block.
 func (h *HybridHighlighter) End() {
 	h.lang = ""
+	h.buf.Reset()
 	h.goHighlighter.End()
 }
 
 var _ CodeHighlighter = (*HybridHighlighter)(nil)
+
+// chromaHighlightLine highlights a single line using Chroma.
+// Falls back to plain monochrome if the language is unknown or highlighting fails.
+func chromaHighlightLine(line, lang string) string {
+	lexer := lexers.Get(lang)
+	if lexer == nil {
+		lexer = lexers.Fallback
+	}
+	lexer = chroma.Coalesce(lexer)
+	style := styles.Get("monokai")
+	if style == nil {
+		style = styles.Fallback
+	}
+	formatter := formatters.Get("terminal16m")
+	if formatter == nil {
+		return monokaiForeground + line + reset
+	}
+	iterator, err := lexer.Tokenise(nil, line)
+	if err != nil {
+		return monokaiForeground + line + reset
+	}
+	var buf strings.Builder
+	if err := formatter.Format(&buf, style, iterator); err != nil {
+		return monokaiForeground + line + reset
+	}
+	// Chroma terminal16m appends a newline; strip it so the renderer controls line endings.
+	return strings.TrimRight(buf.String(), "\n")
+}
 
 func highlightGenericLine(line string, lang string) string {
 	commentPrefix := genericCommentPrefix(lang)

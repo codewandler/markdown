@@ -10,6 +10,24 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-04-28
+
+### Added
+
+- Added Chroma (`github.com/alecthomas/chroma/v2`) as a direct dependency
+  for syntax highlighting of non-Go fenced code blocks.
+
+### Changed
+
+- `HybridHighlighter` now uses Chroma with the `terminal16m` (24-bit
+  truecolor) formatter and Monokai style for all non-Go languages,
+  replacing the generic keyword-based fallback.
+- Go code continues to use the stdlib AST fast path unchanged.
+- Both highlighting paths now use the same 24-bit truecolor colour space,
+  matching the existing Monokai renderer palette.
+- Updated `TestHybridHighlighter` to assert ANSI output presence rather
+  than specific generic-highlighter colour codes.
+
 ## [0.30.0] - 2026-04-28
 
 ### Added

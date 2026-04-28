@@ -202,8 +202,8 @@ func TestHybridHighlighter(t *testing.T) {
 	h.End()
 
 	h.Start("rust", "")
-	if got := h.HighlightLine("fn main() {}"); !strings.Contains(got, monokaiRed) {
-		t.Fatalf("expected generic highlighting, got %q", got)
+	if got := h.HighlightLine("fn main() {}"); !strings.Contains(got, "fn") || !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected Chroma highlighting with ANSI codes, got %q", got)
 	}
 }
 
