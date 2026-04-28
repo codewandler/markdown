@@ -1606,7 +1606,9 @@ func parseInlineImageAsLink(text string, span Span) (Event, string, bool) {
 	if !strings.HasPrefix(text, "![") {
 		return Event{}, text, false
 	}
-	ev, rest, ok := parseInlineLink(text[1:], span)
+	// Images may contain links in their alt text, so skip the
+	// nested-link rejection.
+	ev, rest, ok := parseInlineLinkInner(text[1:], span, false)
 	if !ok {
 		return Event{}, text, false
 	}
@@ -1615,11 +1617,23 @@ func parseInlineImageAsLink(text string, span Span) (Event, string, bool) {
 }
 
 func parseInlineLink(text string, span Span) (Event, string, bool) {
+	return parseInlineLinkInner(text, span, true)
+}
+
+func parseInlineLinkInner(text string, span Span, rejectNestedLinks bool) (Event, string, bool) {
 	closeText := matchingLinkLabelEnd(text)
 	if closeText < 0 || closeText+1 >= len(text) || text[closeText+1] != '(' {
 		return Event{}, text, false
 	}
-	label := decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeText]))
+	labelRaw := text[1:closeText]
+	// Links cannot nest (CommonMark spec §6.5). If the label text
+	// itself contains an inline link, this outer link is invalid.
+	// Images are allowed to contain links, so this check is skipped
+	// when called from the image path.
+	if rejectNestedLinks && containsInlineLink(labelRaw) {
+		return Event{}, text, false
+	}
+	label := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
 	dest, title, end, ok := parseInlineLinkTail(text[closeText+2:])
 	if !ok {
 		return Event{}, text, false
@@ -1627,12 +1641,51 @@ func parseInlineLink(text string, span Span) (Event, string, bool) {
 	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title}, Span: span}, text[closeText+2+end:], true
 }
 
+// containsInlineLink reports whether text contains a valid inline link
+// [...](...). Used to enforce the no-nested-links rule.
+func containsInlineLink(text string) bool {
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\\' && i+1 < len(text) {
+			i++ // skip escaped char
+			continue
+		}
+		if text[i] == '`' {
+			n := countRun(text[i:], '`')
+			close := findClosingBackticks(text[i+n:], n)
+			if close >= 0 {
+				i += n + close + n - 1
+				continue
+			}
+			i += n - 1
+			continue
+		}
+		if text[i] != '[' {
+			continue
+		}
+		// Try to parse an inline link starting at text[i:].
+		sub := text[i:]
+		close := matchingLinkLabelEnd(sub)
+		if close < 0 || close+1 >= len(sub) || sub[close+1] != '(' {
+			continue
+		}
+		if _, _, _, ok := parseInlineLinkTail(sub[close+2:]); ok {
+			return true
+		}
+	}
+	return false
+}
+
 func parseReferenceLink(text string, span Span, refs map[string]linkReference) (Event, string, bool) {
 	closeLabel := matchingLinkLabelEnd(text)
 	if closeLabel <= 0 {
 		return Event{}, text, false
 	}
-	labelText := decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeLabel]))
+	labelRaw := text[1:closeLabel]
+	// Links cannot nest (CommonMark spec §6.5).
+	if containsInlineLink(labelRaw) {
+		return Event{}, text, false
+	}
+	labelText := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
 	end := closeLabel + 1
 
 	// Try full reference [text][label] or collapsed [text][].
@@ -1642,8 +1695,9 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 		if closeRef >= 0 {
 			if closeRef > 1 {
 				// Full reference: [text][label]
-				refLabel := decodeCharacterReferences(unescapeBackslashPunctuation(text[end+1 : end+closeRef]))
-				ref, ok := refs[normalizeReferenceLabel(refLabel)]
+				// Normalize the raw label — no unescaping (spec §6.3).
+				refLabelRaw := text[end+1 : end+closeRef]
+				ref, ok := refs[normalizeReferenceLabel(refLabelRaw)]
 				if ok {
 					return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], true
 				}
@@ -1651,7 +1705,8 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 				return Event{}, text, false
 			}
 			// Collapsed reference: [text][]
-			ref, ok := refs[normalizeReferenceLabel(labelText)]
+			// Use raw first label for lookup.
+			ref, ok := refs[normalizeReferenceLabel(labelRaw)]
 			if ok {
 				return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], true
 			}
@@ -1661,7 +1716,8 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 	}
 
 	// Shortcut reference: [text]
-	ref, ok := refs[normalizeReferenceLabel(labelText)]
+	// Use raw first label for lookup.
+	ref, ok := refs[normalizeReferenceLabel(labelRaw)]
 	if !ok {
 		return Event{}, text, false
 	}
@@ -1693,7 +1749,9 @@ func parseLinkReferenceDefinitionStart(line string) (string, string, int, bool) 
 	if closeLabel <= 0 || closeLabel+1 >= len(text) || text[closeLabel+1] != ':' {
 		return "", "", 0, false
 	}
-	label := normalizeReferenceLabel(decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeLabel])))
+	// Normalize the raw label text — the spec does not unescape
+	// or decode character references during normalization.
+	label := normalizeReferenceLabel(text[1:closeLabel])
 	if label == "" {
 		return "", "", 0, false
 	}

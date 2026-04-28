@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   450,
-		statusKnownGap:    138,
+		statusSupported:   468,
+		statusKnownGap:    120,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -785,6 +785,63 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		expectParagraphText("[foo]")(t, events)
 		expectTextStyle("bar", InlineStyle{Link: "/url1"})(t, events)
 	},
+	// Reference links — additional passing examples.
+	528: expectTextStyle("link [foo [bar]]", InlineStyle{Link: "/uri"}),
+	534: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("*")(t, events)
+		expectTextStyle("foo*", InlineStyle{Link: "/uri"})(t, events)
+	},
+	535: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo *bar", InlineStyle{Link: "/uri"})(t, events)
+		expectParagraphText("*")(t, events)
+	},
+	537: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo")(t, events)
+		expectTextStyle("][ref]", InlineStyle{Code: true})(t, events)
+	},
+	542: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo] ")(t, events)
+		expectTextStyle("bar", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+	},
+	543: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo]")(t, events)
+		expectTextStyle("bar", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+	},
+	544: expectTextStyle("bar", InlineStyle{Link: "/url1"}),
+	549: expectTextStyle("foo", InlineStyle{Link: "/uri"}),
+	550: expectTextStyle("bar\\", InlineStyle{Link: "/uri"}),
+	551: expectParagraphText("[]", "[]: /uri"),
+	552: expectParagraphText("[", "]", "[", "]: /uri"),
+	554: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	556: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+		expectParagraphText("[]")(t, events)
+	},
+	558: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	// Nested links rejected — inner link wins.
+	518: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo ")(t, events)
+		expectTextStyle("bar", InlineStyle{Link: "/uri"})(t, events)
+		expectParagraphText("](/uri)")(t, events)
+	},
+	532: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo ")(t, events)
+		expectTextStyle("bar", InlineStyle{Link: "/uri"})(t, events)
+		expectParagraphText("]")(t, events)
+		expectTextStyle("ref", InlineStyle{Link: "/uri"})(t, events)
+	},
+	// Raw label normalization — backslash escapes not processed.
+	545: expectParagraphText("[bar][foo!]"),
+	// Invalid labels with unescaped brackets.
+	546: expectParagraphText("[foo][ref[]", "[ref[]: /uri"),
 }
 
 func expectBlocks(pairs ...any) func(*testing.T, []eventView) {
