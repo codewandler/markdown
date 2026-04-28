@@ -38,8 +38,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported: 591,
-		statusKnownGap:  61,
+		statusSupported: 601,
+		statusKnownGap:  51,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -938,6 +938,17 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	189: expectBlocks(BlockHTML, 1),
 	190: expectBlocks(BlockHTML, 5),
 	191: expectBlocks(BlockHTML, 4, BlockIndentedCode, 1),
+	// Raw HTML inline — valid tags pass through.
+	613: expectParagraphText("<a><bab><c2c>"),
+	614: expectParagraphText("<a/><b2/>"),
+	617: expectParagraphText("Foo ", "<responsive-image src=\"foo.jpg\" />"),
+	623: expectParagraphText("</a></foo >"),
+	625: expectParagraphText("foo ", "<!-- this is a --\ncomment - with hyphens -->"),
+	627: expectParagraphText("foo ", "<?php echo $a; ?>"),
+	628: expectParagraphText("foo ", "<!ELEMENT br EMPTY>"),
+	629: expectParagraphText("foo ", "<![CDATA[>&<]]>"),
+	630: expectParagraphText("foo ", "<a href=\"&ouml;\">"),
+	631: expectParagraphText("foo ", "<a href=\"\\*\">"),
 	// List items starting with indented code.
 	273: expectBlocks(BlockList, 1, BlockListItem, 1, BlockIndentedCode, 2, BlockParagraph, 1),
 	274: expectBlocks(BlockList, 1, BlockListItem, 1, BlockIndentedCode, 2, BlockParagraph, 1),
