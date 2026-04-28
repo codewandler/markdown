@@ -142,15 +142,30 @@ func renderGomarkdown(input []byte) []byte {
 }
 
 // === Parse-only: all parsers ================================================
+//
+// Fair comparison: each parser gets input in its native format,
+// pre-converted before the benchmark loop.
 
 func benchParseAll(b *testing.B, name string) {
 	input := getInput(name)
-	src := []byte(input)
+	src := []byte(input) // pre-convert for byte-based parsers
 	b.SetBytes(int64(len(input)))
 
+	// Ours: new parser each iteration (includes alloc cost)
 	b.Run("ours", func(b *testing.B) {
 		for b.Loop() {
 			parseOurs(input)
+		}
+	})
+	// Ours with reused parser (isolates parse cost from alloc)
+	b.Run("ours-reuse", func(b *testing.B) {
+		p := stream.NewParser()
+		for b.Loop() {
+			p.Reset()
+			events, _ := p.Write(src)
+			_ = len(events)
+			final, _ := p.Flush()
+			_ = len(final)
 		}
 	})
 	b.Run("goldmark", func(b *testing.B) {

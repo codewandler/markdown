@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/codewandler/markdown"
+	"github.com/codewandler/markdown/stream"
 	"github.com/codewandler/markdown/terminal"
 )
 
@@ -140,5 +141,75 @@ func TestRenderString_Table(t *testing.T) {
 	}
 	if strings.Contains(out, "---") {
 		t.Fatal("raw delimiter row present")
+	}
+}
+
+func TestParse_Basic(t *testing.T) {
+	events, err := markdown.Parse(strings.NewReader("# Hello\n\nWorld\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected events")
+	}
+	// Should have document, heading, paragraph blocks
+	var kinds []string
+	for _, ev := range events {
+		if ev.Kind == stream.EventEnterBlock {
+			kinds = append(kinds, string(ev.Block))
+		}
+	}
+	if len(kinds) < 3 {
+		t.Fatalf("expected at least 3 enter blocks, got %v", kinds)
+	}
+}
+
+func TestParse_WithBufSize(t *testing.T) {
+	events, err := markdown.Parse(
+		strings.NewReader("# Hello\n\nWorld\n"),
+		markdown.WithBufSize(4),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected events")
+	}
+}
+
+func TestParse_WithParser(t *testing.T) {
+	p := stream.NewParser()
+	// Parse twice with the same parser
+	for i := 0; i < 2; i++ {
+		events, err := markdown.Parse(
+			strings.NewReader("# Hello\n"),
+			markdown.WithParser(p),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) == 0 {
+			t.Fatalf("iteration %d: expected events", i)
+		}
+	}
+}
+
+func TestParseBytes(t *testing.T) {
+	events, err := markdown.ParseBytes([]byte("**bold** and `code`\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected events")
+	}
+}
+
+func TestParse_Empty(t *testing.T) {
+	events, err := markdown.Parse(strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("expected no events, got %d", len(events))
 	}
 }
