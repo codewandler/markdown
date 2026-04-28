@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/codewandler/markdown/stream"
 )
@@ -12,6 +13,7 @@ const (
 	reset     = "\x1b[0m"
 	bold      = "\x1b[1m"
 	italic    = "\x1b[3m"
+	strike    = "\x1b[9m"
 	underline = "\x1b[4m"
 
 	monokaiForeground = "\x1b[38;2;248;248;242m"
@@ -31,6 +33,8 @@ type Renderer struct {
 	codeBlock   CodeBlockStyle
 	inCode      bool
 	codeLang    string
+	inTable     bool
+	table       tableBuffer
 	lineStart   bool
 	quoteDepth  int
 	listDepth   int
@@ -49,6 +53,21 @@ type CodeBlockStyle struct {
 	BorderText  string
 	BorderColor string
 	Padding     int
+}
+
+type tableBuffer struct {
+	align       []stream.TableAlign
+	rows        []tableRow
+	currentRow  *tableRow
+	currentCell *tableCell
+}
+
+type tableRow struct {
+	cells []tableCell
+}
+
+type tableCell struct {
+	events []stream.Event
 }
 
 // WithCodeBlockStyle configures fenced-code block layout.
@@ -105,6 +124,48 @@ func (r *Renderer) Render(events []stream.Event) error {
 }
 
 func (r *Renderer) render(event stream.Event) error {
+	if r.inTable {
+		switch event.Kind {
+		case stream.EventEnterBlock:
+			switch event.Block {
+			case stream.BlockTableRow:
+				row := tableRow{}
+				r.table.currentRow = &row
+				return nil
+			case stream.BlockTableCell:
+				cell := tableCell{}
+				r.table.currentCell = &cell
+				return nil
+			default:
+				return nil
+			}
+		case stream.EventExitBlock:
+			switch event.Block {
+			case stream.BlockTableCell:
+				if r.table.currentRow != nil && r.table.currentCell != nil {
+					r.table.currentRow.cells = append(r.table.currentRow.cells, *r.table.currentCell)
+				}
+				r.table.currentCell = nil
+				return nil
+			case stream.BlockTableRow:
+				if r.table.currentRow != nil {
+					r.table.rows = append(r.table.rows, *r.table.currentRow)
+				}
+				r.table.currentRow = nil
+				return nil
+			case stream.BlockTable:
+				return r.exitBlock(event)
+			default:
+				return nil
+			}
+		case stream.EventText, stream.EventSoftBreak, stream.EventLineBreak:
+			if r.table.currentCell != nil {
+				r.table.currentCell.events = append(r.table.currentCell.events, event)
+			}
+			return nil
+		}
+	}
+
 	switch event.Kind {
 	case stream.EventEnterBlock:
 		return r.enterBlock(event)
@@ -129,13 +190,24 @@ func (r *Renderer) enterBlock(event stream.Event) error {
 	switch event.Block {
 	case stream.BlockDocument:
 		return nil
-	case stream.BlockHeading, stream.BlockParagraph, stream.BlockFencedCode, stream.BlockThematicBreak, stream.BlockBlockquote, stream.BlockList:
+	case stream.BlockHeading, stream.BlockParagraph, stream.BlockFencedCode, stream.BlockThematicBreak, stream.BlockBlockquote, stream.BlockList, stream.BlockTable:
 		if r.pending && !r.spaced {
 			if _, err := fmt.Fprint(r.w, "\n"); err != nil {
 				return err
 			}
 		}
 		r.spaced = false
+	}
+	if event.Block == stream.BlockTable {
+		r.inTable = true
+		align := []stream.TableAlign(nil)
+		if event.Table != nil {
+			align = append([]stream.TableAlign(nil), event.Table.Align...)
+		}
+		r.table = tableBuffer{
+			align: align,
+		}
+		return nil
 	}
 	if event.Block == stream.BlockBlockquote {
 		r.quoteDepth++
@@ -205,12 +277,28 @@ func (r *Renderer) exitBlock(event stream.Event) error {
 		r.listItem = ""
 		r.lineStart = true
 		return nil
+	case stream.BlockTable:
+		if err := r.flushTable(); err != nil {
+			return err
+		}
+		r.inTable = false
+		r.pending = true
+		r.lineStart = true
+		return nil
+	case stream.BlockTableRow, stream.BlockTableCell:
+		return nil
 	default:
 		return nil
 	}
 }
 
 func (r *Renderer) text(event stream.Event) error {
+	if r.inTable {
+		if r.table.currentCell != nil {
+			r.table.currentCell.events = append(r.table.currentCell.events, event)
+		}
+		return nil
+	}
 	if r.inCode {
 		_, err := fmt.Fprint(r.w, r.codePrefix(), r.highlighter.HighlightLine(event.Text))
 		r.lineStart = false
@@ -245,6 +333,105 @@ func (r *Renderer) writeLinePrefix() error {
 	return nil
 }
 
+func (r *Renderer) flushTable() error {
+	if len(r.table.rows) == 0 {
+		r.table = tableBuffer{}
+		return nil
+	}
+	cols := len(r.table.align)
+	for _, row := range r.table.rows {
+		if len(row.cells) > cols {
+			cols = len(row.cells)
+		}
+	}
+	widths := make([]int, cols)
+	rendered := make([][]string, len(r.table.rows))
+	for i, row := range r.table.rows {
+		rendered[i] = make([]string, cols)
+		for c := 0; c < cols; c++ {
+			var cell tableCell
+			if c < len(row.cells) {
+				cell = row.cells[c]
+			}
+			text := r.renderTableCell(cell.events)
+			rendered[i][c] = text
+			if w := utf8.RuneCountInString(stripANSI(text)); w > widths[c] {
+				widths[c] = w
+			}
+		}
+	}
+	for _, row := range rendered {
+		if err := r.writeTableRow(row, widths); err != nil {
+			return err
+		}
+	}
+	r.table = tableBuffer{}
+	return nil
+}
+
+func (r *Renderer) renderTableCell(events []stream.Event) string {
+	var out strings.Builder
+	for _, ev := range events {
+		switch ev.Kind {
+		case stream.EventText:
+			out.WriteString(r.styleText(ev))
+		case stream.EventSoftBreak, stream.EventLineBreak:
+			out.WriteByte(' ')
+		}
+	}
+	return out.String()
+}
+
+func (r *Renderer) writeTableRow(cells []string, widths []int) error {
+	if err := r.writeLinePrefix(); err != nil {
+		return err
+	}
+	var out strings.Builder
+	out.WriteString(monokaiComment)
+	out.WriteString("│")
+	out.WriteString(reset)
+	for i := 0; i < len(widths); i++ {
+		out.WriteByte(' ')
+		cell := ""
+		if i < len(cells) {
+			cell = cells[i]
+		}
+		width := utf8.RuneCountInString(stripANSI(cell))
+		align := stream.TableAlignNone
+		if i < len(r.table.align) {
+			align = r.table.align[i]
+		}
+		out.WriteString(padTableCell(cell, widths[i], width, align))
+		out.WriteByte(' ')
+		out.WriteString(monokaiComment)
+		out.WriteString("│")
+		out.WriteString(reset)
+	}
+	out.WriteByte('\n')
+	if _, err := io.WriteString(r.w, out.String()); err != nil {
+		return err
+	}
+	r.lineStart = true
+	return nil
+}
+
+func padTableCell(cell string, targetWidth, visibleWidth int, align stream.TableAlign) string {
+	if targetWidth <= visibleWidth {
+		return cell
+	}
+	pad := targetWidth - visibleWidth
+	switch align {
+	case stream.TableAlignRight:
+		return strings.Repeat(" ", pad) + cell
+	case stream.TableAlignCenter:
+		left := pad / 2
+		right := pad - left
+		return strings.Repeat(" ", left) + cell + strings.Repeat(" ", right)
+	default:
+		return cell + strings.Repeat(" ", pad)
+	}
+}
+
 func (r *Renderer) styleText(event stream.Event) string {
 	text := event.Text
 	if event.Style.Code {
@@ -255,6 +442,9 @@ func (r *Renderer) styleText(event stream.Event) string {
 	}
 	if event.Style.Strong {
 		text = bold + text + reset + monokaiForeground
+	}
+	if event.Style.Strike {
+		text = strike + text + reset + monokaiForeground
 	}
 	if event.Style.Link != "" {
 		text = underline + monokaiBlue + text + reset + monokaiComment + " (" + event.Style.Link + ")" + reset + monokaiForeground
@@ -321,11 +511,42 @@ func listMarker(event stream.Event) string {
 		if marker == "" {
 			marker = "."
 		}
-		return fmt.Sprintf("%d%s ", start, marker)
+		prefix := fmt.Sprintf("%d%s ", start, marker)
+		if event.List.Task {
+			prefix += taskCheckbox(event.List.Checked)
+		}
+		return prefix
 	}
-	return "- "
+	prefix := "- "
+	if event.List != nil && event.List.Task {
+		prefix += taskCheckbox(event.List.Checked)
+	}
+	return prefix
 }
 
 func visibleListMarkerWidth(marker string) int {
 	return len(marker)
+}
+
+func taskCheckbox(checked bool) string {
+	if checked {
+		return "[x] "
+	}
+	return "[ ] "
+}
+
+func stripANSI(s string) string {
+	var out strings.Builder
+	out.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			continue
+		}
+		out.WriteByte(s[i])
+	}
+	return out.String()
 }

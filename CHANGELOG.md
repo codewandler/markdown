@@ -10,6 +10,24 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-04-28
+
+### Added
+
+- Implemented GFM tables, task lists, strikethrough, and autolink literals in
+  the streaming parser and terminal renderer.
+- Added repository-level `AGENTS.md` and refreshed the README to match the
+  current product surface.
+
+### Changed
+
+- Reworked the optional highlighting adapter to build offline without the
+  external Chroma dependency while keeping the Go fast path and a non-Go
+  fallback.
+- Updated the streaming example module to use local `replace` directives only.
+- Expanded parser and renderer coverage for GFM behavior, table layout, and
+  incremental rendering.
+
 ## [0.24.0] - 2026-04-28
 
 ### Added

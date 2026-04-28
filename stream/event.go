@@ -35,6 +35,9 @@ const (
 	BlockHeading       BlockKind = "heading"
 	BlockList          BlockKind = "list"
 	BlockListItem      BlockKind = "list_item"
+	BlockTable         BlockKind = "table"
+	BlockTableRow      BlockKind = "table_row"
+	BlockTableCell     BlockKind = "table_cell"
 	BlockBlockquote    BlockKind = "blockquote"
 	BlockFencedCode    BlockKind = "fenced_code"
 	BlockIndentedCode  BlockKind = "indented_code"
@@ -48,6 +51,7 @@ const (
 type InlineStyle struct {
 	Emphasis  bool
 	Strong    bool
+	Strike    bool
 	Code      bool
 	Link      string
 	LinkTitle string
@@ -59,7 +63,24 @@ type ListData struct {
 	Start   int
 	Marker  string
 	Tight   bool
+	Task    bool
+	Checked bool
 }
+
+// TableData describes a Markdown table represented by table block events.
+type TableData struct {
+	Align []TableAlign
+}
+
+// TableAlign describes the alignment of a table column.
+type TableAlign int
+
+const (
+	TableAlignNone TableAlign = iota
+	TableAlignLeft
+	TableAlignCenter
+	TableAlignRight
+)
 
 // Event is one append-only parser output item.
 //
@@ -75,4 +96,5 @@ type Event struct {
 	Info  string
 	Span  Span
 	List  *ListData
+	Table *TableData
 }

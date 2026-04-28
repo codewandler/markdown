@@ -11,6 +11,8 @@ Production-target implementation plan. The repository currently has:
 - a dependency-free Go highlighter
 - an optional Chroma highlighter adapter in a submodule
 - one runnable example module using local `replace` directives
+- implemented GFM tables, task lists, strikethrough, and autolink literals in
+  the parser and terminal renderer
 - a pinned CommonMark `0.31.2` corpus loader
 - full-corpus parser split-equivalence tests with explicit
   supported/known-gap/unsupported accounting
@@ -22,8 +24,8 @@ Production-target implementation plan. The repository currently has:
   flush-only definitions, and split equivalence
 - `-benchmem` benchmarks for long streams, corpus parsing, tiny chunks, and
   malformed/pathological inline delimiter input
-- exact CommonMark classification totals: `285` supported, `161` known gaps,
-  and `206` unsupported examples
+- exact CommonMark classification totals: `307` supported, `174` known gaps,
+  and `171` unsupported examples
 - complete ATX heading section coverage in the supported CommonMark corpus
 - expanded fenced-code, indented-code, and code-span coverage
 - complete paragraph, blank-line, and soft-line-break coverage in the
@@ -103,7 +105,10 @@ must not leak back into parser events.
 5. **Responsiveness**: stable constructs emit as soon as correctness permits.
 6. **CommonMark conformance**: supported behavior is tested against the
    official CommonMark example corpus at the parser/event and terminal levels.
-7. **agentsdk compatibility**: integration preserves current public APIs long
+7. **GFM compatibility**: implemented GFM features must remain incremental,
+   chunk-safe, and renderer-neutral, and later extensions must follow the same
+   boundary rules.
+8. **agentsdk compatibility**: integration preserves current public APIs long
    enough for a safe migration.
 
 ## Production Quality Bar
@@ -117,6 +122,8 @@ The project is not complete until these criteria are met:
 - CommonMark compatibility is proven for the supported subset using the
   official CommonMark example corpus, structural parser assertions, split
   tests, and terminal behavior tests.
+- GFM compatibility is proven with focused fixtures, split tests, and terminal
+  layout checks for the implemented extensions.
 - Performance claims are backed by `-benchmem` benchmarks.
 - Memory behavior for long streams is measured and has regression tests or
   benchmarks.
@@ -181,9 +188,9 @@ trade-off, not a CommonMark-conformance mode.
 
 ### GFM Scope
 
-No GFM in the first production pass.
+GFM is in scope for the production product path.
 
-First target is a clearly documented CommonMark-compatible subset:
+Current implemented GFM subset:
 
 - ATX headings
 - paragraphs
@@ -194,9 +201,18 @@ First target is a clearly documented CommonMark-compatible subset:
 - blockquotes
 - ordered/unordered lists
 - paragraph-boundary inlines
+- pipe tables with header, separator, body rows, and alignment metadata
+- task lists
+- strikethrough
+- extended autolinks
 
-GFM tables, task lists, strikethrough, and extended autolinks come after this
-core product is correct and measured.
+The current parser and renderer implement this subset in a streaming-safe way,
+but GFM conformance still needs broader corpus coverage, malformed input
+coverage, and edge-case hardening before it should be called complete.
+
+Tables must not be implemented as a renderer-side Markdown heuristic. The
+parser must emit explicit table structure, and the terminal renderer may buffer
+only the active table block when it needs to compute column widths.
 
 ### HTML Handling
 
@@ -228,7 +244,7 @@ Migration strategy:
 - Glamour or any all-in-one Markdown terminal renderer.
 - Full CommonMark in the first implementation turn if it would compromise
   correctness of the supported subset.
-- GFM before CommonMark-compatible core behavior.
+- GFM features beyond tables before CommonMark-compatible core behavior.
 - Public API freeze before conformance and split-fuzz tests exist.
 - Incremental inline parsing before paragraph-boundary inline parsing is
   proven correct.
@@ -320,6 +336,7 @@ type Event struct {
     Span  Span
 
     List *ListData
+    Table *TableData
 }
 
 type ListData struct {
@@ -328,6 +345,19 @@ type ListData struct {
     Marker  string
     Tight   bool
 }
+
+type TableData struct {
+    Align []TableAlign
+}
+
+type TableAlign int
+
+const (
+    TableAlignNone TableAlign = iota
+    TableAlignLeft
+    TableAlignCenter
+    TableAlignRight
+)
 ```
 
 Rules:
@@ -338,8 +368,10 @@ Rules:
   terminal wrapping.
 - Fenced-code language/info stays in `Info`.
 - Lists use `ListData`; renderers should not parse list markers from text.
+- Tables use `TableData`; renderers should not infer column structure from raw
+  pipe characters.
 - Events must not contain terminal-specific layout fields.
-- Event text is immutable from the caller’s perspective. Do not expose slices
+- Event text is immutable from the caller's perspective. Do not expose slices
   backed by mutable parser buffers.
 
 ## Parser Architecture
@@ -602,6 +634,10 @@ Current required behavior:
 - code highlighting through `CodeHighlighter`
 - default highlighter uses stdlib Go scanner
 - Chroma adapter handles non-Go languages outside core module
+- table rendering uses explicit table events, not Markdown parsing
+- table layout may buffer the current table block only when needed to compute
+  column widths
+- terminal output stays incremental even when a table is buffered locally
 
 Add tests:
 
@@ -609,6 +645,7 @@ Add tests:
 - configurable code style
 - streamed render equals unsplit render for supported samples
 - ANSI-stripped visible output for blocks/lists/blockquotes
+- table rendering for header/alignment/body combinations
 
 ## Compatibility Plan
 
@@ -625,6 +662,8 @@ Agentsdk migration after parser baseline:
 4. Feed events into terminal renderer.
 5. Keep `agentsdk/markdown.Buffer` compiling.
 6. Add side-by-side tests for existing terminal samples.
+7. Add table fixtures once GFM tables land so the migration covers the new
+   terminal surface as well.
 
 Acceptance:
 
@@ -724,6 +763,35 @@ Acceptance:
 - unsupported CommonMark sections have explicit status
 - terminal-first conformance does not depend on an HTML renderer
 
+### Step 4b: GFM Extensions
+
+Status: implemented in `v0.6.0`.
+
+Files:
+
+- `stream/event.go`
+- `stream/parser_impl.go`
+- `stream/commonmark_test.go`
+- `terminal/renderer.go`
+- `terminal/renderer_test.go`
+
+Work:
+
+- add explicit table block events and alignment metadata
+- implement conservative pipe-table recognition with parser-side commitment
+- keep table recognition incremental and chunk-safe
+- render header/body rows in the terminal renderer without Markdown parsing
+- keep table layout local to the active table block
+- add focused fixtures for alignment, empty cells, narrow columns, task lists,
+  strikethrough, and autolinks
+
+Acceptance:
+
+- `go test ./stream` passes
+- `go test ./terminal` passes
+- implemented GFM output is stable across chunk splits
+- renderer does not parse Markdown syntax itself
+
 ### Step 5: Terminal Tests
 
 Files:
@@ -789,11 +857,13 @@ Acceptance:
 The first production release is done when:
 
 - parser emits append-only events for the supported subset
+- parser emits append-only events for the supported GFM subset
 - split tests pass for all supported samples
 - fenced code streams line-by-line before closing fence
 - long-fence benchmark shows no retained parser growth with emitted content
 - paragraph buffering behavior is documented and benchmarked
 - official CommonMark corpus is loaded and used for split/corpus tests
+- fixtures and renderer tests cover incremental GFM behavior
 - terminal renderer consumes events without parsing Markdown
 - Chroma adapter remains outside core dependency graph
 - single example module runs
@@ -853,6 +923,15 @@ Mitigation:
 - keep container state until continuation is stable
 - prefer delayed emission over incorrect emission
 
+### Risk: Tables need width computation
+
+Mitigation:
+
+- make table support explicit in the event model
+- buffer only the current table block if the renderer needs width measurement
+- keep buffering local to the table, not the full document
+- add table split tests so width computation remains chunk-safe
+
 ### Risk: Memory grows with long outputs
 
 Mitigation:
@@ -876,7 +955,9 @@ All previously open questions are resolved for the next implementation pass:
 
 1. Source positions: include them now.
 2. Long paragraph latency: conformant baseline buffers until boundary or flush.
-3. GFM: defer until CommonMark subset is stable.
+3. GFM: tables, task lists, strikethrough, and extended autolinks are
+   implemented; the remaining work is conformance hardening and broader
+   edge-case coverage.
 4. HTML: terminal renders raw source text; full incremental valid HTML is a
    future renderer project.
 5. `agentsdk/markdown.Buffer`: keep source-compatible during migration.

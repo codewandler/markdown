@@ -64,3 +64,22 @@ func TestIncompleteLineDoesNotEmitBeforeNewline(t *testing.T) {
 	assertContains(t, viewEvents(events), eventView{Kind: EventEnterBlock, Block: BlockHeading, Level: 1})
 	assertContains(t, viewEvents(events), eventView{Kind: EventText, Text: "heading"})
 }
+
+func TestTableEmitsAfterSeparatorLine(t *testing.T) {
+	p := NewParser()
+	if events, err := p.Write([]byte("| a | b |\n")); err != nil {
+		t.Fatal(err)
+	} else if len(events) != 0 {
+		t.Fatalf("table emitted before separator: %#v", events)
+	}
+
+	events, err := p.Write([]byte("| --- | :---: |\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := viewEvents(events)
+	assertContains(t, got, eventView{Kind: EventEnterBlock, Block: BlockTable, Table: &TableData{Align: []TableAlign{TableAlignNone, TableAlignCenter}}})
+	assertContains(t, got, eventView{Kind: EventEnterBlock, Block: BlockTableRow})
+	assertContains(t, got, eventView{Kind: EventText, Text: "a"})
+	assertContains(t, got, eventView{Kind: EventText, Text: "b"})
+}

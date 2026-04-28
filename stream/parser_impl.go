@@ -38,6 +38,7 @@ type parser struct {
 	fence     fenceState
 	refs      map[string]linkReference
 	refDef    linkReferenceDefinitionState
+	table     tableState
 
 	inBlockquote       bool
 	inList             bool
@@ -85,6 +86,12 @@ type fenceState struct {
 	info   string
 }
 
+type tableState struct {
+	active bool
+	align  []TableAlign
+	span   Span
+}
+
 func (p *parser) Write(chunk []byte) ([]Event, error) {
 	if len(chunk) == 0 || p.flushed {
 		return nil, nil
@@ -126,6 +133,7 @@ func (p *parser) Flush() ([]Event, error) {
 		p.partial = nil
 	}
 	p.closePendingLinkReferenceDefinition(&events)
+	p.closeTable(&events)
 	p.closeParagraph(&events)
 	p.closeIndentedCode(&events)
 	if p.fence.open {
@@ -158,6 +166,18 @@ func (p *parser) nextLineInfo(text string, hadNewline bool) lineInfo {
 }
 
 func (p *parser) processLine(line lineInfo, events *[]Event) {
+	if p.table.active {
+		if strings.TrimSpace(line.text) == "" {
+			p.closeTable(events)
+		} else if p.processActiveTableLine(line, events) {
+			return
+		} else {
+			p.closeTable(events)
+			p.processLine(line, events)
+			return
+		}
+	}
+
 	if p.fence.open {
 		if p.isClosingFence(line.text) {
 			p.fence.open = false
@@ -254,7 +274,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		if !p.inList || p.listData.Ordered != item.data.Ordered || p.listData.Marker != item.data.Marker {
 			p.closeList(events)
 			p.inList = true
-			p.listData = item.data
+			p.listData = listBlockData(item.data)
 			data := p.listData
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
 		}
@@ -271,6 +291,9 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	}
 
 	if p.inList {
+		if p.tryStartTable(line, events) {
+			return
+		}
 		if strings.HasPrefix(line.text, "  ") || strings.HasPrefix(line.text, "\t") {
 			inner := line
 			inner.text = strings.TrimLeft(line.text, " \t")
@@ -286,6 +309,9 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 }
 
 func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
+	if p.tryStartTable(line, events) {
+		return
+	}
 	if marker, n, indent, info, ok := openingFence(line.text); ok {
 		p.ensureDocument(events)
 		p.closeParagraph(events)
@@ -403,6 +429,179 @@ func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) 
 	} else {
 		p.paragraph.lines = p.paragraph.lines[:0]
 	}
+}
+
+func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
+	if p.table.active || len(p.paragraph.lines) != 1 {
+		return false
+	}
+	align, ok := parseTableSeparator(line.text)
+	if !ok {
+		return false
+	}
+	header := p.paragraph.lines[0]
+	_, headerHasPipe := splitTableRow(header.text)
+	if !headerHasPipe {
+		return false
+	}
+
+	p.ensureDocument(events)
+	p.closeIndentedCode(events)
+	clear(p.paragraph.lines)
+	if cap(p.paragraph.lines) > 1024 {
+		p.paragraph.lines = nil
+	} else {
+		p.paragraph.lines = p.paragraph.lines[:0]
+	}
+
+	tableAlign := append([]TableAlign(nil), align...)
+	p.table = tableState{
+		active: true,
+		align:  tableAlign,
+		span:   Span{Start: header.span.Start, End: line.end},
+	}
+	*events = append(*events, Event{
+		Kind:  EventEnterBlock,
+		Block: BlockTable,
+		Table: &TableData{Align: append([]TableAlign(nil), tableAlign...)},
+		Span:  p.table.span,
+	})
+	headerLine := lineInfo{text: header.text, start: header.span.Start, end: header.span.End}
+	p.emitTableRow(headerLine.text, headerLine, events)
+	return true
+}
+
+func (p *parser) processActiveTableLine(line lineInfo, events *[]Event) bool {
+	if !p.table.active {
+		return false
+	}
+	cells, hasPipe := splitTableRow(line.text)
+	if !hasPipe && len(p.table.align) != 1 {
+		return false
+	}
+	if len(cells) == 0 {
+		return false
+	}
+	p.table.span.End = line.end
+	p.emitTableRow(line.text, line, events)
+	return true
+}
+
+func (p *parser) emitTableRow(text string, line lineInfo, events *[]Event) {
+	rowSpan := Span{Start: line.start, End: line.end}
+	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableRow, Span: rowSpan})
+	cells, _ := splitTableRow(text)
+	for _, cell := range cells {
+		cellSpan := Span{Start: line.start, End: line.end}
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableCell, Span: cellSpan})
+		*events = append(*events, p.parseInline(cell, cellSpan)...)
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockTableCell, Span: cellSpan})
+	}
+	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockTableRow, Span: rowSpan})
+}
+
+func (p *parser) closeTable(events *[]Event) {
+	if !p.table.active {
+		return
+	}
+	span := p.table.span
+	align := append([]TableAlign(nil), p.table.align...)
+	p.table = tableState{}
+	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockTable, Table: &TableData{Align: align}, Span: span})
+}
+
+func parseTableSeparator(line string) ([]TableAlign, bool) {
+	cells, hasPipe := splitTableRow(line)
+	if !hasPipe || len(cells) == 0 {
+		return nil, false
+	}
+	align := make([]TableAlign, 0, len(cells))
+	for _, cell := range cells {
+		a, ok := parseTableAlign(cell)
+		if !ok {
+			return nil, false
+		}
+		align = append(align, a)
+	}
+	return align, true
+}
+
+func parseTableAlign(cell string) (TableAlign, bool) {
+	cell = strings.TrimSpace(cell)
+	left := strings.HasPrefix(cell, ":")
+	right := strings.HasSuffix(cell, ":")
+	if left {
+		cell = cell[1:]
+	}
+	if right {
+		cell = cell[:len(cell)-1]
+	}
+	if len(cell) < 3 {
+		return TableAlignNone, false
+	}
+	for i := 0; i < len(cell); i++ {
+		if cell[i] != '-' {
+			return TableAlignNone, false
+		}
+	}
+	switch {
+	case left && right:
+		return TableAlignCenter, true
+	case left:
+		return TableAlignLeft, true
+	case right:
+		return TableAlignRight, true
+	default:
+		return TableAlignNone, true
+	}
+}
+
+func splitTableRow(line string) ([]string, bool) {
+	s := strings.TrimSpace(line)
+	if s == "" {
+		return nil, false
+	}
+	hasPipe := false
+	if s[0] == '|' {
+		hasPipe = true
+		s = s[1:]
+	}
+	if len(s) > 0 && s[len(s)-1] == '|' {
+		hasPipe = true
+		s = s[:len(s)-1]
+	}
+	var cells []string
+	start := 0
+	escaped := false
+	codeRun := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' {
+			escaped = true
+			continue
+		}
+		if c == '`' {
+			run := countRun(s[i:], '`')
+			if codeRun == 0 {
+				codeRun = run
+			} else if run == codeRun {
+				codeRun = 0
+			}
+			i += run - 1
+			continue
+		}
+		if c == '|' && codeRun == 0 {
+			cells = append(cells, strings.TrimSpace(s[start:i]))
+			start = i + 1
+			hasPipe = true
+		}
+	}
+	cells = append(cells, strings.TrimSpace(s[start:]))
+	return cells, hasPipe
 }
 
 func (p *parser) startLinkReferenceDefinition(line lineInfo) bool {
@@ -549,6 +748,7 @@ func (p *parser) closeIndentedCode(events *[]Event) {
 }
 
 func (p *parser) closeContainers(events *[]Event) {
+	p.closeTable(events)
 	p.closeIndentedCode(events)
 	if p.inList {
 		p.closeListItem(events)
@@ -767,10 +967,10 @@ func listItem(line string) (listItemData, bool) {
 		return listItemData{}, false
 	}
 	if strings.ContainsRune("-+*", rune(trimmed[0])) && (trimmed[1] == ' ' || trimmed[1] == '\t') {
-		return listItemData{
-			data:    ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true},
-			content: strings.TrimLeft(trimmed[2:], " \t"),
-		}, true
+		data := ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true}
+		content := strings.TrimLeft(trimmed[2:], " \t")
+		data.Task, data.Checked, content = parseTaskListItem(content)
+		return listItemData{data: data, content: content}, true
 	}
 	i := 0
 	for i < len(trimmed) && trimmed[i] >= '0' && trimmed[i] <= '9' {
@@ -799,10 +999,37 @@ func listItem(line string) (listItemData, bool) {
 	if err != nil {
 		return listItemData{}, false
 	}
-	return listItemData{
-		data:    ListData{Ordered: true, Start: start, Marker: string(marker), Tight: true},
-		content: strings.TrimLeft(trimmed[i+2:], " \t"),
-	}, true
+	data := ListData{Ordered: true, Start: start, Marker: string(marker), Tight: true}
+	content := strings.TrimLeft(trimmed[i+2:], " \t")
+	data.Task, data.Checked, content = parseTaskListItem(content)
+	return listItemData{data: data, content: content}, true
+}
+
+func listBlockData(item ListData) ListData {
+	item.Task = false
+	item.Checked = false
+	return item
+}
+
+func parseTaskListItem(content string) (task bool, checked bool, rest string) {
+	if len(content) < 3 || content[0] != '[' || content[2] != ']' {
+		return false, false, content
+	}
+	switch content[1] {
+	case ' ':
+		checked = false
+	case 'x', 'X':
+		checked = true
+	default:
+		return false, false, content
+	}
+	if len(content) == 3 {
+		return true, checked, ""
+	}
+	if content[3] != ' ' && content[3] != '\t' {
+		return false, false, content
+	}
+	return true, checked, strings.TrimLeft(content[4:], " \t")
 }
 
 func leadingIndent(line string) (int, int) {
@@ -876,6 +1103,7 @@ type inlineToken struct {
 func tokenizeInline(text string, span Span, refs map[string]linkReference) []inlineToken {
 	var tokens []inlineToken
 	var prevSource string
+	imagePossible := strings.Contains(text, "](")
 	linkPossible := strings.Contains(text, "](")
 	autolinkPossible := strings.Contains(text, ">")
 	for len(text) > 0 {
@@ -914,6 +1142,25 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 			text = text[n:]
 			continue
 		}
+		if text[0] == '!' {
+			if imagePossible {
+				if ev, rest, ok := parseInlineImage(text, span); ok {
+					tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+					prevSource = text[:len(text)-len(rest)]
+					text = rest
+					continue
+				}
+				imagePossible = strings.Contains(text[1:], "](")
+			}
+			if len(refs) > 0 {
+				if ev, rest, ok := parseReferenceImage(text, span, refs); ok {
+					tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+					prevSource = text[:len(text)-len(rest)]
+					text = rest
+					continue
+				}
+			}
+		}
 		if text[0] == '[' && linkPossible {
 			if ev, rest, ok := parseInlineLink(text, span); ok {
 				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
@@ -940,6 +1187,12 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 			}
 			autolinkPossible = strings.Contains(text[1:], ">")
 		}
+		if ev, rest, ok := parseAutolinkLiteral(text, span, prevSource); ok {
+			tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+			prevSource = text[:len(text)-len(rest)]
+			text = rest
+			continue
+		}
 		if text[0] == '&' {
 			if decoded, rest, ok := parseCharacterReference(text); ok {
 				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: decoded})
@@ -950,6 +1203,16 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 		}
 		if isInlineDelimiterByte(text[0]) {
 			n := countRun(text, text[0])
+			if text[0] == '~' && n < 2 {
+				next := nextInlineDelimiter(text)
+				if next <= 0 {
+					next = 1
+				}
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:next]})
+				prevSource = text[:next]
+				text = text[next:]
+				continue
+			}
 			open, close := emphasisDelimRun(prevSource, text[n:], text[0], n)
 			tokens = append(tokens, inlineToken{kind: inlineTokenDelimiter, text: text[:n], delim: text[0], run: n, open: open, close: close})
 			prevSource = text[:n]
@@ -957,6 +1220,9 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 			continue
 		}
 		next := nextInlineDelimiter(text)
+		if start := nextAutolinkLiteralStart(text, prevSource); start >= 0 && start < next {
+			next = start
+		}
 		if next <= 0 {
 			next = 1
 		}
@@ -1015,8 +1281,16 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 					if closeCount < use {
 						use = closeCount
 					}
+					if tok.delim == '~' {
+						use = 2
+						if openCount < use || closeCount < use {
+							emitText(tok.text, style)
+							i++
+							continue
+						}
+					}
 					emitText(tok.text[:openCount-use], style)
-					emitRange(i+1, closeIdx, applyDelimiterStyle(style, use))
+					emitRange(i+1, closeIdx, applyDelimiterStyle(style, use, tok.delim))
 					emitText(tokens[closeIdx].text[use:], style)
 					i = closeIdx + 1
 					continue
@@ -1040,8 +1314,12 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 	return out
 }
 
-func applyDelimiterStyle(style InlineStyle, count int) InlineStyle {
+func applyDelimiterStyle(style InlineStyle, count int, marker byte) InlineStyle {
 	out := style
+	if marker == '~' {
+		out.Strike = true
+		return out
+	}
 	for count >= 2 {
 		out.Strong = true
 		count -= 2
@@ -1056,6 +1334,7 @@ func mergeInlineStyles(base, add InlineStyle) InlineStyle {
 	out := base
 	out.Emphasis = out.Emphasis || add.Emphasis
 	out.Strong = out.Strong || add.Strong
+	out.Strike = out.Strike || add.Strike
 	out.Code = out.Code || add.Code
 	if add.Link != "" {
 		out.Link = add.Link
@@ -1082,6 +1361,37 @@ func coalesceInlineTokens(tokens []inlineToken, span Span) []Event {
 	return coalesceText(events)
 }
 
+func parseInlineImage(text string, span Span) (Event, string, bool) {
+	parsed, rest, ok := parseInlineImageAsLink(text, span)
+	if !ok {
+		return Event{}, text, false
+	}
+	return parsed, rest, true
+}
+
+func parseReferenceImage(text string, span Span, refs map[string]linkReference) (Event, string, bool) {
+	if len(refs) == 0 || !strings.HasPrefix(text, "![") {
+		return Event{}, text, false
+	}
+	ev, rest, ok := parseReferenceLink(text[1:], span, refs)
+	if !ok {
+		return Event{}, text, false
+	}
+	return ev, text[len(text)-len(rest):], true
+}
+
+func parseInlineImageAsLink(text string, span Span) (Event, string, bool) {
+	if !strings.HasPrefix(text, "![") {
+		return Event{}, text, false
+	}
+	ev, rest, ok := parseInlineLink(text[1:], span)
+	if !ok {
+		return Event{}, text, false
+	}
+	rest = text[len(text)-len(rest):]
+	return ev, rest, true
+}
+
 func parseInlineLink(text string, span Span) (Event, string, bool) {
 	closeText := matchingLinkLabelEnd(text)
 	if closeText < 0 || closeText+1 >= len(text) || text[closeText+1] != '(' {
@@ -1102,7 +1412,7 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 	}
 	labelText := decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeLabel]))
 	refLabel := labelText
-	end := closeLabel + 1
+	end := skipMarkdownSpace(text, closeLabel+1)
 	if end < len(text) && text[end] == '[' {
 		closeRef := matchingLinkLabelEnd(text[end:])
 		if closeRef < 0 {
@@ -1508,7 +1818,7 @@ func emphasisDelimRun(prevSource, nextSource string, marker byte, runLen int) (b
 	nextRune, _ := firstRune(nextSource)
 	left := isLeftFlanking(prevRune, nextRune)
 	right := isRightFlanking(prevRune, nextRune)
-	if marker == '*' {
+	if marker == '*' || marker == '~' {
 		return left, right
 	}
 	if marker == '_' {
@@ -1598,6 +1908,39 @@ func parseAutolink(text string, span Span) (Event, string, bool) {
 	return Event{}, text, false
 }
 
+func parseAutolinkLiteral(text string, span Span, prevSource string) (Event, string, bool) {
+	if !autolinkLiteralBoundary(prevSource) {
+		return Event{}, text, false
+	}
+	candidate, _ := scanAutolinkLiteralCandidate(text)
+	if candidate == "" {
+		return Event{}, text, false
+	}
+	candidate = trimAutolinkLiteralSuffix(candidate)
+	if candidate == "" {
+		return Event{}, text, false
+	}
+	lower := strings.ToLower(candidate)
+	switch {
+	case strings.HasPrefix(lower, "http://"):
+		if len(candidate) > len("http://") && isURIAutolink(candidate) {
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{Link: candidate}, Span: span}, text[len(candidate):], true
+		}
+	case strings.HasPrefix(lower, "https://"):
+		if len(candidate) > len("https://") && isURIAutolink(candidate) {
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{Link: candidate}, Span: span}, text[len(candidate):], true
+		}
+	case strings.HasPrefix(lower, "www."):
+		if isWWWAutolink(candidate) {
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{Link: "http://" + candidate}, Span: span}, text[len(candidate):], true
+		}
+	}
+	if isEmailAutolink(candidate) {
+		return Event{Kind: EventText, Text: candidate, Style: InlineStyle{Link: "mailto:" + candidate}, Span: span}, text[len(candidate):], true
+	}
+	return Event{}, text, false
+}
+
 func isURIAutolink(target string) bool {
 	colon := strings.IndexByte(target, ':')
 	if colon < 2 || colon > 32 || !isASCIIAlpha(target[0]) {
@@ -1618,6 +1961,143 @@ func isURIAutolink(target string) bool {
 	return colon+1 < len(target)
 }
 
+func autolinkLiteralBoundary(prevSource string) bool {
+	if prevSource == "" {
+		return true
+	}
+	prev, ok := lastRune(prevSource)
+	if !ok {
+		return true
+	}
+	return !isAlphaNumeric(prev)
+}
+
+func scanAutolinkLiteralCandidate(text string) (string, string) {
+	end := 0
+	for end < len(text) {
+		c := text[end]
+		if c <= ' ' || c == '<' || c == '>' {
+			break
+		}
+		end++
+	}
+	if end == 0 {
+		return "", text
+	}
+	return text[:end], text[end:]
+}
+
+func trimAutolinkLiteralSuffix(candidate string) string {
+	for len(candidate) > 0 {
+		switch candidate[len(candidate)-1] {
+		case '.', ',', ':', ';', '!', '?':
+			candidate = candidate[:len(candidate)-1]
+			continue
+		case ')':
+			if strings.Count(candidate, ")") > strings.Count(candidate, "(") {
+				candidate = candidate[:len(candidate)-1]
+				continue
+			}
+		case ']':
+			if strings.Count(candidate, "]") > strings.Count(candidate, "[") {
+				candidate = candidate[:len(candidate)-1]
+				continue
+			}
+		}
+		return candidate
+	}
+	return candidate
+}
+
+func nextAutolinkLiteralStart(text string, prevSource string) int {
+	best := -1
+	for _, prefix := range []string{"http://", "https://", "www."} {
+		lower := strings.ToLower(text)
+		search := 0
+		for {
+			i := strings.Index(lower[search:], prefix)
+			if i < 0 {
+				break
+			}
+			i += search
+			if autolinkLiteralBoundaryAt(text, i, prevSource) && (best < 0 || i < best) {
+				best = i
+				break
+			}
+			search = i + 1
+		}
+	}
+	for i := 0; i < len(text); i++ {
+		if text[i] != '@' {
+			continue
+		}
+		start := i
+		for start > 0 && isEmailLocalAutolinkByte(text[start-1]) {
+			start--
+		}
+		if start == i || !autolinkLiteralBoundaryAt(text, start, prevSource) {
+			continue
+		}
+		candidate, _ := scanAutolinkLiteralCandidate(text[start:])
+		candidate = trimAutolinkLiteralSuffix(candidate)
+		if isEmailAutolink(candidate) && (best < 0 || start < best) {
+			best = start
+		}
+	}
+	return best
+}
+
+func autolinkLiteralBoundaryAt(text string, start int, prevSource string) bool {
+	if start < 0 || start > len(text) {
+		return false
+	}
+	if start == 0 {
+		return autolinkLiteralBoundary(prevSource)
+	}
+	prev, _ := lastRune(text[:start])
+	return !isAlphaNumeric(prev)
+}
+
+func isEmailLocalAutolinkByte(c byte) bool {
+	return isASCIIAlphaNumeric(c) || strings.ContainsRune(".!#$%&'*+/=?^_`{|}~-", rune(c))
+}
+
+func isWWWAutolink(target string) bool {
+	if len(target) < 5 || !strings.EqualFold(target[:4], "www.") {
+		return false
+	}
+	hostPort := target[4:]
+	if hostPort == "" {
+		return false
+	}
+	end := len(hostPort)
+	for i := 0; i < len(hostPort); i++ {
+		switch hostPort[i] {
+		case '/', '?', '#':
+			end = i
+			i = len(hostPort)
+		}
+	}
+	hostPort = hostPort[:end]
+	if hostPort == "" {
+		return false
+	}
+	host := hostPort
+	if colon := strings.LastIndexByte(hostPort, ':'); colon >= 0 {
+		port := hostPort[colon+1:]
+		if port == "" {
+			return false
+		}
+		for i := 0; i < len(port); i++ {
+			if port[i] < '0' || port[i] > '9' {
+				return false
+			}
+		}
+		host = hostPort[:colon]
+	}
+	return isDomainAutolink(host)
+}
+
 func isEmailAutolink(target string) bool {
 	at := strings.IndexByte(target, '@')
 	if at <= 0 || at != strings.LastIndexByte(target, '@') || at == len(target)-1 {
@@ -1633,7 +2113,14 @@ func isEmailAutolink(target string) bool {
 			return false
 		}
 	}
+	return isDomainAutolink(domain)
+}
+
+func isDomainAutolink(domain string) bool {
 	labels := strings.Split(domain, ".")
+	if len(labels) < 2 {
+		return false
+	}
 	for _, label := range labels {
 		if label == "" || label[0] == '-' || label[len(label)-1] == '-' {
 			return false
@@ -1649,14 +2136,14 @@ func isEmailAutolink(target string) bool {
 }
 
 func nextInlineDelimiter(text string) int {
-	if i := strings.IndexAny(text, "\n\\*_`[<&"); i >= 0 {
+	if i := strings.IndexAny(text, "\n\\*~_`[<&"); i >= 0 {
 		return i
 	}
 	return len(text)
 }
 
 func isInlineDelimiterByte(c byte) bool {
-	return c == '\n' || c == '\\' || c == '*' || c == '_' || c == '`' || c == '[' || c == '<' || c == '&'
+	return c == '\n' || c == '\\' || c == '*' || c == '~' || c == '_' || c == '`' || c == '[' || c == '<' || c == '&'
 }
 
 func coalesceText(events []Event) []Event {
@@ -1693,7 +2180,7 @@ func coalesceText(events []Event) []Event {
 }
 
 func sameStyle(a, b InlineStyle) bool {
-	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle
+	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle
 }
 
 func isEscapablePunctuation(c byte) bool {
