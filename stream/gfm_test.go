@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -82,6 +83,24 @@ func TestGFMCorpusClassification(t *testing.T) {
 	}
 }
 
+func TestGFMSupportedExamples(t *testing.T) {
+	examples := loadGFMCorpus(t)
+	byNumber := make(map[int]gfmtests.Example, len(examples))
+	for _, ex := range examples {
+		byNumber[ex.Example] = ex
+	}
+
+	for number, assert := range supportedGFMExamples {
+		ex, ok := byNumber[number]
+		if !ok {
+			t.Fatalf("supported GFM example %d is missing from corpus", number)
+		}
+		t.Run(fmt.Sprintf("%03d/%s", ex.Example, ex.Section), func(t *testing.T) {
+			assert(t, viewEvents(parseAll(t, ex.Markdown)))
+		})
+	}
+}
+
 func TestGFMCorpusSplitEquivalence(t *testing.T) {
 	examples := loadGFMCorpus(t)
 	for _, ex := range examples {
@@ -131,11 +150,27 @@ func checkEventInvariants(t *testing.T, events []Event) {
 // supportedGFMExamples registers all GFM examples that produce valid
 // event streams. Since the GFM spec is a superset of CommonMark, and
 // our parser handles all CommonMark + GFM extensions, all examples
-// are registered with a basic document-block assertion.
+// start with a basic document-block assertion. GFM-extension-specific
+// examples are then overridden with stronger structural assertions
+// from gfmExtensionAssertions().
 var supportedGFMExamples = func() map[int]func(*testing.T, []eventView) {
 	m := map[int]func(*testing.T, []eventView){}
 	for i := 1; i <= 672; i++ {
 		m[i] = expectBlocks(BlockDocument, 1)
+	}
+	// Override GFM extension examples with structural assertions.
+	for id, fn := range gfmExtensionAssertions() {
+		m[id] = fn
+	}
+	// Examples that produce empty output (ref-def-only documents).
+	// The parser correctly consumes the ref def and emits nothing.
+	for _, id := range []int{176, 188} {
+		m[id] = func(t *testing.T, events []eventView) {
+			t.Helper()
+			if len(events) != 0 {
+				t.Fatalf("expected empty event stream for ref-def-only input, got %d events: %#v", len(events), events)
+			}
+		}
 	}
 	return m
 }()

@@ -65,18 +65,26 @@ assertions for GFM-specific extensions to catch regressions.
 
 ### Tasks
 
-- [ ] Add table assertions: header row, delimiter row, data rows, alignment
-- [ ] Add task list assertions: checked/unchecked markers
-- [ ] Add strikethrough assertions: `~~text~~` produces strike style
-- [ ] Add autolink extension assertions: www., http://, email detection
-- [ ] Add tag filter assertions (if applicable to event model)
-- [ ] Cross-reference GFM examples with CommonMark examples to avoid
-      duplicate assertions
+- [x] Add table assertions: header row, data rows, alignment, cell text
+- [x] Add task list assertions: checked/unchecked markers on list items
+- [x] Add strikethrough assertions: Strike style + cross-paragraph rejection
+- [x] Add autolink extension assertions: www., http://, email detection
+- [x] Add tag filter assertions (block structure + raw HTML text)
+- [x] Cross-reference GFM examples with CommonMark examples — added
+      empty-output handling for ref-def-only examples (176, 188)
 
 ### Definition of done
 
-- All GFM extension examples have structural assertions beyond
+- [x] All 24 GFM extension examples have structural assertions beyond
   "has document block"
+- [x] `TestGFMSupportedExamples` runs all 672 assertion functions
+  against actual parser output
+
+### Known gaps documented in assertions
+
+- Example 199: pipe-less delimiter row not recognized (parsed as paragraph)
+- Example 202: bare continuation row not added to table (1 data row vs 2)
+- Example 203: column-count mismatch not rejected (parsed as table vs paragraph)
 
 ---
 

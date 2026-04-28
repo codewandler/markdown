@@ -10,6 +10,40 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-04-28
+
+### Added
+
+- Added `TestGFMSupportedExamples` that runs all 672 GFM assertion
+  functions against actual parser output, mirroring the CommonMark
+  `TestCommonMarkSupportedExamples` pattern.
+- Added structural assertions for all 24 GFM-extension-specific examples
+  (previously only checked "has document block"):
+  - **Tables** (examples 198-205): column alignment arrays, row counts,
+    header and data cell text, inline styles (code, strong) inside cells,
+    table-to-blockquote/paragraph transitions.
+  - **Task lists** (examples 279-280): checked/unchecked markers on list
+    items, nested task sublists.
+  - **Strikethrough** (examples 491-492): `Strike:true` inline style,
+    cross-paragraph `~~` rejection.
+  - **Autolinks** (examples 621-631): `www.`, `http://`, `https://`,
+    `ftp://`, and email autolink detection; parenthesis balancing; entity
+    suffix stripping; `<` termination; invalid email rejection.
+  - **Tag filter** (example 652): paragraph + HTML block structure with
+    raw HTML text content.
+- Added 8 new test assertion helpers: `expectTable`, `expectTableCellText`,
+  `expectTaskList`, `expectStrike`, `expectNoStrike`, `expectAutolink`,
+  `expectNoAutolink`, `combine`.
+- Added empty-output handling for ref-def-only GFM examples (176, 188)
+  that correctly produce zero events.
+
+### Known Gaps Documented
+
+- Example 199: pipe-less delimiter row not recognized (parsed as paragraph).
+- Example 202: bare continuation row not added to table (1 data row vs 2).
+- Example 203: column-count mismatch not rejected (parsed as table vs
+  paragraph).
+
 ## [0.35.1] - 2026-04-28
 
 ### Added
