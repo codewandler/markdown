@@ -1690,8 +1690,9 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 
 	// Try full reference [text][label] or collapsed [text][].
 	// The spec forbids spaces between the two bracket pairs.
+	// The second label must not contain unescaped brackets.
 	if end < len(text) && text[end] == '[' {
-		closeRef := matchingLinkLabelEnd(text[end:])
+		closeRef := matchingStrictLinkLabelEnd(text[end:])
 		if closeRef >= 0 {
 			if closeRef > 1 {
 				// Full reference: [text][label]
@@ -1745,7 +1746,8 @@ func parseLinkReferenceDefinitionStart(line string) (string, string, int, bool) 
 		return "", "", 0, false
 	}
 	text := line[indentBytes:]
-	closeLabel := matchingLinkLabelEnd(text)
+	// Link labels in definitions must not contain unescaped brackets.
+	closeLabel := matchingStrictLinkLabelEnd(text)
 	if closeLabel <= 0 || closeLabel+1 >= len(text) || text[closeLabel+1] != ':' {
 		return "", "", 0, false
 	}
@@ -1791,6 +1793,16 @@ func normalizeReferenceLabel(label string) string {
 }
 
 func matchingLinkLabelEnd(text string) int {
+	return matchingBracketEnd(text, false)
+}
+
+// matchingStrictLinkLabelEnd finds the closing ] for a link label,
+// rejecting any unescaped [ inside the label (CommonMark spec §6.3).
+func matchingStrictLinkLabelEnd(text string) int {
+	return matchingBracketEnd(text, true)
+}
+
+func matchingBracketEnd(text string, strict bool) int {
 	if text == "" || text[0] != '[' {
 		return -1
 	}
@@ -1822,6 +1834,9 @@ func matchingLinkLabelEnd(text string) int {
 		}
 		switch c {
 		case '[':
+			if strict {
+				return -1
+			}
 			depth++
 		case ']':
 			if depth == 0 {
