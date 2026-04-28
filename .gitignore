@@ -1,4 +1,1 @@
 markdown.iml
-stream/testdata/fuzz/
-stream/debug_fuzz_test.go
-stream/fuzz_test.go
