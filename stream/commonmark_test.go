@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   541,
-		statusKnownGap:    47,
+		statusSupported:   550,
+		statusKnownGap:    38,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -912,6 +912,18 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	278: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 1, BlockFencedCode, 1, BlockIndentedCode, 1),
 	// HTML comment separating lists.
 	308: expectBlocks(BlockList, 2, BlockListItem, 4, BlockParagraph, 5),
+	// Raw HTML tags shield delimiters from emphasis/link parsing.
+	475: expectParagraphText("*<img src=\"foo\" title=\"*\"/>"),
+	476: expectParagraphText("**<a href=\"**\">"),
+	477: expectParagraphText("__<a href=\"__\">"),
+	524: expectParagraphText("[foo <bar attr=\"](baz)\">"),
+	536: expectParagraphText("[foo <bar attr=\"][ref]\">"),
+	344: expectParagraphText("<a href=\"" + "`" + "\">" + "`"),
+	// Hard line breaks don't occur inside HTML tags.
+	642: expectParagraphText("<a href=\"foo  \nbar\">"),
+	643: expectParagraphText("<a href=\"foo\\\nbar\">"),
+	// Multiline emphasis: * at end of line is not right-flanking.
+	367: expectParagraphText("*foo bar", "*"),
 	// Shortcut ref with leading [.
 	559: func(t *testing.T, events []eventView) {
 		t.Helper()

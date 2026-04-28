@@ -1686,6 +1686,13 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 				text = rest
 				continue
 			}
+			// Raw HTML tag (same precedence as autolinks and code spans).
+			if tag, ok := parseRawHTMLTag(text); ok {
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: tag})
+				prevSource = tag
+				text = text[len(tag):]
+				continue
+			}
 			autolinkPossible = strings.Contains(text[1:], ">")
 		}
 		if ev, rest, ok := parseAutolinkLiteral(text, span, prevSource); ok {
@@ -2257,6 +2264,150 @@ func unicodeCaseFold(s string) string {
 	return b.String()
 }
 
+// parseRawHTMLTag tries to parse a raw HTML tag at the start of text.
+// Returns the full tag string and true if successful.
+// Handles open tags, closing tags, comments, processing instructions,
+// declarations, and CDATA sections per CommonMark spec §6.6.
+func parseRawHTMLTag(text string) (string, bool) {
+	if len(text) < 2 || text[0] != '<' {
+		return "", false
+	}
+	// Closing tag: </tagname>
+	if len(text) >= 3 && text[1] == '/' {
+		if !isASCIILetter(text[2]) {
+			return "", false
+		}
+		i := 3
+		for i < len(text) && (isASCIILetter(text[i]) || isASCIIDigit(text[i]) || text[i] == '-') {
+			i++
+		}
+		for i < len(text) && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n') {
+			i++
+		}
+		if i < len(text) && text[i] == '>' {
+			return text[:i+1], true
+		}
+		return "", false
+	}
+	// Comment: <!-- ... -->
+	if strings.HasPrefix(text, "<!--") {
+		end := strings.Index(text[4:], "-->")
+		if end >= 0 {
+			return text[:4+end+3], true
+		}
+		return "", false
+	}
+	// Processing instruction: <? ... ?>
+	if strings.HasPrefix(text, "<?") {
+		end := strings.Index(text[2:], "?>")
+		if end >= 0 {
+			return text[:2+end+2], true
+		}
+		return "", false
+	}
+	// Declaration: <! LETTER ... >
+	if len(text) >= 3 && text[1] == '!' && isASCIILetter(text[2]) {
+		for i := 3; i < len(text); i++ {
+			if text[i] == '>' {
+				return text[:i+1], true
+			}
+		}
+		return "", false
+	}
+	// CDATA: <![CDATA[ ... ]]>
+	if strings.HasPrefix(text, "<![CDATA[") {
+		end := strings.Index(text[9:], "]]>")
+		if end >= 0 {
+			return text[:9+end+3], true
+		}
+		return "", false
+	}
+	// Open tag: <tagname attributes? /? >
+	if !isASCIILetter(text[1]) {
+		return "", false
+	}
+	i := 2
+	for i < len(text) && (isASCIILetter(text[i]) || isASCIIDigit(text[i]) || text[i] == '-') {
+		i++
+	}
+	// Skip attributes.
+	for i < len(text) {
+		// Skip whitespace.
+		j := i
+		for i < len(text) && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n') {
+			i++
+		}
+		if i >= len(text) {
+			return "", false
+		}
+		if text[i] == '>' {
+			return text[:i+1], true
+		}
+		if text[i] == '/' {
+			if i+1 < len(text) && text[i+1] == '>' {
+				return text[:i+2], true
+			}
+			return "", false
+		}
+		// Must have whitespace before attribute.
+		if i == j {
+			return "", false
+		}
+		// Attribute name: [a-zA-Z_:][a-zA-Z0-9_.:-]*
+		if !isASCIILetter(text[i]) && text[i] != '_' && text[i] != ':' {
+			return "", false
+		}
+		i++
+		for i < len(text) && (isASCIILetter(text[i]) || isASCIIDigit(text[i]) || text[i] == '_' || text[i] == '.' || text[i] == ':' || text[i] == '-') {
+			i++
+		}
+		// Optional value specification.
+		j = i
+		for i < len(text) && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n') {
+			i++
+		}
+		if i < len(text) && text[i] == '=' {
+			i++
+			for i < len(text) && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n') {
+				i++
+			}
+			if i >= len(text) {
+				return "", false
+			}
+			if text[i] == '\'' || text[i] == '"' {
+				quote := text[i]
+				i++
+				for i < len(text) && text[i] != quote {
+					i++
+				}
+				if i >= len(text) {
+					return "", false
+				}
+				i++ // skip closing quote
+			} else {
+				// Unquoted value.
+				if text[i] == ' ' || text[i] == '\t' || text[i] == '\n' || text[i] == '"' || text[i] == '\'' || text[i] == '=' || text[i] == '<' || text[i] == '>' || text[i] == '`' {
+					return "", false
+				}
+				for i < len(text) && text[i] != ' ' && text[i] != '\t' && text[i] != '\n' && text[i] != '"' && text[i] != '\'' && text[i] != '=' && text[i] != '<' && text[i] != '>' && text[i] != '`' {
+					i++
+				}
+			}
+		} else {
+			i = j // no value, restore position
+		}
+	}
+	return "", false
+}
+
+func isASCIILetter(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func isASCIIDigit(c byte) bool {
+	return c >= '0' && c <= '9'
+}
+
 func matchingLinkLabelEnd(text string) int {
 	return matchingBracketEnd(text, false)
 }
@@ -2296,6 +2447,15 @@ func matchingBracketEnd(text string, strict bool) int {
 			}
 			i += n + close + n - 1
 			continue
+		}
+		// Raw HTML tags take precedence over link structure.
+		// Skip over any HTML tag so that brackets inside
+		// attributes are not counted.
+		if c == '<' {
+			if tag, ok := parseRawHTMLTag(text[i:]); ok {
+				i += len(tag) - 1
+				continue
+			}
 		}
 		switch c {
 		case '[':
