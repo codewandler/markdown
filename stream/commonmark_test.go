@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   470,
-		statusKnownGap:    118,
+		statusSupported:   472,
+		statusKnownGap:    116,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -817,13 +817,21 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	550: expectTextStyle("bar\\", InlineStyle{Link: "/uri"}),
 	551: expectParagraphText("[]", "[]: /uri"),
 	552: expectParagraphText("[", "]", "[", "]: /uri"),
-	554: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	554: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true, Link: "/url", LinkTitle: "title"})(t, events)
+		expectTextStyle(" bar", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+	},
 	556: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
 		expectParagraphText("[]")(t, events)
 	},
-	558: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	558: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true, Link: "/url", LinkTitle: "title"})(t, events)
+		expectTextStyle(" bar", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+	},
 	// Nested links rejected — inner link wins.
 	518: func(t *testing.T, events []eventView) {
 		t.Helper()
@@ -840,6 +848,21 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	},
 	// Raw label normalization — backslash escapes not processed.
 	545: expectParagraphText("[bar][foo!]"),
+	// Link text with inner emphasis, strong, and code.
+	516: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("link ", InlineStyle{Link: "/uri"})(t, events)
+		expectTextStyle("foo ", InlineStyle{Emphasis: true, Link: "/uri"})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true, Link: "/uri"})(t, events)
+		expectTextStyle("#", InlineStyle{Emphasis: true, Code: true, Link: "/uri"})(t, events)
+	},
+	530: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("link ", InlineStyle{Link: "/uri"})(t, events)
+		expectTextStyle("foo ", InlineStyle{Emphasis: true, Link: "/uri"})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true, Link: "/uri"})(t, events)
+		expectTextStyle("#", InlineStyle{Emphasis: true, Code: true, Link: "/uri"})(t, events)
+	},
 	// Invalid labels with unescaped brackets.
 	546: expectParagraphText("[foo][ref[]", "[ref[]: /uri"),
 	547: expectParagraphText("[foo][ref[bar]]", "[ref[bar]]: /uri"),

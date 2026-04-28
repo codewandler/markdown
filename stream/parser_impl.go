@@ -1236,8 +1236,9 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 			}
 		}
 		if text[0] == '[' && linkPossible {
-			if ev, rest, ok := parseInlineLink(text, span); ok {
-				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+			if ev, rest, labelRaw, ok := parseInlineLink(text, span); ok {
+				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle}
+				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs)...)
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
@@ -1245,8 +1246,10 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 			linkPossible = strings.Contains(text[1:], "](")
 		}
 		if text[0] == '[' && len(refs) > 0 {
-			if ev, rest, ok := parseReferenceLink(text, span, refs); ok {
-				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+			if ev, rest, labelRaw, ok := parseReferenceLink(text, span, refs); ok {
+				_ = ev
+				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle}
+				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs)...)
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
@@ -1552,6 +1555,21 @@ func applyDelimiterStyle(style InlineStyle, count int, marker byte) InlineStyle 
 	return out
 }
 
+// tokenizeLinkContent tokenizes and resolves emphasis in link label
+// text, then applies the link style to every resulting token.
+func tokenizeLinkContent(labelRaw string, linkStyle InlineStyle, span Span, refs map[string]linkReference) []inlineToken {
+	label := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
+	if label == "" {
+		return []inlineToken{{kind: inlineTokenText, text: "", style: linkStyle}}
+	}
+	inner := tokenizeInline(label, span, refs)
+	inner = resolveEmphasis(inner)
+	for i := range inner {
+		inner[i].style = mergeInlineStyles(inner[i].style, linkStyle)
+	}
+	return inner
+}
+
 func mergeInlineStyles(base, add InlineStyle) InlineStyle {
 	out := base
 	out.Emphasis = out.Emphasis || add.Emphasis
@@ -1595,7 +1613,7 @@ func parseReferenceImage(text string, span Span, refs map[string]linkReference) 
 	if len(refs) == 0 || !strings.HasPrefix(text, "![") {
 		return Event{}, text, false
 	}
-	ev, rest, ok := parseReferenceLink(text[1:], span, refs)
+	ev, rest, _, ok := parseReferenceLink(text[1:], span, refs)
 	if !ok {
 		return Event{}, text, false
 	}
@@ -1608,7 +1626,7 @@ func parseInlineImageAsLink(text string, span Span) (Event, string, bool) {
 	}
 	// Images may contain links in their alt text, so skip the
 	// nested-link rejection.
-	ev, rest, ok := parseInlineLinkInner(text[1:], span, false)
+	ev, rest, _, ok := parseInlineLinkInner(text[1:], span, false)
 	if !ok {
 		return Event{}, text, false
 	}
@@ -1616,14 +1634,14 @@ func parseInlineImageAsLink(text string, span Span) (Event, string, bool) {
 	return ev, rest, true
 }
 
-func parseInlineLink(text string, span Span) (Event, string, bool) {
+func parseInlineLink(text string, span Span) (Event, string, string, bool) {
 	return parseInlineLinkInner(text, span, true)
 }
 
-func parseInlineLinkInner(text string, span Span, rejectNestedLinks bool) (Event, string, bool) {
+func parseInlineLinkInner(text string, span Span, rejectNestedLinks bool) (Event, string, string, bool) {
 	closeText := matchingLinkLabelEnd(text)
 	if closeText < 0 || closeText+1 >= len(text) || text[closeText+1] != '(' {
-		return Event{}, text, false
+		return Event{}, text, "", false
 	}
 	labelRaw := text[1:closeText]
 	// Links cannot nest (CommonMark spec §6.5). If the label text
@@ -1631,14 +1649,14 @@ func parseInlineLinkInner(text string, span Span, rejectNestedLinks bool) (Event
 	// Images are allowed to contain links, so this check is skipped
 	// when called from the image path.
 	if rejectNestedLinks && containsInlineLink(labelRaw) {
-		return Event{}, text, false
+		return Event{}, text, "", false
 	}
 	label := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
 	dest, title, end, ok := parseInlineLinkTail(text[closeText+2:])
 	if !ok {
-		return Event{}, text, false
+		return Event{}, text, "", false
 	}
-	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title}, Span: span}, text[closeText+2+end:], true
+	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title}, Span: span}, text[closeText+2+end:], labelRaw, true
 }
 
 // containsInlineLink reports whether text contains a valid inline link
@@ -1675,15 +1693,15 @@ func containsInlineLink(text string) bool {
 	return false
 }
 
-func parseReferenceLink(text string, span Span, refs map[string]linkReference) (Event, string, bool) {
+func parseReferenceLink(text string, span Span, refs map[string]linkReference) (Event, string, string, bool) {
 	closeLabel := matchingLinkLabelEnd(text)
 	if closeLabel <= 0 {
-		return Event{}, text, false
+		return Event{}, text, "", false
 	}
 	labelRaw := text[1:closeLabel]
 	// Links cannot nest (CommonMark spec §6.5).
 	if containsInlineLink(labelRaw) {
-		return Event{}, text, false
+		return Event{}, text, "", false
 	}
 	labelText := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
 	end := closeLabel + 1
@@ -1700,18 +1718,18 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 				refLabelRaw := text[end+1 : end+closeRef]
 				ref, ok := refs[normalizeReferenceLabel(refLabelRaw)]
 				if ok {
-					return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], true
+					return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], labelRaw, true
 				}
 				// Full reference label not found — don't fall through to shortcut.
-				return Event{}, text, false
+				return Event{}, text, "", false
 			}
 			// Collapsed reference: [text][]
 			// Use raw first label for lookup.
 			ref, ok := refs[normalizeReferenceLabel(labelRaw)]
 			if ok {
-				return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], true
+				return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], labelRaw, true
 			}
-			return Event{}, text, false
+			return Event{}, text, "", false
 		}
 		// No matching ] for the second [ — fall through to shortcut.
 	}
@@ -1720,9 +1738,9 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 	// Use raw first label for lookup.
 	ref, ok := refs[normalizeReferenceLabel(labelRaw)]
 	if !ok {
-		return Event{}, text, false
+		return Event{}, text, "", false
 	}
-	return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end:], true
+	return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end:], labelRaw, true
 }
 
 func parseLinkReferenceDefinition(line string) (string, linkReference, bool) {
