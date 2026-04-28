@@ -3,6 +3,7 @@ package stream
 import (
 	"bytes"
 	"html"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -40,12 +41,27 @@ type parser struct {
 	refDef    linkReferenceDefinitionState
 	table     tableState
 
+	// pendingBlocks buffers closed paragraph/heading events so that
+	// link reference definitions appearing after the paragraph can be
+	// collected before inline parsing runs. The pending blocks are
+	// drained (inline-parsed and emitted) when a non-definition block
+	// starts or at Flush.
+	pendingBlocks []pendingBlock
+
 	inBlockquote       bool
 	inList             bool
 	listData           ListData
 	inListItem         bool
 	inIndented         bool
 	indentedBlankLines int
+}
+
+// pendingBlock stores a closed paragraph whose inline content has not yet
+// been parsed. This allows forward link reference definitions to be
+// collected before inline parsing resolves references.
+type pendingBlock struct {
+	text string
+	span Span
 }
 
 type linkReference struct {
@@ -140,6 +156,7 @@ func (p *parser) Flush() ([]Event, error) {
 		p.fence.open = false
 		events = append(events, Event{Kind: EventExitBlock, Block: BlockFencedCode})
 	}
+	p.drainPendingBlocks(&events)
 	p.closeContainers(&events)
 	if p.started {
 		events = append(events, Event{Kind: EventExitBlock, Block: BlockDocument})
@@ -215,6 +232,11 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		p.closeIndentedCode(events)
 		p.closeListItem(events)
 		p.closeContainers(events)
+		// Drain pending blocks that don't contain bracket syntax,
+		// since they can't benefit from deferred reference resolution.
+		// Blocks with brackets are kept pending so that link reference
+		// definitions following the blank line can be collected first.
+		p.drainPendingBlocksEager(events)
 		return
 	}
 
@@ -224,13 +246,18 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		}
 	}
 
+	// If we reach here, the line is non-blank and not a ref def continuation.
+	// Drain any pending blocks now — all definitions before this point have
+	// been collected.
+	p.drainPendingBlocks(events)
+
 	if content, ok := blockquoteContent(line.text); ok {
 		p.ensureDocument(events)
 		if !p.inBlockquote {
 			p.closeParagraph(events)
 			p.closeList(events)
 			p.inBlockquote = true
-			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
+			p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
 		}
 		if strings.TrimSpace(content) == "" {
 			p.closeParagraph(events)
@@ -276,12 +303,12 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			p.inList = true
 			p.listData = listBlockData(item.data)
 			data := p.listData
-			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
+			p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
 		}
 		p.closeListItem(events)
 		p.inListItem = true
 		data := item.data
-		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
+		p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
 		if strings.TrimSpace(item.content) != "" {
 			inner := line
 			inner.text = item.content
@@ -317,13 +344,14 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 		p.closeParagraph(events)
 		p.closeIndentedCode(events)
 		p.fence = fenceState{open: true, marker: marker, length: n, indent: indent, info: info}
-		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockFencedCode, Info: info, Span: Span{Start: line.start, End: line.end}})
+		p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockFencedCode, Info: info, Span: Span{Start: line.start, End: line.end}})
 		return
 	}
 
 	if level, text, ok := heading(line.text); ok {
 		p.ensureDocument(events)
 		p.closeParagraph(events)
+		p.drainPendingBlocks(events)
 		span := Span{Start: line.start, End: line.end}
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: span})
 		*events = append(*events, p.parseInline(text, span)...)
@@ -349,7 +377,7 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 		p.closeParagraph(events)
 		if !p.inIndented {
 			p.inIndented = true
-			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockIndentedCode, Span: Span{Start: line.start, End: line.end}})
+			p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockIndentedCode, Span: Span{Start: line.start, End: line.end}})
 		}
 		p.emitIndentedCodeLine(line, events)
 		return
@@ -388,7 +416,6 @@ func (p *parser) closeParagraph(events *[]Event) {
 	p.ensureDocument(events)
 	start := p.paragraph.lines[0].span.Start
 	end := p.paragraph.lines[len(p.paragraph.lines)-1].span.End
-	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: Span{Start: start, End: end}})
 	var text strings.Builder
 	for i, line := range p.paragraph.lines {
 		if i > 0 {
@@ -396,8 +423,10 @@ func (p *parser) closeParagraph(events *[]Event) {
 		}
 		text.WriteString(line.text)
 	}
-	*events = append(*events, p.parseInline(text.String(), Span{Start: start, End: end})...)
-	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: Span{Start: start, End: end}})
+	p.pendingBlocks = append(p.pendingBlocks, pendingBlock{
+		text: text.String(),
+		span: Span{Start: start, End: end},
+	})
 	clear(p.paragraph.lines)
 	if cap(p.paragraph.lines) > 1024 {
 		p.paragraph.lines = nil
@@ -406,11 +435,52 @@ func (p *parser) closeParagraph(events *[]Event) {
 	}
 }
 
+// drainPendingBlocks inline-parses and emits all buffered paragraph/heading
+// blocks. Called before emitting any non-definition block and at Flush, so
+// that forward link reference definitions are available for resolution.
+func (p *parser) drainPendingBlocks(events *[]Event) {
+	for _, pb := range p.pendingBlocks {
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: pb.span})
+		*events = append(*events, p.parseInline(pb.text, pb.span)...)
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: pb.span})
+	}
+	p.pendingBlocks = p.pendingBlocks[:0]
+}
+
+// drainPendingBlocksEager emits pending blocks that don't contain bracket
+// syntax (and thus can't benefit from deferred reference resolution).
+// Blocks with brackets are kept pending for forward reference resolution.
+func (p *parser) drainPendingBlocksEager(events *[]Event) {
+	// In-place filter: kept shares the backing array with p.pendingBlocks.
+	// This is safe because the kept write index never advances past the
+	// read index — every iteration either keeps or emits the element.
+	kept := p.pendingBlocks[:0]
+	for _, pb := range p.pendingBlocks {
+		if strings.ContainsAny(pb.text, "[]") {
+			kept = append(kept, pb)
+			continue
+		}
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: pb.span})
+		*events = append(*events, p.parseInline(pb.text, pb.span)...)
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: pb.span})
+	}
+	p.pendingBlocks = kept
+}
+
+// emitBlockStart drains any pending paragraph/heading blocks before emitting
+// a new structural block. This ensures forward link reference definitions
+// collected after a pending paragraph are available for inline resolution.
+func (p *parser) emitBlockStart(events *[]Event, ev Event) {
+	p.drainPendingBlocks(events)
+	*events = append(*events, ev)
+}
+
 func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) {
 	if len(p.paragraph.lines) == 0 {
 		return
 	}
 	p.ensureDocument(events)
+	p.drainPendingBlocks(events)
 	start := p.paragraph.lines[0].span.Start
 	end := underline.End
 	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: Span{Start: start, End: end}})
@@ -460,7 +530,7 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 		align:  tableAlign,
 		span:   Span{Start: header.span.Start, End: line.end},
 	}
-	*events = append(*events, Event{
+	p.emitBlockStart(events, Event{
 		Kind:  EventEnterBlock,
 		Block: BlockTable,
 		Table: &TableData{Align: append([]TableAlign(nil), tableAlign...)},
@@ -717,6 +787,7 @@ func (p *parser) failLinkReferenceDefinition() {
 }
 
 func (p *parser) emitThematicBreak(line lineInfo, events *[]Event) {
+	p.drainPendingBlocks(events)
 	*events = append(*events,
 		Event{Kind: EventEnterBlock, Block: BlockThematicBreak, Span: Span{Start: line.start, End: line.end}},
 		Event{Kind: EventExitBlock, Block: BlockThematicBreak, Span: Span{Start: line.start, End: line.end}},
@@ -764,6 +835,7 @@ func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
 		return
 	}
 	p.closeParagraph(events)
+	p.drainPendingBlocks(events)
 	p.inBlockquote = false
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
 }
@@ -773,6 +845,7 @@ func (p *parser) closeListItem(events *[]Event) {
 		return
 	}
 	p.closeParagraph(events)
+	p.drainPendingBlocks(events)
 	p.inListItem = false
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
 }
@@ -1091,13 +1164,14 @@ const (
 )
 
 type inlineToken struct {
-	kind  inlineTokenKind
-	text  string
-	style InlineStyle
-	delim byte
-	run   int
-	open  bool
-	close bool
+	kind    inlineTokenKind
+	text    string
+	style   InlineStyle
+	delim   byte
+	run     int
+	origRun int // original run length, for rule-of-three checks
+	open    bool
+	close   bool
 }
 
 func tokenizeInline(text string, span Span, refs map[string]linkReference) []inlineToken {
@@ -1214,7 +1288,7 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 				continue
 			}
 			open, close := emphasisDelimRun(prevSource, text[n:], text[0], n)
-			tokens = append(tokens, inlineToken{kind: inlineTokenDelimiter, text: text[:n], delim: text[0], run: n, open: open, close: close})
+			tokens = append(tokens, inlineToken{kind: inlineTokenDelimiter, text: text[:n], delim: text[0], run: n, origRun: n, open: open, close: close})
 			prevSource = text[:n]
 			text = text[n:]
 			continue
@@ -1233,84 +1307,232 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 	return tokens
 }
 
+// resolveEmphasis implements the CommonMark "process emphasis" algorithm.
+//
+// Phase 1: match openers to closers, recording (opener, closer, use) triples.
+// Phase 2: walk tokens and use the recorded matches to build nested styled output.
 func resolveEmphasis(tokens []inlineToken) []inlineToken {
 	if len(tokens) == 0 {
 		return tokens
 	}
-	pairs := make(map[int]int)
-	var stack []int
-	for i := range tokens {
-		tok := tokens[i]
-		if tok.kind != inlineTokenDelimiter {
+
+	// Collect delimiter indices.
+	var dstack []int // indices into tokens, acts as the delimiter stack
+	for i, tok := range tokens {
+		if tok.kind == inlineTokenDelimiter {
+			dstack = append(dstack, i)
+		}
+	}
+	if len(dstack) == 0 {
+		return tokens
+	}
+
+	// emphPair records a matched opener-closer pair.
+	type emphPair struct {
+		openerIdx int
+		closerIdx int
+		use       int
+		delim     byte
+	}
+	var pairs []emphPair
+
+	// removed[di] = true means dstack[di] has been removed from the stack.
+	removed := make([]bool, len(dstack))
+
+	// openersBottom keyed by (delim, closerCanOpen, closerOrigRun%3).
+	openersBottom := map[int]int{} // value = dstack index (exclusive lower bound)
+	obKey := func(delim byte, canOpen bool, origRun int) int {
+		k := int(delim) * 6
+		if canOpen {
+			k += 3
+		}
+		k += origRun % 3
+		return k
+	}
+
+	for ci := 0; ci < len(dstack); ci++ {
+		if removed[ci] {
 			continue
 		}
-		if tok.close {
-			for j := len(stack) - 1; j >= 0; j-- {
-				openIdx := stack[j]
-				openTok := tokens[openIdx]
-				if openTok.delim != tok.delim || !openTok.open {
+		closerTokIdx := dstack[ci]
+		closer := &tokens[closerTokIdx]
+		if !closer.close || (closer.delim != '*' && closer.delim != '_' && closer.delim != '~') {
+			continue
+		}
+
+		bk := obKey(closer.delim, closer.open, closer.origRun)
+		bottom := openersBottom[bk] // dstack index; search only above this
+
+		found := false
+		for oi := ci - 1; oi >= bottom; oi-- {
+			if removed[oi] {
+				continue
+			}
+			openerTokIdx := dstack[oi]
+			opener := &tokens[openerTokIdx]
+			if opener.delim != closer.delim || !opener.open {
+				continue
+			}
+
+			// Rule of three (spec rules 9-10).
+			if closer.delim != '~' {
+				if (opener.open && opener.close) || (closer.open && closer.close) {
+					if (opener.origRun+closer.origRun)%3 == 0 &&
+						opener.origRun%3 != 0 && closer.origRun%3 != 0 {
+						continue
+					}
+				}
+			}
+
+			var use int
+			if closer.delim == '~' {
+				if opener.run < 2 || closer.run < 2 {
 					continue
 				}
-				pairs[openIdx] = i
-				pairs[i] = openIdx
-				stack = append(stack[:j], stack[j+1:]...)
-				break
+				use = 2
+			} else if opener.run >= 2 && closer.run >= 2 {
+				use = 2
+			} else {
+				use = 1
 			}
+
+			pairs = append(pairs, emphPair{
+				openerIdx: openerTokIdx,
+				closerIdx: closerTokIdx,
+				use:       use,
+				delim:     closer.delim,
+			})
+
+			// Consume delimiters.
+			opener.run -= use
+			opener.text = opener.text[:opener.run]
+			closer.run -= use
+			closer.text = closer.text[use:]
+
+			// Remove delimiters between opener and closer from the stack.
+			for ri := oi + 1; ri < ci; ri++ {
+				removed[ri] = true
+			}
+
+			if opener.run == 0 {
+				removed[oi] = true
+			}
+			if closer.run == 0 {
+				removed[ci] = true
+			} else {
+				ci-- // re-process closer
+			}
+
+			found = true
+			break
 		}
-		if tok.open {
-			stack = append(stack, i)
+
+		if !found {
+			openersBottom[bk] = ci
+			if !closer.open {
+				removed[ci] = true
+			}
 		}
 	}
 
-	var out []inlineToken
-	var emitRange func(start, end int, style InlineStyle)
-	emitText := func(text string, style InlineStyle) {
-		if text == "" {
-			return
-		}
-		out = append(out, inlineToken{kind: inlineTokenText, text: text, style: style})
-	}
-	emitRange = func(start, end int, style InlineStyle) {
-		for i := start; i < end; {
-			tok := tokens[i]
-			if tok.kind == inlineTokenDelimiter {
-				if closeIdx, ok := pairs[i]; ok && closeIdx > i && closeIdx < end {
-					openCount := tok.run
-					closeCount := tokens[closeIdx].run
-					use := openCount
-					if closeCount < use {
-						use = closeCount
-					}
-					if tok.delim == '~' {
-						use = 2
-						if openCount < use || closeCount < use {
-							emitText(tok.text, style)
-							i++
-							continue
-						}
-					}
-					emitText(tok.text[:openCount-use], style)
-					emitRange(i+1, closeIdx, applyDelimiterStyle(style, use, tok.delim))
-					emitText(tokens[closeIdx].text[use:], style)
-					i = closeIdx + 1
-					continue
-				}
-				emitText(tok.text, style)
-				i++
-				continue
-			}
+	if len(pairs) == 0 {
+		// No matches — emit all delimiters as literal text.
+		var out []inlineToken
+		for _, tok := range tokens {
 			switch tok.kind {
-			case inlineTokenText:
-				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: mergeInlineStyles(style, tok.style)})
-			case inlineTokenSoftBreak:
-				out = append(out, inlineToken{kind: inlineTokenSoftBreak})
-			case inlineTokenLineBreak:
-				out = append(out, inlineToken{kind: inlineTokenLineBreak})
+			case inlineTokenDelimiter:
+				if tok.run > 0 {
+					out = append(out, inlineToken{kind: inlineTokenText, text: tok.text})
+				}
+			default:
+				out = append(out, tok)
 			}
-			i++
+		}
+		return out
+	}
+
+	// Phase 2: emit output.
+	//
+	// Pairs are recorded in match order (outermost first for nested cases
+	// like ***foo***). We need to sort them by opener position and handle
+	// nesting. A pair (A, B) is nested inside (C, D) if C < A and B < D.
+	//
+	// We build a stack of active styles. For each token position, we check
+	// if any pair opens or closes here.
+
+	// Build open/close events keyed by token index.
+	type styleEvent struct {
+		use   int
+		delim byte
+		open  bool // true = open, false = close
+		seq   int  // ordering for multiple events at same position
+	}
+	events := map[int][]styleEvent{}
+	for i, p := range pairs {
+		// Open event goes right after the opener token.
+		// Close event goes right before the closer token.
+		// We key by token index and use a convention:
+		// opener: event at openerIdx, phase=open
+		// closer: event at closerIdx, phase=close
+		events[p.openerIdx] = append(events[p.openerIdx], styleEvent{use: p.use, delim: p.delim, open: true, seq: i})
+		events[p.closerIdx] = append(events[p.closerIdx], styleEvent{use: p.use, delim: p.delim, open: false, seq: i})
+	}
+
+	// Sort events at each position so opens come before closes.
+	// When multiple opens share a token (e.g. ***foo***), the first
+	// matched pair is the outermost, so opens sort by seq ascending.
+	// Closes are the reverse: inner-first (seq descending).
+	for idx := range events {
+		ev := events[idx]
+		sort.SliceStable(ev, func(i, j int) bool {
+			if ev[i].open != ev[j].open {
+				return ev[i].open // opens before closes
+			}
+			if ev[i].open {
+				return ev[i].seq < ev[j].seq // opens: outer first
+			}
+			return ev[i].seq > ev[j].seq // closes: inner first
+		})
+		events[idx] = ev
+	}
+
+	var out []inlineToken
+	var styleStack []InlineStyle
+	currentStyle := InlineStyle{}
+
+	for i, tok := range tokens {
+		if evs, ok := events[i]; ok {
+			// Emit remaining delimiter text before processing events.
+			if tok.kind == inlineTokenDelimiter && tok.run > 0 {
+				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: currentStyle})
+			}
+			for _, ev := range evs {
+				if ev.open {
+					styleStack = append(styleStack, currentStyle)
+					currentStyle = applyDelimiterStyle(currentStyle, ev.use, ev.delim)
+				} else {
+					if len(styleStack) > 0 {
+						currentStyle = styleStack[len(styleStack)-1]
+						styleStack = styleStack[:len(styleStack)-1]
+					}
+				}
+			}
+			continue
+		}
+
+		switch tok.kind {
+		case inlineTokenDelimiter:
+			if tok.run > 0 {
+				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: currentStyle})
+			}
+		case inlineTokenText:
+			out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: mergeInlineStyles(currentStyle, tok.style)})
+		case inlineTokenSoftBreak:
+			out = append(out, inlineToken{kind: inlineTokenSoftBreak})
+		case inlineTokenLineBreak:
+			out = append(out, inlineToken{kind: inlineTokenLineBreak})
 		}
 	}
-	emitRange(0, len(tokens), InlineStyle{})
 	return out
 }
 
@@ -1411,19 +1633,35 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 		return Event{}, text, false
 	}
 	labelText := decodeCharacterReferences(unescapeBackslashPunctuation(text[1:closeLabel]))
-	refLabel := labelText
-	end := skipMarkdownSpace(text, closeLabel+1)
+	end := closeLabel + 1
+
+	// Try full reference [text][label] or collapsed [text][].
+	// The spec forbids spaces between the two bracket pairs.
 	if end < len(text) && text[end] == '[' {
 		closeRef := matchingLinkLabelEnd(text[end:])
-		if closeRef < 0 {
+		if closeRef >= 0 {
+			if closeRef > 1 {
+				// Full reference: [text][label]
+				refLabel := decodeCharacterReferences(unescapeBackslashPunctuation(text[end+1 : end+closeRef]))
+				ref, ok := refs[normalizeReferenceLabel(refLabel)]
+				if ok {
+					return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], true
+				}
+				// Full reference label not found — don't fall through to shortcut.
+				return Event{}, text, false
+			}
+			// Collapsed reference: [text][]
+			ref, ok := refs[normalizeReferenceLabel(labelText)]
+			if ok {
+				return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], true
+			}
 			return Event{}, text, false
 		}
-		if closeRef > 1 {
-			refLabel = decodeCharacterReferences(unescapeBackslashPunctuation(text[end+1 : end+closeRef]))
-		}
-		end += closeRef + 1
+		// No matching ] for the second [ — fall through to shortcut.
 	}
-	ref, ok := refs[normalizeReferenceLabel(refLabel)]
+
+	// Shortcut reference: [text]
+	ref, ok := refs[normalizeReferenceLabel(labelText)]
 	if !ok {
 		return Event{}, text, false
 	}

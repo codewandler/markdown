@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -28,6 +29,26 @@ func TestRendererDoesNotRenderFenceMarkers(t *testing.T) {
 	}
 	if !strings.Contains(visible, "    │ package main\n") {
 		t.Fatalf("missing default code prefix: %q", visible)
+	}
+}
+
+func TestRendererRendersIndentedCodeBlocks(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out)
+
+	err := renderer.Render([]stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockIndentedCode},
+		{Kind: stream.EventText, Text: "package main"},
+		{Kind: stream.EventLineBreak},
+		{Kind: stream.EventExitBlock, Block: stream.BlockIndentedCode},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "    │ package main\n") {
+		t.Fatalf("missing indented code prefix: %q", visible)
 	}
 }
 
@@ -83,6 +104,38 @@ func TestRendererConfiguresCodeHighlighter(t *testing.T) {
 	visible := stripANSI(out.String())
 	if !strings.Contains(visible, "<<hello>>") {
 		t.Fatalf("missing configured code highlighter output: %q", visible)
+	}
+}
+
+func TestStreamRendererWritesAndFlushes(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewStreamRenderer(&out, WithCodeHighlighter(stubHighlighter{}))
+
+	if _, err := renderer.Write([]byte("```text\nhello")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderer.Write([]byte("\n```")); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderer.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "<<hello>>") {
+		t.Fatalf("missing stream renderer output: %q", visible)
+	}
+}
+
+func TestStreamRendererRejectsWritesAfterFlush(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewStreamRenderer(&out)
+
+	if err := renderer.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderer.Write([]byte("hello")); err != io.ErrClosedPipe {
+		t.Fatalf("expected closed pipe after flush, got %v", err)
 	}
 }
 
@@ -154,6 +207,26 @@ func TestHybridHighlighter(t *testing.T) {
 	}
 }
 
+func TestRendererUsesHybridHighlighterByDefault(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out)
+
+	err := renderer.Render([]stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "rust"},
+		{Kind: stream.EventText, Text: "fn main() {}"},
+		{Kind: stream.EventLineBreak},
+		{Kind: stream.EventExitBlock, Block: stream.BlockFencedCode},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "fn main() {}") {
+		t.Fatalf("expected default hybrid highlighter output, got %q", visible)
+	}
+}
+
 func TestRendererTaskListsAndStrike(t *testing.T) {
 	var out bytes.Buffer
 	renderer := NewRenderer(&out)
@@ -178,6 +251,160 @@ func TestRendererTaskListsAndStrike(t *testing.T) {
 	visible := stripANSI(raw)
 	if !strings.Contains(visible, "- [x] done") {
 		t.Fatalf("missing task list output: %q", visible)
+	}
+}
+
+func TestRendererEmitsClickableLinks(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out)
+
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventText, Text: "inline", Style: stream.InlineStyle{Link: "https://example.com"}},
+		{Kind: stream.EventSoftBreak},
+		{Kind: stream.EventText, Text: "reference", Style: stream.InlineStyle{Link: "https://example.org/docs", LinkTitle: "docs"}},
+		{Kind: stream.EventSoftBreak},
+		{Kind: stream.EventText, Text: "autolink", Style: stream.InlineStyle{Link: "mailto:team@example.org"}},
+		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+
+	raw := out.String()
+	for _, want := range []string{
+		"\x1b]8;;https://example.com\a",
+		"\x1b]8;;https://example.org/docs\a",
+		"\x1b]8;;mailto:team@example.org\a",
+	} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("missing hyperlink escape %q in %q", want, raw)
+		}
+	}
+	for _, want := range []string{
+		"\x1b]8;;https://example.com\ainline\x1b]8;;\a",
+		"\x1b]8;;https://example.org/docs\areference\x1b]8;;\a",
+		"\x1b]8;;mailto:team@example.org\aautolink\x1b]8;;\a",
+	} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("hyperlink text is not a contiguous clickable region %q in %q", want, raw)
+		}
+	}
+	visible := stripANSI(raw)
+	if visible != "inline reference autolink\n" {
+		t.Fatalf("unexpected clickable link rendering: %q", visible)
+	}
+}
+
+func TestRendererDoesNotWrapShortTextAtLastSpace(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out, WithWrapWidth(80))
+
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventText, Text: "short text with several spaces"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+
+	visible := stripANSI(out.String())
+	if visible != "short text with several spaces\n" {
+		t.Fatalf("unexpected short text wrapping: %q", visible)
+	}
+}
+
+func TestRendererWrapsClickableLinks(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out, WithWrapWidth(12))
+
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventText, Text: "https://example.com/very/long/path", Style: stream.InlineStyle{Link: "https://example.com/very/long/path"}},
+		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+
+	raw := out.String()
+	if count := strings.Count(raw, "\x1b]8;;https://example.com/very/long/path\a"); count < 2 {
+		t.Fatalf("expected wrapped hyperlink to reopen, got %d opens in %q", count, raw)
+	}
+	visible := stripANSI(raw)
+	if !strings.Contains(visible, "\n") {
+		t.Fatalf("expected wrapped visible output, got %q", visible)
+	}
+}
+
+func TestRendererTightListsStayCompact(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out)
+
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockList, List: &stream.ListData{Marker: "-", Tight: true}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockListItem, List: &stream.ListData{Marker: "-", Tight: true}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventText, Text: "alpha"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventExitBlock, Block: stream.BlockListItem},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockListItem, List: &stream.ListData{Marker: "-", Tight: true}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventText, Text: "beta"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventExitBlock, Block: stream.BlockListItem},
+		{Kind: stream.EventExitBlock, Block: stream.BlockList},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+
+	visible := stripANSI(out.String())
+	if strings.Contains(visible, "\n\n") {
+		t.Fatalf("tight list rendered with extra blank line: %q", visible)
+	}
+	if !strings.Contains(visible, "- alpha\n- beta\n") {
+		t.Fatalf("tight list missing compact layout: %q", visible)
+	}
+}
+
+func TestRendererWrapDoesNotDegradeInDeepNesting(t *testing.T) {
+	var out bytes.Buffer
+	// wrapWidth=10 with quoteDepth=6 means the prefix alone is 12 chars,
+	// exceeding the wrap budget. The renderer must emit the full text on
+	// one line rather than splitting it one rune at a time.
+	renderer := NewRenderer(&out, WithWrapWidth(10))
+
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventText, Text: "hello world"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventExitBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventExitBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventExitBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventExitBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventExitBlock, Block: stream.BlockBlockquote},
+		{Kind: stream.EventExitBlock, Block: stream.BlockBlockquote},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+
+	visible := stripANSI(out.String())
+	// The text must appear on a single line, not split per-rune.
+	lines := strings.Split(strings.TrimRight(visible, "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d: %q", len(lines), visible)
+	}
+	if !strings.Contains(visible, "hello world") {
+		t.Fatalf("expected full text on one line: %q", visible)
 	}
 }
 

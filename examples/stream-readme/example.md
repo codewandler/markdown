@@ -1,182 +1,170 @@
-# Streaming Markdown Fixture
+# markdown
 
-This fixture is intentionally separate from the project README. It is meant to
-exercise the prototype event pipeline with a mix of regular prose, headings,
-and a long fenced code block that should start rendering before the whole
-document has arrived.
+Streaming Markdown parsing and rendering for Codewandler projects.
 
-## Why This Exists
+This repository provides a small, production-oriented Markdown pipeline that
+keeps parsing incremental and rendering terminal output as events arrive. It is
+designed for AI streams, long-lived CLI tools, and other inputs that should not
+wait for a full document before showing useful output.
 
-The parser should be able to accept very small chunks from an AI stream and keep
-rendering progress visible. Fenced code blocks are especially important because
-agent responses often contain long snippets.
+> The parser owns Markdown structure.
+> The terminal renderer owns presentation.
+> Both stay small enough to keep the streaming path responsive.
+
+## Supported Surface
+
+| Area                   | Status | Notes |
+|------------------------| --- | --- |
+| Headings               | supported | ATX headings in streamed input |
+| Paragraphs             | supported | soft wraps stay as spaces |
+| Lists                  | supported | ordered, unordered, and task items |
+| Tables                 | supported | pipe tables with alignment metadata |
+| **Code blocks**        | supported | fenced and indented blocks |
+| Quotes                 | supported | nested blockquotes stay readable |
+| Inline styles          | supported | emphasis, strong, strike, code |
+| Links                  | supported | inline and reference-style links |
+| Autolinks              | supported | bare URLs and email addresses |
+| HTML rendering         | planned | stays out of scope for now |
+| Incremental DOM output | planned | future renderer target |
+
+## What This Looks Like
+
+The main use case is a terminal session that receives small chunks, renders
+them immediately, and keeps memory bounded to unresolved parser state.
+
+The default renderer uses a Monokai-inspired palette, a thin code border, and a
+hybrid code highlighter that stays fast for Go and falls back for other
+languages.
+
+## Current Workflow
+
+- [x] Stream Markdown into the parser in small chunks
+- [x] Emit append-only events instead of rebuilding the document
+- [x] Render headings, quotes, lists, tables, and code blocks in the terminal
+- [x] Highlight Go code on the fast path
+- [x] Fall back to generic highlighting for Rust, JavaScript, Python, and shell
+- [ ] Add incremental DOM rendering
+- [ ] Add HTML output that preserves validity without full re-rendering
+
+## Example Content
+
+The public API is centered around `terminal.NewStreamRenderer`, which combines
+parsing and rendering behind a single `io.Writer`-style helper. The
+[repository on GitHub](https://github.com/codewandler/markdown) shows the
+current code, and bare links such as https://github.com/codewandler/markdown
+should render as clickable autolinks too.
+
+See the project [README][readme] for the package overview and the
+[roadmap][roadmap] for what comes next.
+
+You can also stream directly from a shell pipeline or a file descriptor, for
+example when rendering agent output live:
+
+```bash
+cat README.md | go run ./examples/stream-readme -chunk 48 -delay 20ms
+```
+
+## Release Notes
+
+Before shipping a release, the usual checklist is:
+
+- [x] confirm parser and renderer tests pass
+- [x] verify the streaming example still works
+- [x] keep the changelog aligned with behavior changes
+- [ ] cut the next release tag
+- [ ] publish notes on GitHub
+
+## Notes On Compatibility
+
+CommonMark conformance stays the baseline. GFM extensions are included where
+they fit the streaming model, especially tables, task lists, strikethrough, and
+autolink literals.
+
+HTML parsing is still intentionally out of scope here. If it comes later, it
+needs to be incrementally valid instead of being rebuilt from scratch on every
+chunk.
+
+## Go Example
 
 ```go
 package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/codewandler/markdown/terminal"
 )
 
-type Event struct {
-	Kind string
-	Text string
-}
+func main() {
+	pipe := terminal.NewStreamRenderer(os.Stdout)
+	input := strings.NewReader(strings.Join([]string{
+		"# Streamed release notes",
+		"",
+		"- [x] parser events stay append-only",
+		"- [ ] DOM rendering remains a future step",
+		"",
+		"| Area | Status |",
+		"| --- | --- |",
+		"| Tables | supported |",
+		"| HTML | planned |",
+		"",
+		"See https://github.com/codewandler/markdown for the current repo.",
+		"",
+		"```go",
+		"func render(ctx context.Context, r io.Reader) error {",
+		"    _ = ctx",
+		"    _ = r",
+		"    return nil",
+		"}",
+		"```",
+	}, "\n"))
 
-type Parser struct {
-	buffer strings.Builder
-	line   int
-}
-
-func NewParser() *Parser {
-	return &Parser{}
-}
-
-func (p *Parser) Write(chunk string) ([]Event, error) {
-	if chunk == "" {
-		return nil, nil
-	}
-
-	// Keep only unresolved stream tails in memory.
-	p.buffer.WriteString(chunk)
-	var events []Event
+	buf := make([]byte, 32)
 	for {
-		current := p.buffer.String()
-		next := strings.IndexByte(current, '\n')
-		if next < 0 {
-			break
-		}
-
-		line := current[:next]
-		p.buffer.Reset()
-		p.buffer.WriteString(current[next+1:])
-		p.line++
-
-		events = append(events, Event{
-			Kind: "line",
-			Text: fmt.Sprintf("%03d: %s", p.line, line),
-		})
-	}
-	return events, nil
-}
-
-func (p *Parser) Flush() ([]Event, error) {
-	if p.buffer.Len() == 0 {
-		return nil, nil
-	}
-	p.line++
-	event := Event{
-		Kind: "line",
-		Text: fmt.Sprintf("%03d: %s", p.line, p.buffer.String()),
-	}
-	p.buffer.Reset()
-	return []Event{event}, nil
-}
-
-func Stream(ctx context.Context, r io.Reader, parser *Parser, chunkSize int) error {
-	if chunkSize <= 0 {
-		return errors.New("chunk size must be greater than zero")
-	}
-
-	buf := make([]byte, chunkSize)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		n, err := r.Read(buf)
+		n, err := input.Read(buf)
 		if n > 0 {
-			events, writeErr := parser.Write(string(buf[:n]))
-			if writeErr != nil {
-				return writeErr
-			}
-			for _, event := range events {
-				fmt.Println(event.Text)
+			if _, writeErr := pipe.Write(buf[:n]); writeErr != nil {
+				panic(writeErr)
 			}
 		}
 		if err == io.EOF {
-			events, flushErr := parser.Flush()
-			if flushErr != nil {
-				return flushErr
-			}
-			for _, event := range events {
-				fmt.Println(event.Text)
-			}
-			return nil
+			break
 		}
 		if err != nil {
-			return err
+			panic(err)
 		}
-		time.Sleep(15 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
-}
-
-func main() {
-	const chunkSize = 11
-	input := strings.NewReader(strings.Repeat("alpha beta gamma\n", 12))
-	parser := NewParser()
-	if err := Stream(context.Background(), input, parser, chunkSize); err != nil {
+	if err := pipe.Flush(); err != nil {
 		panic(err)
 	}
+	fmt.Println()
 }
 ```
 
-## After The Code
-
-The text after the fence verifies that the parser exits code mode and resumes
-normal paragraph handling.
-
-## Rust Fixture
-
-The optional Chroma adapter should make this fence much more useful than the
-built-in fallback highlighter.
+## Rust Example
 
 ```rust
 use std::collections::VecDeque;
-use std::fmt::{self, Display};
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum EventKind {
-    Text,
-    SoftBreak,
-    HardBreak,
-    EnterBlock(&'static str),
-    ExitBlock(&'static str),
-}
-
 #[derive(Debug, Clone)]
-struct Event {
-    kind: EventKind,
+struct Chunk {
     text: String,
     created_at: Instant,
 }
 
-impl Display for Event {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            EventKind::Text => write!(f, "text({})", self.text),
-            EventKind::SoftBreak => f.write_str("soft-break"),
-            EventKind::HardBreak => f.write_str("hard-break"),
-            EventKind::EnterBlock(name) => write!(f, "enter<{name}>"),
-            EventKind::ExitBlock(name) => write!(f, "exit</{name}>"),
-        }
-    }
-}
-
-struct StreamWindow {
-    pending: VecDeque<Event>,
+struct Window {
+    pending: VecDeque<Chunk>,
     max_age: Duration,
 }
 
-impl StreamWindow {
+impl Window {
     fn new(max_age: Duration) -> Self {
         Self {
             pending: VecDeque::new(),
@@ -184,51 +172,60 @@ impl StreamWindow {
         }
     }
 
-    fn push(&mut self, event: Event) {
-        self.pending.push_back(event);
-        self.drop_expired();
+    fn push(&mut self, text: impl Into<String>) {
+        self.pending.push_back(Chunk {
+            text: text.into(),
+            created_at: Instant::now(),
+        });
+        self.compact();
     }
 
-    fn drain_ready(&mut self) -> Vec<Event> {
+    fn compact(&mut self) {
+        while self.pending.len() > 128 {
+            self.pending.pop_front();
+        }
+    }
+
+    fn drain_ready(&mut self) -> Vec<String> {
         let mut ready = Vec::new();
         while let Some(front) = self.pending.front() {
             if front.created_at.elapsed() < self.max_age {
                 break;
             }
-            if let Some(event) = self.pending.pop_front() {
-                ready.push(event);
+            if let Some(chunk) = self.pending.pop_front() {
+                ready.push(chunk.text);
             }
         }
         ready
     }
-
-    fn drop_expired(&mut self) {
-        while self.pending.len() > 256 {
-            self.pending.pop_front();
-        }
-    }
-}
-
-fn tokenize_lines(input: &str) -> impl Iterator<Item = Event> + '_ {
-    input.lines().map(|line| Event {
-        kind: if line.trim().is_empty() {
-            EventKind::SoftBreak
-        } else {
-            EventKind::Text
-        },
-        text: line.to_owned(),
-        created_at: Instant::now(),
-    })
 }
 
 fn main() {
-    let mut window = StreamWindow::new(Duration::from_millis(30));
-    for event in tokenize_lines("alpha\nbeta\n\nfinal") {
-        window.push(event);
+    let mut window = Window::new(Duration::from_millis(40));
+    for line in [
+        "streaming markdown stays responsive",
+        "tables and task lists render incrementally",
+        "generic highlighting handles non-Go code",
+    ] {
+        window.push(line);
     }
 
-    for event in window.drain_ready() {
-        println!("{event}");
+    for line in window.drain_ready() {
+        println!("{line}");
     }
 }
 ```
+
+## Indented Code
+
+    markdown.NewParser()
+    terminal.NewStreamRenderer(os.Stdout)
+    terminal.WithCodeBlockStyle(terminal.DefaultCodeBlockStyle())
+
+## References
+
+- [Project README][readme]
+- [Project Roadmap][roadmap]
+
+[readme]: ../../README.md
+[roadmap]: ../../ROADMAP.md

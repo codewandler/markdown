@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   307,
-		statusKnownGap:    174,
-		statusUnsupported: 171,
+		statusSupported:   400,
+		statusKnownGap:    188,
+		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -135,11 +135,12 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Backslash escapes",
 		"Blank lines",
 		"Block quotes",
-		"Images",
 		"Code spans",
+		"Emphasis and strong emphasis",
 		"Entity and numeric character references",
 		"Fenced code blocks",
 		"Hard line breaks",
+		"Images",
 		"Indented code blocks",
 		"Inlines",
 		"Link reference definitions",
@@ -487,6 +488,149 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	579: expectTextStyle("foo bar", InlineStyle{Link: "/path/to/train.jpg", LinkTitle: "title"}),
 	580: expectTextStyle("foo", InlineStyle{Link: "url"}),
 	581: expectTextStyle("", InlineStyle{Link: "/url"}),
+	// Emphasis and strong emphasis — rules 1-17 (newly supported via CommonMark algorithm).
+	// Rule 1: * can open emphasis iff left-flanking.
+	351: expectParagraphText("a * foo bar*"),
+	352: expectParagraphText("a*\"foo\"*"),
+	353: expectParagraphText("*\u00a0a\u00a0*"),
+	354: expectParagraphText("*$*alpha.", "*£*bravo.", "*€*charlie."),
+	// Rule 2: _ can open emphasis with extra restrictions.
+	358: expectParagraphText("_ foo bar_"),
+	359: expectParagraphText("a_\"foo\"_"),
+	360: expectParagraphText("foo_bar_"),
+	361: expectParagraphText("5_6_78"),
+	362: expectParagraphText("пристаням_стремятся_"),
+	363: expectParagraphText("aa_\"bb\"_cc"),
+	// Rule 3: * can close emphasis iff right-flanking.
+	365: expectParagraphText("_foo*"),
+	366: expectParagraphText("*foo bar *"),
+	368: expectParagraphText("*(*foo)"),
+	369: expectTextStyle("(foo)", InlineStyle{Emphasis: true}),
+	// Rule 4: _ can close emphasis with extra restrictions.
+	371: expectParagraphText("_foo bar _"),
+	372: expectParagraphText("_(_foo)"),
+	373: expectTextStyle("(foo)", InlineStyle{Emphasis: true}),
+	374: expectParagraphText("_foo_bar"),
+	375: expectParagraphText("_пристаням_стремятся"),
+	// Rule 5: ** can open strong iff left-flanking.
+	379: expectParagraphText("** foo bar**"),
+	380: expectParagraphText("a**\"foo\"**"),
+	// Rule 6: __ can open strong with extra restrictions.
+	383: expectParagraphText("__ foo bar__"),
+	384: expectParagraphText("__", "foo bar__"),
+	385: expectParagraphText("a__\"foo\"__"),
+	386: expectParagraphText("foo__bar__"),
+	387: expectParagraphText("5__6__78"),
+	388: expectParagraphText("пристаням__стремятся__"),
+	389: expectTextStyle("foo, bar, baz", InlineStyle{Strong: true}),
+	// Rule 7: ** can close strong iff right-flanking.
+	391: expectParagraphText("**foo bar **"),
+	392: expectParagraphText("**(**foo)"),
+	394: expectTextStyle("Gomphocarpus (", InlineStyle{Strong: true}),
+	// Rule 8: __ can close strong with extra restrictions.
+	397: expectParagraphText("__foo bar __"),
+	398: expectParagraphText("__(__foo)"),
+	400: expectParagraphText("__foo__bar"),
+	401: expectParagraphText("__пристаням__стремятся"),
+	402: expectTextStyle("foo__bar__baz", InlineStyle{Strong: true}),
+	403: expectTextStyle("(bar)", InlineStyle{Strong: true}),
+	// Rule 9: emphasis nesting.
+	405: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	406: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle(" baz", InlineStyle{Emphasis: true})(t, events)
+	},
+	407: expectTextStyle("foo bar baz", InlineStyle{Emphasis: true}),
+	408: expectTextStyle("foo bar", InlineStyle{Emphasis: true}),
+	409: expectTextStyle("foo bar", InlineStyle{Emphasis: true}),
+	410: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle(" baz", InlineStyle{Emphasis: true})(t, events)
+	},
+	411: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	412: expectTextStyle("foo**bar", InlineStyle{Emphasis: true}),
+	413: expectTextStyle("foo", InlineStyle{Emphasis: true, Strong: true}),
+	414: expectTextStyle("foo ", InlineStyle{Emphasis: true}),
+	415: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	416: expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true}),
+	417: expectTextStyle("bar***", InlineStyle{Strong: true}),
+	418: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar baz bim", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle(" bop", InlineStyle{Emphasis: true})(t, events)
+	},
+	// Rule 10: strong emphasis nesting.
+	420: expectParagraphText("** is not an empty emphasis"),
+	421: expectParagraphText("**** is not an empty strong emphasis"),
+	423: expectTextStyle("foo", InlineStyle{Strong: true}),
+	424: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle(" baz", InlineStyle{Strong: true})(t, events)
+	},
+	425: expectTextStyle("foo bar baz", InlineStyle{Strong: true}),
+	426: expectTextStyle("foo bar", InlineStyle{Strong: true}),
+	427: expectTextStyle("foo bar", InlineStyle{Strong: true}),
+	428: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle(" baz", InlineStyle{Strong: true})(t, events)
+	},
+	429: expectTextStyle("foo", InlineStyle{Strong: true}),
+	430: expectTextStyle("foo", InlineStyle{Emphasis: true, Strong: true}),
+	431: expectTextStyle("foo ", InlineStyle{Strong: true}),
+	432: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar baz", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle(" bop", InlineStyle{Strong: true})(t, events)
+	},
+	// Rules 11-12: literal delimiters.
+	434: expectParagraphText("__ is not an empty emphasis"),
+	435: expectParagraphText("____ is not an empty strong emphasis"),
+	436: expectParagraphText("foo ***"),
+	437: expectTextStyle("*", InlineStyle{Emphasis: true}),
+	438: expectTextStyle("_", InlineStyle{Emphasis: true}),
+	439: expectParagraphText("foo *****"),
+	440: expectTextStyle("*", InlineStyle{Strong: true}),
+	441: expectTextStyle("_", InlineStyle{Strong: true}),
+	442: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+	},
+	443: expectTextStyle("foo*", InlineStyle{Emphasis: true}),
+	444: expectTextStyle("foo", InlineStyle{Strong: true}),
+	445: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	446: expectTextStyle("foo*", InlineStyle{Strong: true}),
+	447: expectTextStyle("foo***", InlineStyle{Emphasis: true}),
+	448: expectParagraphText("foo ___"),
+	449: expectTextStyle("_", InlineStyle{Emphasis: true}),
+	450: expectTextStyle("*", InlineStyle{Emphasis: true}),
+	451: expectParagraphText("foo _____"),
+	452: expectTextStyle("_", InlineStyle{Strong: true}),
+	453: expectTextStyle("*", InlineStyle{Strong: true}),
+	454: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	455: expectTextStyle("foo_", InlineStyle{Emphasis: true}),
+	456: expectTextStyle("foo", InlineStyle{Strong: true}),
+	457: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	458: expectTextStyle("foo_", InlineStyle{Strong: true}),
+	459: expectTextStyle("foo___", InlineStyle{Emphasis: true}),
+	// Rules 15-16: overlap and precedence.
+	469: expectTextStyle("foo _bar", InlineStyle{Emphasis: true}),
+	470: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar *baz bim", InlineStyle{Emphasis: true, Strong: true})(t, events)
+	},
+	471: expectTextStyle("bar baz", InlineStyle{Strong: true}),
+	472: expectTextStyle("bar baz", InlineStyle{Emphasis: true}),
 }
 
 func expectBlocks(pairs ...any) func(*testing.T, []eventView) {

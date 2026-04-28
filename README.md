@@ -48,11 +48,15 @@ The terminal renderer stays low-level and dependency-light. It uses Monokai as
 the default palette for Markdown structure and code fences. Fenced code blocks
 render with a configurable left prefix, border, and padding.
 
+Inline and reference links render as OSC 8 terminal hyperlinks. When the
+renderer can determine a terminal width, it wraps visible text itself so
+hyperlinks remain clickable across physical line breaks.
+
 The renderer does not parse Markdown syntax. It only consumes parser events.
 That keeps table layout, list prefixes, blockquote prefixes, and ANSI styling
-local to presentation code. The built-in highlighter keeps Go on the stdlib
-fast path and applies a small generic fallback for other fenced code languages
-such as Rust, JavaScript, Python, and shell.
+local to presentation code. The built-in default highlighter keeps Go on the
+stdlib fast path and applies a small generic fallback for other fenced code
+languages such as Rust, JavaScript, Python, and shell.
 
 ## Packages
 

@@ -31,11 +31,15 @@ type Renderer struct {
 	w           io.Writer
 	highlighter CodeHighlighter
 	codeBlock   CodeBlockStyle
+	wrapWidth   int
 	inCode      bool
+	inIndented  bool
 	codeLang    string
 	inTable     bool
 	table       tableBuffer
+	listTight   []bool
 	lineStart   bool
+	lineWidth   int
 	quoteDepth  int
 	listDepth   int
 	listItem    string
@@ -45,6 +49,14 @@ type Renderer struct {
 
 // RendererOption configures a terminal renderer.
 type RendererOption func(*Renderer)
+
+// StreamRenderer wires a parser to a terminal renderer and implements
+// io.Writer for streaming Markdown inputs.
+type StreamRenderer struct {
+	parser  stream.Parser
+	render  *Renderer
+	flushed bool
+}
 
 // CodeBlockStyle controls terminal rendering for fenced-code blocks.
 type CodeBlockStyle struct {
@@ -89,6 +101,17 @@ func WithCodeHighlighter(highlighter CodeHighlighter) RendererOption {
 	}
 }
 
+// WithWrapWidth configures the maximum visible width before the renderer
+// inserts its own wrap. A non-positive value disables wrapping.
+func WithWrapWidth(width int) RendererOption {
+	return func(r *Renderer) {
+		if width < 0 {
+			width = 0
+		}
+		r.wrapWidth = width
+	}
+}
+
 // DefaultCodeBlockStyle returns the default fenced-code block layout.
 func DefaultCodeBlockStyle() CodeBlockStyle {
 	return defaultCodeBlockStyle()
@@ -98,8 +121,9 @@ func DefaultCodeBlockStyle() CodeBlockStyle {
 func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 	r := &Renderer{
 		w:           w,
-		highlighter: NewDefaultHighlighter(),
+		highlighter: NewHybridHighlighter(),
 		codeBlock:   defaultCodeBlockStyle(),
+		wrapWidth:   detectWrapWidth(w),
 		lineStart:   true,
 	}
 	for _, opt := range opts {
@@ -110,9 +134,49 @@ func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 	return r
 }
 
+// NewStreamRenderer creates a convenience wrapper that parses and renders
+// Markdown written to it.
+func NewStreamRenderer(w io.Writer, opts ...RendererOption) *StreamRenderer {
+	return &StreamRenderer{
+		parser: stream.NewParser(),
+		render: NewRenderer(w, opts...),
+	}
+}
+
 // SetCodeBlockStyle changes fenced-code block layout.
 func (r *Renderer) SetCodeBlockStyle(style CodeBlockStyle) {
 	r.codeBlock = normalizeCodeBlockStyle(style)
+}
+
+// Write parses Markdown bytes and renders any newly emitted events.
+func (r *StreamRenderer) Write(p []byte) (int, error) {
+	if r.flushed {
+		return 0, io.ErrClosedPipe
+	}
+	events, err := r.parser.Write(p)
+	if err != nil {
+		return len(p), err
+	}
+	if err := r.render.Render(events); err != nil {
+		return len(p), err
+	}
+	return len(p), nil
+}
+
+// Flush finalizes the parser and renders any remaining events.
+func (r *StreamRenderer) Flush() error {
+	if r.flushed {
+		return nil
+	}
+	events, err := r.parser.Flush()
+	if err != nil {
+		return err
+	}
+	if err := r.render.Render(events); err != nil {
+		return err
+	}
+	r.flushed = true
+	return nil
 }
 
 // Render writes terminal output for events.
@@ -177,10 +241,14 @@ func (r *Renderer) render(event stream.Event) error {
 		return r.text(event)
 	case stream.EventSoftBreak:
 		_, err := fmt.Fprint(r.w, " ")
+		if err == nil {
+			r.lineWidth++
+		}
 		return err
 	case stream.EventLineBreak:
 		_, err := fmt.Fprint(r.w, "\n")
 		r.lineStart = true
+		r.lineWidth = 0
 		return err
 	default:
 		return nil
@@ -191,8 +259,8 @@ func (r *Renderer) enterBlock(event stream.Event) error {
 	switch event.Block {
 	case stream.BlockDocument:
 		return nil
-	case stream.BlockHeading, stream.BlockParagraph, stream.BlockFencedCode, stream.BlockThematicBreak, stream.BlockBlockquote, stream.BlockList, stream.BlockTable:
-		if r.pending && !r.spaced {
+	case stream.BlockHeading, stream.BlockParagraph, stream.BlockFencedCode, stream.BlockIndentedCode, stream.BlockThematicBreak, stream.BlockBlockquote, stream.BlockList, stream.BlockTable:
+		if r.pending && !r.spaced && !r.tightListActive() {
 			if _, err := fmt.Fprint(r.w, "\n"); err != nil {
 				return err
 			}
@@ -216,6 +284,11 @@ func (r *Renderer) enterBlock(event stream.Event) error {
 	}
 	if event.Block == stream.BlockList {
 		r.listDepth++
+		tight := true
+		if event.List != nil {
+			tight = event.List.Tight
+		}
+		r.listTight = append(r.listTight, tight)
 		return nil
 	}
 	if event.Block == stream.BlockListItem {
@@ -229,6 +302,10 @@ func (r *Renderer) enterBlock(event stream.Event) error {
 		r.highlighter.Start(r.codeLang, event.Info)
 		return nil
 	}
+	if event.Block == stream.BlockIndentedCode {
+		r.inIndented = true
+		return nil
+	}
 	if event.Block == stream.BlockHeading {
 		_, err := fmt.Fprint(r.w, bold, monokaiGreen)
 		return err
@@ -240,6 +317,8 @@ func (r *Renderer) enterBlock(event stream.Event) error {
 	if event.Block == stream.BlockThematicBreak {
 		_, err := fmt.Fprint(r.w, monokaiComment, strings.Repeat("─", 24), reset, "\n")
 		r.pending = true
+		r.lineStart = true
+		r.lineWidth = 0
 		return err
 	}
 	return nil
@@ -250,16 +329,23 @@ func (r *Renderer) exitBlock(event stream.Event) error {
 	case stream.BlockHeading:
 		_, err := fmt.Fprint(r.w, reset, "\n")
 		r.pending = true
+		r.lineStart = true
+		r.lineWidth = 0
 		return err
 	case stream.BlockParagraph:
 		_, err := fmt.Fprint(r.w, reset, "\n")
 		r.lineStart = true
+		r.lineWidth = 0
 		r.pending = true
 		return err
 	case stream.BlockFencedCode:
 		r.inCode = false
 		r.codeLang = ""
 		r.highlighter.End()
+		r.pending = true
+		return nil
+	case stream.BlockIndentedCode:
+		r.inIndented = false
 		r.pending = true
 		return nil
 	case stream.BlockBlockquote:
@@ -271,6 +357,9 @@ func (r *Renderer) exitBlock(event stream.Event) error {
 	case stream.BlockList:
 		if r.listDepth > 0 {
 			r.listDepth--
+		}
+		if n := len(r.listTight); n > 0 {
+			r.listTight = r.listTight[:n-1]
 		}
 		r.pending = true
 		return nil
@@ -300,38 +389,44 @@ func (r *Renderer) text(event stream.Event) error {
 		}
 		return nil
 	}
-	if r.inCode {
-		_, err := fmt.Fprint(r.w, r.codePrefix(), r.highlighter.HighlightLine(event.Text))
+	if r.inCode || r.inIndented {
+		text := event.Text
+		if r.inCode {
+			text = r.highlighter.HighlightLine(event.Text)
+		}
+		_, err := fmt.Fprint(r.w, r.codePrefix(), text)
 		r.lineStart = false
 		return err
 	}
-	if err := r.writeLinePrefix(); err != nil {
-		return err
-	}
-	_, err := fmt.Fprint(r.w, r.styleText(event))
-	r.lineStart = false
-	return err
+	return r.writeWrappedText(event)
 }
 
 func (r *Renderer) writeLinePrefix() error {
 	if !r.lineStart {
 		return nil
 	}
+	r.lineWidth = 0
 	if r.quoteDepth > 0 {
 		for range r.quoteDepth {
 			if _, err := fmt.Fprint(r.w, monokaiComment, "│ ", reset); err != nil {
 				return err
 			}
+			r.lineWidth += 2
 		}
 	}
 	if r.listItem != "" {
 		if _, err := fmt.Fprint(r.w, strings.Repeat("  ", max(0, r.listDepth-1)), monokaiComment, r.listItem, reset); err != nil {
 			return err
 		}
+		r.lineWidth += 2*max(0, r.listDepth-1) + visibleWidth(r.listItem)
 		r.listItem = strings.Repeat(" ", visibleListMarkerWidth(r.listItem))
 	}
 	r.lineStart = false
 	return nil
+}
+
+func (r *Renderer) tightListActive() bool {
+	return len(r.listTight) > 0 && r.listTight[len(r.listTight)-1]
 }
 
 func (r *Renderer) flushTable() error {
@@ -434,23 +529,133 @@ func padTableCell(cell string, targetWidth, visibleWidth int, align stream.Table
 }
 
 func (r *Renderer) styleText(event stream.Event) string {
+	return styledText(event.Style, event.Text)
+}
+
+func styledText(style stream.InlineStyle, text string) string {
+	if text == "" {
+		return ""
+	}
+	var out strings.Builder
+	if style.Code {
+		out.WriteString(monokaiYellow)
+	}
+	if style.Emphasis {
+		out.WriteString(italic)
+	}
+	if style.Strong {
+		out.WriteString(bold)
+	}
+	if style.Strike {
+		out.WriteString(strike)
+	}
+	if style.Link != "" {
+		out.WriteString(underline)
+		out.WriteString(monokaiBlue)
+		out.WriteString(osc8Open(style.Link))
+	}
+	out.WriteString(text)
+	if style.Link != "" {
+		out.WriteString(osc8Close())
+	}
+	out.WriteString(reset)
+	if style.Code || style.Emphasis || style.Strong || style.Strike || style.Link != "" {
+		out.WriteString(monokaiForeground)
+	}
+	return out.String()
+}
+
+func (r *Renderer) writeWrappedText(event stream.Event) error {
+	if err := r.writeLinePrefix(); err != nil {
+		return err
+	}
+	if r.wrapWidth <= 0 {
+		_, err := fmt.Fprint(r.w, styledText(event.Style, event.Text))
+		r.lineWidth += visibleWidth(event.Text)
+		return err
+	}
 	text := event.Text
-	if event.Style.Code {
-		text = monokaiYellow + text + reset + monokaiForeground
+	for len(text) > 0 {
+		remaining := r.wrapWidth - r.lineWidth
+		// If the line prefix already consumed all available width,
+		// emit the rest on one line to avoid degenerate one-rune-
+		// per-line output in deeply nested containers.
+		if remaining <= 0 {
+			if _, err := fmt.Fprint(r.w, styledText(event.Style, text)); err != nil {
+				return err
+			}
+			r.lineWidth += visibleWidth(text)
+			return nil
+		}
+		segment, rest := splitWrappedText(text, remaining)
+		if segment == "" {
+			segment, rest = text[:firstRuneIndex(text)], text[firstRuneIndex(text):]
+		}
+		if _, err := fmt.Fprint(r.w, styledText(event.Style, segment)); err != nil {
+			return err
+		}
+		r.lineWidth += visibleWidth(segment)
+		text = rest
+		if len(text) > 0 {
+			if err := r.newline(); err != nil {
+				return err
+			}
+			if err := r.writeLinePrefix(); err != nil {
+				return err
+			}
+		}
 	}
-	if event.Style.Emphasis {
-		text = italic + text + reset + monokaiForeground
+	return nil
+}
+
+func (r *Renderer) newline() error {
+	if _, err := fmt.Fprint(r.w, "\n"); err != nil {
+		return err
 	}
-	if event.Style.Strong {
-		text = bold + text + reset + monokaiForeground
+	r.lineStart = true
+	r.lineWidth = 0
+	return nil
+}
+
+func visibleWidth(text string) int {
+	return utf8.RuneCountInString(stripANSI(text))
+}
+
+func firstRuneIndex(text string) int {
+	for i := range text {
+		if i > 0 {
+			return i
+		}
 	}
-	if event.Style.Strike {
-		text = strike + text + reset + monokaiForeground
+	return len(text)
+}
+
+func splitWrappedText(text string, max int) (string, string) {
+	if max <= 0 || len(text) == 0 {
+		return "", text
 	}
-	if event.Style.Link != "" {
-		text = underline + monokaiBlue + text + reset + monokaiComment + " (" + event.Style.Link + ")" + reset + monokaiForeground
+	width := 0
+	lastBreak := -1
+	for i, r := range text {
+		if width >= max {
+			break
+		}
+		width++
+		if r == ' ' || r == '\t' {
+			lastBreak = i + utf8.RuneLen(r)
+		}
+		if width == max {
+			if lastBreak > 0 && lastBreak < len(text) {
+				return strings.TrimRight(text[:lastBreak], " \t"), strings.TrimLeft(text[lastBreak:], " \t")
+			}
+			next := i + utf8.RuneLen(r)
+			if next < len(text) {
+				return text[:next], text[next:]
+			}
+			return text, ""
+		}
 	}
-	return text
+	return text, ""
 }
 
 func (r *Renderer) codePrefix() string {
@@ -540,14 +745,40 @@ func stripANSI(s string) string {
 	var out strings.Builder
 	out.Grow(len(s))
 	for i := 0; i < len(s); i++ {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+		if s[i] != '\x1b' || i+1 >= len(s) {
+			out.WriteByte(s[i])
+			continue
+		}
+		switch s[i+1] {
+		case '[':
 			i += 2
 			for i < len(s) && s[i] != 'm' {
 				i++
 			}
 			continue
+		case ']':
+			i += 2
+			for i < len(s) {
+				if s[i] == '\x07' {
+					break
+				}
+				if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '\\' {
+					i++
+					break
+				}
+				i++
+			}
+			continue
 		}
-		out.WriteByte(s[i])
 	}
 	return out.String()
+}
+
+func osc8Open(target string) string {
+	// Use BEL as the OSC string terminator for broad terminal compatibility.
+	return "\x1b]8;;" + target + "\a"
+}
+
+func osc8Close() string {
+	return "\x1b]8;;\a"
 }

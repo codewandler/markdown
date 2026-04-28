@@ -6,13 +6,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/codewandler/markdown/stream"
 	"github.com/codewandler/markdown/terminal"
 )
 
 func main() {
 	chunkSize := flag.Int("chunk", 32, "bytes to write per parser chunk")
-	delay := flag.Duration("delay", 50*time.Millisecond, "delay between chunks")
+	delay := flag.Duration("delay", 0*time.Millisecond, "delay between chunks")
 	codeIndent := flag.Int("code-indent", 2, "spaces before code block border")
 	codeBorder := flag.Bool("code-border", true, "draw a left border for code blocks")
 	codeBorderText := flag.String("code-border-text", "│", "left border text for code blocks")
@@ -34,16 +33,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	parser := stream.NewParser()
 	codeStyle := terminal.DefaultCodeBlockStyle()
 	codeStyle.Indent = *codeIndent
 	codeStyle.Border = *codeBorder
 	codeStyle.BorderText = *codeBorderText
 	codeStyle.Padding = *codePadding
-	renderer := terminal.NewRenderer(
+	renderer := terminal.NewStreamRenderer(
 		os.Stdout,
 		terminal.WithCodeBlockStyle(codeStyle),
-		terminal.WithCodeHighlighter(terminal.NewHybridHighlighter()),
 	)
 
 	for len(input) > 0 {
@@ -51,12 +48,7 @@ func main() {
 		if n > len(input) {
 			n = len(input)
 		}
-		events, err := parser.Write(input[:n])
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		if err := renderer.Render(events); err != nil {
+		if _, err := renderer.Write(input[:n]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -66,12 +58,7 @@ func main() {
 		}
 	}
 
-	events, err := parser.Flush()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	if err := renderer.Render(events); err != nil {
+	if err := renderer.Flush(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
