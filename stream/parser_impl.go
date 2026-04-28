@@ -1040,6 +1040,13 @@ func (p *parser) popList() {
 // same line. It checks for block-level constructs before falling back to
 // paragraph text.
 func (p *parser) processListItemFirstLine(line lineInfo, events *[]Event) {
+	// Indented code block (4+ spaces of content indent).
+	if indentedCode(line.text) {
+		p.inIndented = true
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockIndentedCode, Span: Span{Start: line.start, End: line.end}})
+		p.emitIndentedCodeLine(line, events)
+		return
+	}
 	// Fenced code block.
 	if marker, n, indent, info, ok := openingFence(line.text); ok {
 		p.fence = fenceState{open: true, marker: marker, length: n, indent: indent, info: info}
@@ -1135,9 +1142,13 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 		return
 	}
 	if p.inBlockquote {
-		if len(p.paragraph.lines) > 0 {
-			p.addParagraphLine(line)
-			return
+		if len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
+			if _, _, _, _, isFence := openingFence(line.text); !isFence {
+				if _, ok := listItem(line.text); !ok {
+					p.addParagraphLine(line)
+					return
+				}
+			}
 		}
 		p.closeBlockquote(line, events)
 	}
@@ -1183,6 +1194,13 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 			p.processListItemFirstLine(inner, events)
 		}
 		return
+	}
+
+	// Link reference definition inside list item.
+	if len(p.paragraph.lines) == 0 {
+		if p.startLinkReferenceDefinition(line) {
+			return
+		}
 	}
 
 	p.processNonContainerLine(line, events)

@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   537,
-		statusKnownGap:    51,
+		statusSupported:   541,
+		statusKnownGap:    47,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -898,6 +898,16 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	197: expectParagraphText("[foo]: /url 'title", "with blank line'", "[foo]"),
 	199: expectParagraphText("[foo]:", "[foo]"),
 	201: expectParagraphText("[foo]: <bar>(baz)", "[foo]"),
+	// List items starting with indented code.
+	273: expectBlocks(BlockList, 1, BlockListItem, 1, BlockIndentedCode, 2, BlockParagraph, 1),
+	274: expectBlocks(BlockList, 1, BlockListItem, 1, BlockIndentedCode, 2, BlockParagraph, 1),
+	// Blockquote + fenced code in list item.
+	321: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 2, BlockParagraph, 3, BlockBlockquote, 1, BlockFencedCode, 1)(t, events)
+	},
+	// Ref def inside list continuation.
+	317: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 3),
 	// List items starting with blank line.
 	278: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 1, BlockFencedCode, 1, BlockIndentedCode, 1),
 	// HTML comment separating lists.
