@@ -80,11 +80,11 @@ assertions for GFM-specific extensions to catch regressions.
 - [x] `TestGFMSupportedExamples` runs all 672 assertion functions
   against actual parser output
 
-### Known gaps documented in assertions
+### Table parsing fixes (v0.36.1)
 
-- Example 199: pipe-less delimiter row not recognized (parsed as paragraph)
-- Example 202: bare continuation row not added to table (1 data row vs 2)
-- Example 203: column-count mismatch not rejected (parsed as table vs paragraph)
+- Fixed example 199: pipe-less delimiter rows now recognized
+- Fixed example 202: pipe-less continuation rows now accepted
+- Fixed example 203: column-count mismatch now correctly rejected
 
 ---
 

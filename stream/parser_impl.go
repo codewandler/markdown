@@ -748,8 +748,12 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 		return false
 	}
 	header := p.paragraph.lines[0]
-	_, headerHasPipe := splitTableRow(header.text)
+	headerCells, headerHasPipe := splitTableRow(header.text)
 	if !headerHasPipe {
+		return false
+	}
+	// GFM spec: delimiter column count must match header column count.
+	if len(headerCells) != len(align) {
 		return false
 	}
 
@@ -783,16 +787,73 @@ func (p *parser) processActiveTableLine(line lineInfo, events *[]Event) bool {
 	if !p.table.active {
 		return false
 	}
-	cells, hasPipe := splitTableRow(line.text)
-	if !hasPipe && len(p.table.align) != 1 {
+	// Lines that start a new block-level construct end the table.
+	if startsNewBlock(line.text) {
 		return false
 	}
+	cells, _ := splitTableRow(line.text)
 	if len(cells) == 0 {
 		return false
 	}
 	p.table.span.End = line.end
 	p.emitTableRow(line.text, line, events)
 	return true
+}
+
+// startsNewBlock returns true if the line would start a block-level
+// construct that should interrupt a table.
+func startsNewBlock(text string) bool {
+	s := strings.TrimLeft(text, " \t")
+	if s == "" {
+		return false
+	}
+	switch s[0] {
+	case '>':
+		return true // blockquote
+	case '#':
+		// ATX heading: # followed by space or end of line.
+		for i := 0; i < len(s) && i < 6; i++ {
+			if s[i] != '#' {
+				return i > 0 && (s[i] == ' ' || s[i] == '\t')
+			}
+		}
+		return len(s) <= 6 || s[6] == ' ' || s[6] == '\t'
+	case '-', '*', '_':
+		// Thematic break: 3+ of the same char with optional spaces.
+		if thematicBreak(s) {
+			return true
+		}
+		// List item: marker followed by space.
+		if (s[0] == '-' || s[0] == '*') && len(s) > 1 && (s[1] == ' ' || s[1] == '\t') {
+			return true
+		}
+		return false
+	case '+':
+		return len(s) > 1 && (s[1] == ' ' || s[1] == '\t') // list item
+	case '`', '~':
+		// Fenced code: 3+ backticks or tildes.
+		if len(s) >= 3 && (s[:3] == "```" || s[:3] == "~~~") {
+			return true
+		}
+		return false
+	case '<':
+		// HTML block.
+		return true
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		// Ordered list item: digits followed by . or ) and space.
+		for i := 0; i < len(s) && i < 10; i++ {
+			if s[i] >= '0' && s[i] <= '9' {
+				continue
+			}
+			if (s[i] == '.' || s[i] == ')') && i > 0 && i+1 < len(s) && (s[i+1] == ' ' || s[i+1] == '\t') {
+				return true
+			}
+			break
+		}
+		return false
+	default:
+		return false
+	}
 }
 
 func (p *parser) emitTableRow(text string, line lineInfo, events *[]Event) {
@@ -847,7 +908,8 @@ func parseTableAlign(cell string) (TableAlign, bool) {
 	if right && len(cell) > 0 {
 		cell = cell[:len(cell)-1]
 	}
-	if len(cell) < 3 {
+	// GFM spec requires at least one dash in the delimiter cell.
+	if len(cell) == 0 {
 		return TableAlignNone, false
 	}
 	for i := 0; i < len(cell); i++ {

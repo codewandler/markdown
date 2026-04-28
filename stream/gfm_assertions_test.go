@@ -228,10 +228,15 @@ func gfmExtensionAssertions() map[int]func(*testing.T, []eventView) {
 			expectTableCellText(0, "baz", "bim"),
 		),
 
-		// Example 199: table with center/right alignment, no leading pipe.
-		// Parser currently treats this as a paragraph (known gap for
-		// pipe-less delimiter rows). Assert paragraph structure.
-		199: expectBlocks(BlockDocument, 1, BlockParagraph, 1),
+		// Example 199: table with center/right alignment, no leading pipe
+		// on delimiter or data rows.
+		// | abc | defghi |
+		// :-: | -----------:
+		// bar | baz
+		199: combine(
+			expectTable([]TableAlign{TableAlignCenter, TableAlignRight}, 1, "abc", "defghi"),
+			expectTableCellText(0, "bar", "baz"),
+		),
 
 		// Example 200: single-column table with escaped pipes, inline
 		// code and strong emphasis inside cells.
@@ -256,20 +261,22 @@ func gfmExtensionAssertions() map[int]func(*testing.T, []eventView) {
 			expectBlocks(BlockBlockquote, 1),
 		),
 
-		// Example 202: table ends at blank line; the GFM spec treats
-		// the bare "bar" line as a continuation data row, but our
-		// parser ends the table before it. Known gap: we get 1 data
-		// row instead of 2. Assert what we actually produce.
+		// Example 202: table ends at blank line; the bare "bar" line
+		// is a continuation data row, then blank line ends the table,
+		// and the final "bar" is a separate paragraph.
 		202: combine(
-			expectTable([]TableAlign{TableAlignNone, TableAlignNone}, 1, "abc", "def"),
+			expectTable([]TableAlign{TableAlignNone, TableAlignNone}, 2, "abc", "def"),
 			expectTableCellText(0, "bar", "baz"),
-			expectBlocks(BlockParagraph, 2),
+			expectTableCellText(1, "bar"),
+			expectBlocks(BlockParagraph, 1),
 		),
 
 		// Example 203: delimiter row column count doesn't match header.
-		// GFM spec says this should be a paragraph. Our parser currently
-		// produces a table (known gap). Assert table structure for now.
-		203: expectBlocks(BlockDocument, 1, BlockTable, 1),
+		// GFM spec says this should be a paragraph.
+		203: combine(
+			expectBlocks(BlockDocument, 1, BlockParagraph, 1),
+			expectTextParts("abc", "def", "bar"),
+		),
 
 		// Example 204: data rows with fewer/more columns than header.
 		// | abc | def |

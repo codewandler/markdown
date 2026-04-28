@@ -10,6 +10,22 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-04-28
+
+### Fixed
+
+- Fixed table delimiter row requiring 3+ dashes per cell; the GFM spec
+  only requires 1 dash (e.g. `:-:` is now valid). Fixes example 199.
+- Fixed table data rows requiring pipes for multi-column tables; bare
+  text lines now continue an active table until a blank line or new
+  block-level construct. Fixes example 202.
+- Fixed table creation when delimiter column count doesn't match header
+  column count; mismatched counts now correctly fall back to a paragraph.
+  Fixes example 203.
+- Added `startsNewBlock` helper to detect block-level constructs
+  (blockquotes, headings, thematic breaks, list items, fenced code,
+  HTML blocks) that should interrupt an active table.
+
 ## [0.36.0] - 2026-04-28
 
 ### Added
