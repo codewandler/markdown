@@ -38,8 +38,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported: 609,
-		statusKnownGap:  43,
+		statusSupported: 615,
+		statusKnownGap:  37,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -969,6 +969,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	629: expectParagraphText("foo ", "<![CDATA[>&<]]>"),
 	630: expectParagraphText("foo ", "<a href=\"&ouml;\">"),
 	631: expectParagraphText("foo ", "<a href=\"\\*\">"),
+	// Raw HTML — invalid tags are literal text.
+	618: expectParagraphText("<33> <__>"),
+	619: expectParagraphText("<a h*#ref=\"hi\">"),
+	620: expectParagraphText("<a href=\"hi'> <a href=hi'>"),
+	622: expectParagraphText("<a href='bar'title=title>"),
+	624: expectParagraphText("</a href=\"foo\">"),
+	632: expectParagraphText("<a href=\"\"\">"),
 	// List items starting with indented code.
 	273: expectBlocks(BlockList, 1, BlockListItem, 1, BlockIndentedCode, 2, BlockParagraph, 1),
 	274: expectBlocks(BlockList, 1, BlockListItem, 1, BlockIndentedCode, 2, BlockParagraph, 1),
