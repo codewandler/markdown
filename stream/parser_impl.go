@@ -49,6 +49,7 @@ type parser struct {
 	pendingBlocks []pendingBlock
 
 	inBlockquote       bool
+	bqInsideListItem   bool // true if blockquote was opened inside a list item
 	inList             bool
 	listData           ListData
 	listLoose          bool
@@ -405,7 +406,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		if !p.inBlockquote {
 			p.closeParagraph(events)
 			p.closeList(events)
-			p.inBlockquote = true
+			p.inBlockquote = true; p.bqInsideListItem = p.inListItem
 			p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
 		}
 		if strings.TrimSpace(content) == "" {
@@ -1087,7 +1088,27 @@ func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
 	p.drainPendingBlocks(events)
 	p.closeIndentedCode(events)
 	p.closeFencedCode(events)
+	// Set inBlockquote = false BEFORE closing lists to prevent
+	// mutual recursion: closeListItem -> closeBlockquote -> closeListItem.
+	bqOpenedInsideList := p.bqInsideListItem
 	p.inBlockquote = false
+	// Close any lists that were opened inside this blockquote.
+	// Don't close the outer list if the blockquote was inside a list item.
+	if !bqOpenedInsideList && p.inList {
+		if p.inListItem {
+			p.closeParagraph(events)
+			p.drainPendingBlocks(events)
+			p.inListItem = false
+			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
+		}
+		data := p.listData
+		data.Tight = !p.listLoose
+		p.inList = false
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
+		p.listData = ListData{}
+		p.listLoose = false
+		p.popList()
+	}
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
 }
 
@@ -1315,7 +1336,7 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 		p.closeParagraph(events)
 		p.drainPendingBlocks(events)
 		if !p.inBlockquote {
-			p.inBlockquote = true
+			p.inBlockquote = true; p.bqInsideListItem = p.inListItem
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
 		}
 		if strings.TrimSpace(content) == "" {
