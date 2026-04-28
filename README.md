@@ -31,6 +31,20 @@ lists, tables with alignment, fenced and indented code, emphasis,
 strong, ~~strikethrough~~, `code spans`, inline/reference/auto links,
 images, thematic breaks, setext headings, HTML blocks.
 
+## Dependencies
+
+The core parser (`stream`) has **zero dependencies** -- it is pure Go
+standard library.
+
+The terminal renderer (`terminal`) has one dependency:
+
+| Dependency | Why |
+| --- | --- |
+| [`alecthomas/chroma`](https://github.com/alecthomas/chroma) | Syntax highlighting for non-Go fenced code blocks (24-bit truecolor). Go code uses a built-in stdlib AST fast path and does not need Chroma. |
+
+No framework, no goldmark, no blackfriday. The parser and renderer are
+written from scratch for the streaming use case.
+
 ## Quick Start
 
 ```go
@@ -107,3 +121,18 @@ go test ./stream ./terminal .
 3. Memory bounded by **unresolved state** -- not document size
 4. Renderer **never parses** Markdown syntax
 5. Terminal rendering is the **first-class output path**
+
+## Roadmap
+
+See [`roadmap-v1.0.md`](.agents/plans/roadmap-v1.0.md) for the full plan.
+
+| Milestone | Status |
+| --- | --- |
+| Fuzz testing | :white_check_mark: v0.35.1 |
+| GFM structural assertions | :white_check_mark: v0.36.0 |
+| GFM table parsing fixes | :white_check_mark: v0.36.1 |
+| Demo application + README | :white_check_mark: v0.37.0 |
+| CommonMark gaps (target >= 98%) | planned |
+| `cmd/mdview` terminal viewer | planned |
+| Benchmarks + renderer comparison | planned |
+| v1.0 stable API | planned |

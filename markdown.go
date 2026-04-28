@@ -1,7 +1,5 @@
 // Package markdown provides markdown parsing and rendering primitives for streaming AI-agent output.
 //
-// For block-level buffering with goldmark, see the Buffer type in buffer.go.
-//
 // For stream-based parsing and rendering, use the stream and terminal subpackages directly:
 //
 //	parser := stream.NewParser()
