@@ -2193,8 +2193,13 @@ func parseLinkReferenceDefinitionTail(text string, start int) (dest string, titl
 	if !ok || next == i {
 		return "", "", false, false, false, false
 	}
-	i = skipMarkdownSpace(text, next)
+	spaceAfterDest := skipMarkdownSpace(text, next)
+	i = spaceAfterDest
 	if i < len(text) {
+		// Title must be separated from destination by whitespace.
+		if spaceAfterDest == next {
+			return "", "", false, false, false, false
+		}
 		parsedTitle, next, ok := parseInlineLinkTitle(text, i)
 		if !ok {
 			return "", "", false, false, false, false

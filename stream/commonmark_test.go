@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   536,
-		statusKnownGap:    52,
+		statusSupported:   537,
+		statusKnownGap:    51,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -897,6 +897,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	// Link reference definitions — edge cases.
 	197: expectParagraphText("[foo]: /url 'title", "with blank line'", "[foo]"),
 	199: expectParagraphText("[foo]:", "[foo]"),
+	201: expectParagraphText("[foo]: <bar>(baz)", "[foo]"),
 	// List items starting with blank line.
 	278: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 1, BlockFencedCode, 1, BlockIndentedCode, 1),
 	// HTML comment separating lists.
