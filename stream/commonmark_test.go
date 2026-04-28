@@ -38,8 +38,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported: 622,
-		statusKnownGap:  30,
+		statusSupported: 624,
+		statusKnownGap:  28,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -1103,6 +1103,12 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		t.Helper()
 		expectBlocks(BlockList, 1, BlockListItem, 1, BlockFencedCode, 1, BlockParagraph, 1)(t, events)
 	},
+	// Lazy continuation in list items.
+	291: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1),
+	290: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2, BlockIndentedCode, 1, BlockBlockquote, 1)(t, events)
+	},
 	// Deep sublists (3+ levels).
 	294: expectBlocks(BlockList, 4, BlockListItem, 4, BlockParagraph, 4),
 	307: func(t *testing.T, events []eventView) {
@@ -1116,7 +1122,8 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	},
 	312: func(t *testing.T, events []eventView) {
 		t.Helper()
-		expectBlocks(BlockList, 1, BlockListItem, 4, BlockIndentedCode, 1)(t, events)
+		expectBlocks(BlockList, 1, BlockListItem, 4, BlockParagraph, 4)(t, events)
+		expectParagraphText("- e")(t, events)
 	},
 	319: func(t *testing.T, events []eventView) {
 		t.Helper()

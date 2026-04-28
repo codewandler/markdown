@@ -371,6 +371,14 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			p.processListItemContent(inner, events)
 			return
 		}
+		// Lazy continuation: if a paragraph is open inside the list
+		// item, a non-blank line continues it even without enough indent.
+		if p.inListItem && len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
+			if _, ok := listItem(line.text); !ok {
+				p.addParagraphLine(line)
+				return
+			}
+		}
 	}
 
 	if content, ok := blockquoteContent(line.text); ok {
