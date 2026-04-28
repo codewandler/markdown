@@ -1295,9 +1295,11 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 		p.closeParagraph(events)
 		p.drainPendingBlocks(events)
 		// Check if this is a sibling in an existing sublist (not the outer list).
-		// We know we're in a sublist context if listStack is non-empty.
+		// A sibling must be at indent 0 (same level as existing sublist items).
+		// An indented list item creates a deeper sublist.
+		itemIndent, _ := leadingIndent(line.text)
 		inSublist := len(p.listStack) > 0 && p.inList
-		if inSublist && p.listData.Ordered == item.data.Ordered && p.listData.Marker == item.data.Marker {
+		if inSublist && itemIndent == 0 && p.listData.Ordered == item.data.Ordered && p.listData.Marker == item.data.Marker {
 			// Sibling item in the existing sublist.
 			// Close just the current item, not the sublist.
 			if p.inListItem {
@@ -1309,10 +1311,7 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 				*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
 			}
 		} else {
-			// New sublist — close any existing sublist and save outer state.
-			if inSublist {
-				p.closeList(events)
-			}
+			// New sublist — save outer state.
 			p.pushList()
 			p.inList = true
 			p.listData = listBlockData(item.data)

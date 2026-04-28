@@ -38,8 +38,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported: 620,
-		statusKnownGap:  32,
+		statusSupported: 622,
+		statusKnownGap:  30,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -1103,8 +1103,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		t.Helper()
 		expectBlocks(BlockList, 1, BlockListItem, 1, BlockFencedCode, 1, BlockParagraph, 1)(t, events)
 	},
-	// Deep sublists — not yet fully correct for 3+ levels.
-	// 294 and 307 are deferred until deep nesting is fixed.
+	// Deep sublists (3+ levels).
+	294: expectBlocks(BlockList, 4, BlockListItem, 4, BlockParagraph, 4),
+	307: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 3, BlockListItem, 3, BlockParagraph, 4)(t, events)
+		expectParagraphText("bim")(t, events)
+	},
 	309: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectBlocks(BlockList, 1, BlockListItem, 2, BlockParagraph, 3, BlockHTML, 1)(t, events)
