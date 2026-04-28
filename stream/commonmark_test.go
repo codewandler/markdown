@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   472,
-		statusKnownGap:    116,
+		statusSupported:   488,
+		statusKnownGap:    100,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -867,6 +867,36 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	546: expectParagraphText("[foo][ref[]", "[ref[]: /uri"),
 	547: expectParagraphText("[foo][ref[bar]]", "[ref[bar]]: /uri"),
 	548: expectParagraphText("[[[foo]]]", "[[[foo]]]: /url"),
+	// Nested links rejected with inner emphasis.
+	519: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo ")(t, events)
+		expectTextStyle("baz", InlineStyle{Emphasis: true, Link: "/uri"})(t, events)
+	},
+	// Images — reference, collapsed, shortcut, and edge cases.
+	573: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks"}),
+	576: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks"}),
+	577: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks"}),
+	582: expectTextStyle("foo", InlineStyle{Link: "/url"}),
+	583: expectTextStyle("foo", InlineStyle{Link: "/url"}),
+	584: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	585: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	586: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	587: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+		expectParagraphText("[]")(t, events)
+	},
+	588: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	589: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	590: expectParagraphText("![[foo]]", "[[foo]]: /url \"title\""),
+	591: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	592: expectParagraphText("![foo]"),
+	593: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("!")(t, events)
+		expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+	},
 }
 
 func expectBlocks(pairs ...any) func(*testing.T, []eventView) {
