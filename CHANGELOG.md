@@ -10,6 +10,33 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-04-28
+
+### Added
+
+- Expanded CommonMark corpus coverage from 616 to 627 supported examples
+  (96.2% pass rate, up from 94.5%).
+- Added thematic break and setext heading detection inside list items.
+- Added lazy continuation for list items: non-blank lines that aren't
+  indented enough continue an open paragraph.
+- Added deep sublist nesting (3+ levels) by checking item indent in
+  processListItemContent.
+- Added HTML block detection inside list items (processListItemFirstLine
+  and processListItemContent).
+- Added blockquote fence/code closing: non-> lines close the blockquote
+  when a fenced or indented code block is open inside it.
+- Registered 11 additional Raw HTML inline examples for valid and invalid
+  tag detection.
+
+### Changed
+
+- Blockquote content processing now supports lists, fenced code, indented
+  code, and headings inside blockquotes.
+- processListItemContent no longer closes existing sublists when creating
+  deeper sublists (just pushes another stack level).
+- Sibling detection in processListItemContent now checks item indent:
+  items at indent 0 are siblings, indented items create deeper sublists.
+
 ## [0.27.0] - 2026-04-28
 
 ### Added
