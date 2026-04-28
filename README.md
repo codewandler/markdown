@@ -99,6 +99,21 @@ knows about the other's internals.
 - **TTY detection** -- ANSI escapes stripped when piped or redirected
 - **Configurable** -- code block borders, padding, indentation, ANSI mode
 
+## Performance
+
+Fastest Go terminal Markdown renderer. See [COMPARISON.md](COMPARISON.md)
+for full benchmarks against glamour, go-term-markdown, goldmark,
+blackfriday, and gomarkdown.
+
+| vs glamour | Speed | Allocations |
+| --- | ---: | ---: |
+| Spec (~120KB) | **6.9x faster** | **5.5x fewer** |
+| README (~10KB) | **6.5x faster** | **4.8x fewer** |
+| GitHub Top 10 | **1.2x faster** | **8.6x fewer** |
+
+Only streaming Markdown renderer in Go — no other library supports
+chunk-by-chunk parsing and rendering.
+
 ## Conformance
 
 | Spec              | Pass Rate | Examples |
