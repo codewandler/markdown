@@ -322,6 +322,74 @@ edge cases for users who need pixel-perfect highlighting.
 
 ---
 
+## 9. Theming
+
+**Priority: medium — customization, user experience**
+
+Replace hardcoded Monokai color constants with a `Theme` struct that
+can be swapped at renderer construction time. Ship built-in themes
+and allow users to define custom ones.
+
+### Current state
+
+Colors are hardcoded as `monokaiForeground`, `monokaiComment`, etc.
+in `terminal/renderer.go`. The `styler` interface wraps them but
+doesn't parameterize them — `ansiStyler` always uses Monokai.
+
+### Design
+
+```go
+type Theme struct {
+    Foreground  string // ANSI escape for default text
+    Comment     string // dim/muted text (borders, metadata)
+    Keyword     string // headings, bold markers
+    String      string // inline code, string literals
+    Function    string // links, emphasis
+    Type        string // blockquote text, secondary
+    Number      string // list markers, ordered list numbers
+    Error       string // strikethrough, warnings
+    Background  string // code block background (optional)
+}
+```
+
+- `WithTheme(theme Theme)` renderer option
+- `ansiStyler` reads colors from the theme instead of constants
+- Built-in highlighters use theme colors instead of hardcoded Monokai
+- Chroma style name derived from theme or configurable separately
+
+### Built-in themes
+
+| Theme | Description |
+|-------|-------------|
+| Monokai | Current default — warm, high contrast |
+| Dracula | Popular dark theme |
+| Nord | Cool, muted Scandinavian palette |
+| Solarized Dark | Ethan Schoonover's classic |
+| Solarized Light | Light variant |
+| One Dark | Atom-inspired |
+| Plain | No colors (current `plainStyler` behavior) |
+
+### Tasks
+
+- [ ] Define `Theme` struct with semantic color roles
+- [ ] Create `WithTheme(theme Theme)` renderer option
+- [ ] Refactor `ansiStyler` to read from `Theme` instead of constants
+- [ ] Refactor built-in Go highlighter to use theme colors
+- [ ] Ship Monokai, Dracula, Nord, Solarized Dark/Light, One Dark themes
+- [ ] Add `--theme` flag to `examples/demo` and `cmd/mdview`
+- [ ] Add `THEME_NAME` environment variable support
+- [ ] Document theme API and custom theme creation in README
+- [ ] Ensure Chroma style aligns with selected theme
+
+### Definition of done
+
+- `WithTheme(ThemeDracula)` produces Dracula-colored output
+- Custom themes work: `WithTheme(Theme{Foreground: "...", ...})`
+- Demo and mdview support `--theme` flag
+- At least 5 built-in themes ship
+
+---
+
 ## Release Plan
 
 | Version | Content |
@@ -334,4 +402,5 @@ edge cases for users who need pixel-perfect highlighting.
 | v0.39.0 | CommonMark gaps (target ≥98%) + documentation |
 | v0.40.0 | `cmd/mdview` terminal viewer |
 | v0.41.0 | Built-in highlighters (JSON, YAML, TOML) |
+| v0.42.0 | Theming (Monokai, Dracula, Nord, Solarized, One Dark) |
 | v1.0.0  | Stable API, full documentation, polished README |
