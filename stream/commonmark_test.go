@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   513,
-		statusKnownGap:    75,
+		statusSupported:   521,
+		statusKnownGap:    67,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -917,6 +917,33 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	108: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2)(t, events)
+	},
+	// More list item examples.
+	257: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1, BlockIndentedCode, 1)(t, events)
+	},
+	279: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1),
+	// Sublists on same line as outer marker.
+	298: expectBlocks(BlockList, 2, BlockListItem, 2, BlockParagraph, 1),
+	299: expectBlocks(BlockList, 3, BlockListItem, 3, BlockParagraph, 1),
+	// Deep sublists — not yet fully correct for 3+ levels.
+	// 294 and 307 are deferred until deep nesting is fixed.
+	309: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 2, BlockParagraph, 4)(t, events)
+	},
+	312: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 4, BlockIndentedCode, 1)(t, events)
+	},
+	319: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 2, BlockListItem, 3, BlockParagraph, 4)(t, events)
+	},
+	325: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 2, BlockListItem, 2, BlockParagraph, 3)(t, events)
 	},
 	// List item continuation after blank lines.
 	255: func(t *testing.T, events []eventView) {

@@ -373,7 +373,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		if strings.TrimSpace(item.content) != "" {
 			inner := line
 			inner.text = item.content
-			p.addParagraphLine(inner)
+			p.processListItemFirstLine(inner, events)
 		}
 		return
 	}
@@ -981,6 +981,49 @@ func (p *parser) popList() {
 	p.listItemBlankLine = saved.listItemBlankLine
 }
 
+// processListItemFirstLine handles the first content line of a list item.
+// Unlike continuation lines, this is the content after the marker on the
+// same line. It checks for block-level constructs before falling back to
+// paragraph text.
+func (p *parser) processListItemFirstLine(line lineInfo, events *[]Event) {
+	// Fenced code block.
+	if marker, n, indent, info, ok := openingFence(line.text); ok {
+		p.fence = fenceState{open: true, marker: marker, length: n, indent: indent, info: info}
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockFencedCode, Info: info, Span: Span{Start: line.start, End: line.end}})
+		return
+	}
+	// ATX heading.
+	if level, text, ok := heading(line.text); ok {
+		span := Span{Start: line.start, End: line.end}
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: span})
+		*events = append(*events, p.parseInline(text, span)...)
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Span: span})
+		return
+	}
+	// Sublist on same line as outer marker (e.g., "- - foo").
+	if item, ok := listItem(line.text); ok {
+		p.pushList()
+		p.inList = true
+		p.listData = listBlockData(item.data)
+		p.listLoose = false
+		data := p.listData
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
+		p.inListItem = true
+		p.listItemIndent = item.contentIndent
+		p.listItemBlankLine = false
+		idata := item.data
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &idata, Span: Span{Start: line.start, End: line.end}})
+		if strings.TrimSpace(item.content) != "" {
+			inner := line
+			inner.text = item.content
+			p.processListItemFirstLine(inner, events)
+		}
+		return
+	}
+	// Default: paragraph text.
+	p.addParagraphLine(line)
+}
+
 // processListItemContent processes a line of content inside a list item.
 // The line has already been stripped of the list item's content indent.
 // It handles sublists, blockquotes, fenced code, headings, and other
@@ -1048,13 +1091,24 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 	if item, ok := listItem(line.text); ok {
 		p.closeParagraph(events)
 		p.drainPendingBlocks(events)
-		// Save the outer list state and start a new sublist.
-		p.pushList()
-		p.inList = true
-		p.listData = listBlockData(item.data)
-		p.listLoose = false
-		data := p.listData
-		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
+		// Check if this is a sibling in an existing sublist (not the outer list).
+		// We know we're in a sublist context if listStack is non-empty.
+		inSublist := len(p.listStack) > 0 && p.inList
+		if inSublist && p.listData.Ordered == item.data.Ordered && p.listData.Marker == item.data.Marker {
+			// Sibling item in the existing sublist.
+			p.closeListItem(events)
+		} else {
+			// New sublist — close any existing sublist and save outer state.
+			if inSublist {
+				p.closeList(events)
+			}
+			p.pushList()
+			p.inList = true
+			p.listData = listBlockData(item.data)
+			p.listLoose = false
+			data := p.listData
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
+		}
 		p.inListItem = true
 		p.listItemIndent = item.contentIndent
 		p.listItemBlankLine = false
@@ -1063,7 +1117,7 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 		if strings.TrimSpace(item.content) != "" {
 			inner := line
 			inner.text = item.content
-			p.addParagraphLine(inner)
+			p.processListItemFirstLine(inner, events)
 		}
 		return
 	}
