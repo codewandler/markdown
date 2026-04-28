@@ -924,7 +924,92 @@ func (p *parser) closeList(events *[]Event) {
 
 // processListItemContent processes a line of content inside a list item.
 // The line has already been stripped of the list item's content indent.
+// It handles sublists, blockquotes, fenced code, headings, and other
+// block-level constructs that can appear inside list items.
 func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
+	// Handle fenced code continuation inside list items.
+	if p.fence.open {
+		if p.isClosingFence(line.text) {
+			p.fence.open = false
+			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockFencedCode, Span: Span{Start: line.start, End: line.end}})
+			return
+		}
+		*events = append(*events,
+			Event{Kind: EventText, Text: stripFenceIndent(line.text, p.fence.indent), Span: Span{Start: line.start, End: line.end}},
+			Event{Kind: EventLineBreak, Span: Span{Start: line.end, End: line.end}},
+		)
+		return
+	}
+
+	// Handle indented code continuation inside list items.
+	if p.inIndented {
+		if indentedCode(line.text) {
+			p.emitIndentedCodeLine(line, events)
+			return
+		}
+		if strings.TrimSpace(line.text) == "" {
+			p.indentedBlankLines++
+			return
+		}
+		p.closeIndentedCode(events)
+	}
+
+	// Blank line inside continuation.
+	if strings.TrimSpace(line.text) == "" {
+		p.closeParagraph(events)
+		p.closeIndentedCode(events)
+		return
+	}
+
+	// Blockquote inside list item.
+	if content, ok := blockquoteContent(line.text); ok {
+		p.closeParagraph(events)
+		if !p.inBlockquote {
+			p.inBlockquote = true
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
+		}
+		if strings.TrimSpace(content) == "" {
+			p.closeParagraph(events)
+			return
+		}
+		inner := line
+		inner.text = content
+		p.processNonContainerLine(inner, events)
+		return
+	}
+	if p.inBlockquote {
+		if len(p.paragraph.lines) > 0 {
+			p.addParagraphLine(line)
+			return
+		}
+		p.closeBlockquote(line, events)
+	}
+
+	// Sublist inside list item.
+	if item, ok := listItem(line.text); ok {
+		p.closeParagraph(events)
+		if !p.inList || p.listData.Ordered != item.data.Ordered || p.listData.Marker != item.data.Marker {
+			p.closeList(events)
+			p.inList = true
+			p.listData = listBlockData(item.data)
+			p.listLoose = false
+			data := p.listData
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
+		}
+		p.closeListItem(events)
+		p.inListItem = true
+		p.listItemIndent = item.contentIndent
+		p.listItemBlankLine = false
+		data := item.data
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
+		if strings.TrimSpace(item.content) != "" {
+			inner := line
+			inner.text = item.content
+			p.addParagraphLine(inner)
+		}
+		return
+	}
+
 	p.processNonContainerLine(line, events)
 }
 
