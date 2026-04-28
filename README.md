@@ -2,7 +2,7 @@
 
 # markdown
 
-**Streaming Markdown parser and terminal renderer for Go**
+**The fastest Go terminal Markdown renderer. The only one that streams.**
 
 Parse incrementally. Render immediately. Keep memory bounded.
 
@@ -16,34 +16,50 @@ Parse incrementally. Render immediately. Keep memory bounded.
 
 ## Why this exists
 
-- **Streaming-first** -- parse and render chunks as they arrive, no
-  buffering the whole document
-- **Append-only events** -- the parser never backtracks or re-parses
-- **Bounded memory** -- only unresolved state is kept, not the full document
-- **Terminal-native** -- Monokai palette, syntax highlighting, clickable
-  links, word wrapping
-- **Spec-compliant** -- 96.2% CommonMark, 100% GFM, fuzz-tested
+- **Only streaming Markdown renderer in Go** -- no other library
+  supports chunk-by-chunk parsing and rendering
+- **3-7x faster** than glamour on real-world documents, up to
+  **121x faster** on pathological inputs
+  ([benchmarks](COMPARISON.md))
+- **96.2% CommonMark**, **100% GFM** -- higher GFM compliance than
+  goldmark (97.3%), blackfriday (36.8%), and gomarkdown (39.1%)
+  ([measured](benchmarks/compliance_test.go))
+- **2 dependencies** -- parser is pure stdlib; only Chroma for
+  non-Go syntax highlighting
+- **18x faster Go highlighting** than Chroma via built-in stdlib
+  AST fast path
 
-## Features
+## Performance
 
-Headings, paragraphs, blockquotes, ordered and unordered lists, task
-lists, tables with alignment, fenced and indented code, emphasis,
-strong, ~~strikethrough~~, `code spans`, inline/reference/auto links,
-images, thematic breaks, setext headings, HTML blocks.
+Benchmarked against 5 Go Markdown libraries. Full results in
+[COMPARISON.md](COMPARISON.md). Competitor profiles in
+[docs/competitors.md](docs/competitors.md).
 
-## Dependencies
+### Terminal rendering (parse + render)
 
-The core parser (`stream`) has **zero dependencies** -- it is pure Go
-standard library.
+| Input | ours | glamour | go-term-md |
+| --- | ---: | ---: | ---: |
+| Spec (~120KB) | **8.7ms** | 54ms (6.2x slower) | 398ms (46x slower) |
+| README (~10KB) | **1.3ms** | 7.9ms (6.1x slower) | 3.9ms (3x slower) |
+| GitHub Top 10 (~130KB) | **32ms** | 37ms (1.1x slower) | 7,060ms (221x slower) |
 
-The terminal renderer (`terminal`) has one dependency:
+### Spec compliance (measured, not claimed)
 
-| Dependency | Why |
-| --- | --- |
-| [`alecthomas/chroma`](https://github.com/alecthomas/chroma) | Syntax highlighting for non-Go fenced code blocks (24-bit truecolor). Go code uses a built-in stdlib AST fast path and does not need Chroma. |
+| Spec | ours | goldmark | blackfriday | gomarkdown |
+| --- | ---: | ---: | ---: | ---: |
+| CommonMark 0.31.2 | **627/652 (96.2%)** | 646/652 (99.1%) | 244/652 (37.4%) | 263/652 (40.3%) |
+| GFM 0.29 | **672/672 (100%)** | 654/672 (97.3%) | 247/672 (36.8%) | 263/672 (39.1%) |
 
-No framework, no goldmark, no blackfriday. The parser and renderer are
-written from scratch for the streaming use case.
+### Feature matrix
+
+| | ours | glamour | go-term-md | goldmark | blackfriday |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| **Streaming** | **yes** | no | no | no | no |
+| Terminal render | yes | yes | yes | no | no |
+| Go fast path | **18x faster** | no | no | n/a | n/a |
+| OSC 8 hyperlinks | yes | no | no | n/a | n/a |
+| TTY auto-detect | yes | no | no | n/a | n/a |
+| Dependencies | **2** | ~20 | ~15 | 0 | 0 |
 
 ## Quick Start
 
@@ -69,10 +85,10 @@ go get github.com/codewandler/markdown
 ## Demo
 
 ```bash
-go run ./examples/demo                    # stream the built-in showcase
-go run ./examples/demo README.md          # stream any file
-go run ./examples/demo --chunk 10 --delay 30ms  # tune the effect
-go run ./examples/demo --instant          # render all at once
+go run ./examples/demo                         # stream the built-in showcase
+go run ./examples/demo README.md               # stream any file
+go run ./examples/demo --chunk 10 --delay 30ms # tune the effect
+go run ./examples/demo --instant               # render all at once
 ```
 
 ## Architecture
@@ -86,47 +102,48 @@ chunks --> stream.Parser --> events --> terminal.Renderer --> output
 | `stream`             | Incremental parser, append-only event model |
 | `terminal`           | Terminal renderer over `stream.Event`       |
 | `examples/demo`      | Streaming showcase with recording support   |
+| `benchmarks`         | Comparative benchmarks against 5 libraries  |
 
 The parser emits structure. The renderer owns presentation. Neither
 knows about the other's internals.
 
+## Dependencies
+
+The core parser (`stream`) has **zero dependencies** -- pure Go stdlib.
+
+The terminal renderer has one dependency:
+
+| Dependency | Why |
+| --- | --- |
+| [`chroma`](https://github.com/alecthomas/chroma) | Syntax highlighting for non-Go code (24-bit truecolor). Go uses a built-in stdlib AST fast path that is 18x faster. |
+
+No framework, no goldmark, no blackfriday. Written from scratch for
+streaming.
+
 ## Terminal Renderer
 
-- **Syntax highlighting** -- Go via stdlib AST (fast path), other
-  languages via Chroma with 24-bit truecolor
+- **Syntax highlighting** -- Go via stdlib AST (18x faster than Chroma),
+  other languages via Chroma with 24-bit truecolor
 - **OSC 8 hyperlinks** -- inline and reference links are clickable
 - **Word wrapping** -- auto-detected terminal width or `WithWrapWidth`
 - **TTY detection** -- ANSI escapes stripped when piped or redirected
 - **Configurable** -- code block borders, padding, indentation, ANSI mode
 
-## Performance
+## Testing
 
-Fastest Go terminal Markdown renderer. See [COMPARISON.md](COMPARISON.md)
-for full benchmarks against glamour, go-term-markdown, goldmark,
-blackfriday, and gomarkdown.
-
-| vs glamour | Speed | Allocations |
-| --- | ---: | ---: |
-| Spec (~120KB) | **6.9x faster** | **5.5x fewer** |
-| README (~10KB) | **6.5x faster** | **4.8x fewer** |
-| GitHub Top 10 | **1.2x faster** | **8.6x fewer** |
-
-Only streaming Markdown renderer in Go — no other library supports
-chunk-by-chunk parsing and rendering.
-
-## Conformance
-
-| Spec              | Pass Rate | Examples |
-| ----------------- | --------- | -------- |
-| CommonMark 0.31.2 | **96.2%** | 627/652  |
-| GFM 0.29          | **100%**  | 672/672  |
-
-Every example is tested for split equivalence across all chunk
-boundaries, structural correctness, and balanced event invariants.
-The fuzz suite covers 1300+ seeds with 3 `testing.F` targets.
+| Category | Coverage |
+| --- | --- |
+| Corpus classification | every CommonMark + GFM example tracked |
+| Split equivalence | every example parsed at every chunk boundary |
+| Structural assertions | 627 CommonMark + 24 GFM extension examples |
+| Event invariants | balanced enter/exit, correct nesting |
+| Fuzz testing | 3 `testing.F` targets, 1300+ seeds |
+| Memory retention | completed blocks released promptly |
 
 ```bash
 go test ./stream ./terminal .
+task bench:compliance    # run spec compliance against all parsers
+task bench:render        # run render benchmarks with comparison tables
 ```
 
 ## Design Rules
@@ -147,7 +164,7 @@ See [`roadmap-v1.0.md`](.agents/plans/roadmap-v1.0.md) for the full plan.
 | GFM structural assertions | :white_check_mark: v0.36.0 |
 | GFM table parsing fixes | :white_check_mark: v0.36.1 |
 | Demo application + README | :white_check_mark: v0.37.0 |
+| Benchmarks + competition | :white_check_mark: v0.38.0 |
 | CommonMark gaps (target >= 98%) | planned |
 | `cmd/mdview` terminal viewer | planned |
-| Benchmarks + renderer comparison | planned |
 | v1.0 stable API | planned |
