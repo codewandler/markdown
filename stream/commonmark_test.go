@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   491,
-		statusKnownGap:    97,
+		statusSupported:   502,
+		statusKnownGap:    86,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -899,6 +899,52 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	},
 	289: expectBlocks(BlockIndentedCode, 1),
 	310: expectBlocks(BlockList, 1, BlockListItem, 7),
+	// List item continuation after blank lines.
+	255: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2)(t, events)
+		expectParagraphText("two")(t, events)
+	},
+	256: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2)(t, events)
+		expectParagraphText("one")(t, events)
+		expectParagraphText("two")(t, events)
+	},
+	262: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2)(t, events)
+		expectParagraphText("foo")(t, events)
+		expectParagraphText("bar")(t, events)
+	},
+	270: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1, BlockIndentedCode, 1)(t, events)
+	},
+	271: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1, BlockIndentedCode, 1)(t, events)
+	},
+	277: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2)(t, events)
+	},
+	276: func(t *testing.T, events []eventView) {
+		t.Helper()
+		// -    foo\n\n  bar: 2-space indent < content column (5), so bar is outside.
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2)(t, events)
+	},
+	295: expectBlocks(BlockList, 1, BlockListItem, 4),
+	297: expectBlocks(BlockList, 2, BlockListItem, 2),
+	303: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockParagraph, 3, BlockList, 1, BlockListItem, 2)(t, events)
+		expectParagraphText("Foo")(t, events)
+	},
+	313: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 2, BlockIndentedCode, 1)(t, events)
+	},
 	593: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectParagraphText("!")(t, events)

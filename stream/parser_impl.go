@@ -51,7 +51,10 @@ type parser struct {
 	inBlockquote       bool
 	inList             bool
 	listData           ListData
+	listLoose          bool
 	inListItem         bool
+	listItemIndent     int  // content column: marker indent + marker width + padding
+	listItemBlankLine  bool // saw a blank line inside the current list item
 	inIndented         bool
 	indentedBlankLines int
 }
@@ -230,14 +233,44 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	if strings.TrimSpace(line.text) == "" {
 		p.closeParagraph(events)
 		p.closeIndentedCode(events)
-		p.closeListItem(events)
-		p.closeContainers(events)
+		if p.inListItem {
+			// Don't close the list item yet — the next non-blank line
+			// may be a continuation if it's indented enough.
+			p.listItemBlankLine = true
+		} else {
+			p.closeListItem(events)
+			p.closeContainers(events)
+		}
 		// Drain pending blocks that don't contain bracket syntax,
 		// since they can't benefit from deferred reference resolution.
 		// Blocks with brackets are kept pending so that link reference
 		// definitions following the blank line can be collected first.
 		p.drainPendingBlocksEager(events)
 		return
+	}
+
+	// Non-blank line: check for list item continuation after a blank line.
+	if p.inListItem && p.listItemBlankLine {
+		p.listItemBlankLine = false
+		indent, _ := leadingIndent(line.text)
+		if indent >= p.listItemIndent {
+			// Continuation after blank line — the list becomes loose.
+			p.listLoose = true
+			inner := line
+			inner.text = stripIndent(line.text, p.listItemIndent)
+			p.processListItemContent(inner, events)
+			return
+		}
+		// Check if this is a new list item — blank line between items
+		// makes the list loose.
+		if _, ok := listItem(line.text); ok {
+			p.listLoose = true
+		}
+		// Not enough indent — close the list item.
+		p.closeListItem(events)
+		if _, ok := listItem(line.text); !ok {
+			p.closeList(events)
+		}
 	}
 
 	if len(p.paragraph.lines) == 0 && !p.inList && !p.inListItem {
@@ -302,11 +335,14 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			p.closeList(events)
 			p.inList = true
 			p.listData = listBlockData(item.data)
+			p.listLoose = false
 			data := p.listData
 			p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
 		}
 		p.closeListItem(events)
 		p.inListItem = true
+		p.listItemIndent = item.contentIndent
+		p.listItemBlankLine = false
 		data := item.data
 		p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
 		if strings.TrimSpace(item.content) != "" {
@@ -317,14 +353,22 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		return
 	}
 
-	if p.inList {
-		if p.tryStartTable(line, events) {
+	if p.inListItem {
+		// Non-blank line inside a list item (no blank line seen).
+		// Check if indented enough to be continuation content.
+		indent, _ := leadingIndent(line.text)
+		if indent >= p.listItemIndent {
+			inner := line
+			inner.text = stripIndent(line.text, p.listItemIndent)
+			p.processListItemContent(inner, events)
 			return
 		}
-		if strings.HasPrefix(line.text, "  ") || strings.HasPrefix(line.text, "\t") {
-			inner := line
-			inner.text = strings.TrimLeft(line.text, " \t")
-			p.addParagraphLine(inner)
+		// Not enough indent and not a new list item — close list.
+		p.closeParagraph(events)
+		p.closeListItem(events)
+		p.closeList(events)
+	} else if p.inList {
+		if p.tryStartTable(line, events) {
 			return
 		}
 		p.closeParagraph(events)
@@ -846,8 +890,23 @@ func (p *parser) closeListItem(events *[]Event) {
 	}
 	p.closeParagraph(events)
 	p.drainPendingBlocks(events)
+	p.closeIndentedCode(events)
+	p.closeFencedCode(events)
+	if p.inBlockquote {
+		p.closeBlockquote(lineInfo{}, events)
+	}
 	p.inListItem = false
+	p.listItemBlankLine = false
+	p.listItemIndent = 0
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
+}
+
+func (p *parser) closeFencedCode(events *[]Event) {
+	if !p.fence.open {
+		return
+	}
+	p.fence.open = false
+	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockFencedCode})
 }
 
 func (p *parser) closeList(events *[]Event) {
@@ -857,8 +916,39 @@ func (p *parser) closeList(events *[]Event) {
 	p.closeListItem(events)
 	p.inList = false
 	data := p.listData
+	data.Tight = !p.listLoose
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
 	p.listData = ListData{}
+	p.listLoose = false
+}
+
+// processListItemContent processes a line of content inside a list item.
+// The line has already been stripped of the list item's content indent.
+func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
+	p.processNonContainerLine(line, events)
+}
+
+// stripIndent removes up to n columns of leading indentation from a line.
+func stripIndent(line string, n int) string {
+	col := 0
+	for i := 0; i < len(line); i++ {
+		if col >= n {
+			return line[i:]
+		}
+		switch line[i] {
+		case ' ':
+			col++
+		case '\t':
+			col += 4 - col%4
+			if col > n {
+				// Tab extends past the indent boundary; replace with spaces.
+				return strings.Repeat(" ", col-n) + line[i+1:]
+			}
+		default:
+			return line[i:]
+		}
+	}
+	return ""
 }
 
 func (p *parser) isClosingFence(line string) bool {
@@ -1021,8 +1111,9 @@ func blockquoteContent(line string) (string, bool) {
 }
 
 type listItemData struct {
-	data    ListData
-	content string
+	data         ListData
+	content      string
+	contentIndent int // column where content starts
 }
 
 func listItem(line string) (listItemData, bool) {
@@ -1031,20 +1122,38 @@ func listItem(line string) (listItemData, bool) {
 		return listItemData{}, false
 	}
 	trimmed := line[indentBytes:]
-	if len(trimmed) == 1 && strings.ContainsRune("-+*", rune(trimmed[0])) {
+
+	// Bullet list marker: -, +, or *
+	if len(trimmed) >= 1 && strings.ContainsRune("-+*", rune(trimmed[0])) {
+		markerWidth := 1 // the bullet character
+		if len(trimmed) == 1 {
+			// Marker at end of line — content starts at marker + 1 space.
+			return listItemData{
+				data:          ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true},
+				contentIndent: indent + markerWidth + 1,
+			}, true
+		}
+		if trimmed[1] != ' ' && trimmed[1] != '\t' {
+			if len(trimmed) < 2 {
+				return listItemData{}, false
+			}
+			// Not a list item — no space after marker.
+			goto tryOrdered
+		}
+		// Count spaces after marker (1-4, per spec).
+		padding := countListPadding(trimmed[markerWidth:])
+		data := ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true}
+		content := trimmed[markerWidth+padding:]
+		data.Task, data.Checked, content = parseTaskListItem(content)
 		return listItemData{
-			data: ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true},
+			data:          data,
+			content:       content,
+			contentIndent: indent + markerWidth + padding,
 		}, true
 	}
-	if len(trimmed) < 2 {
-		return listItemData{}, false
-	}
-	if strings.ContainsRune("-+*", rune(trimmed[0])) && (trimmed[1] == ' ' || trimmed[1] == '\t') {
-		data := ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true}
-		content := strings.TrimLeft(trimmed[2:], " \t")
-		data.Task, data.Checked, content = parseTaskListItem(content)
-		return listItemData{data: data, content: content}, true
-	}
+
+tryOrdered:
+	// Ordered list marker: 1-9 digits followed by . or )
 	i := 0
 	for i < len(trimmed) && trimmed[i] >= '0' && trimmed[i] <= '9' {
 		i++
@@ -1056,26 +1165,55 @@ func listItem(line string) (listItemData, bool) {
 	if marker != '.' && marker != ')' {
 		return listItemData{}, false
 	}
-	if i+1 == len(trimmed) {
-		start, err := strconv.Atoi(trimmed[:i])
-		if err != nil {
-			return listItemData{}, false
-		}
-		return listItemData{
-			data: ListData{Ordered: true, Start: start, Marker: string(marker), Tight: true},
-		}, true
-	}
-	if trimmed[i+1] != ' ' && trimmed[i+1] != '\t' {
-		return listItemData{}, false
-	}
+	markerWidth := i + 1 // digits + delimiter
 	start, err := strconv.Atoi(trimmed[:i])
 	if err != nil {
 		return listItemData{}, false
 	}
+	if markerWidth >= len(trimmed) {
+		// Marker at end of line.
+		return listItemData{
+			data:          ListData{Ordered: true, Start: start, Marker: string(marker), Tight: true},
+			contentIndent: indent + markerWidth + 1,
+		}, true
+	}
+	if trimmed[markerWidth] != ' ' && trimmed[markerWidth] != '\t' {
+		return listItemData{}, false
+	}
+	padding := countListPadding(trimmed[markerWidth:])
 	data := ListData{Ordered: true, Start: start, Marker: string(marker), Tight: true}
-	content := strings.TrimLeft(trimmed[i+2:], " \t")
+	content := trimmed[markerWidth+padding:]
 	data.Task, data.Checked, content = parseTaskListItem(content)
-	return listItemData{data: data, content: content}, true
+	return listItemData{
+		data:          data,
+		content:       content,
+		contentIndent: indent + markerWidth + padding,
+	}, true
+}
+
+// countListPadding counts the spaces/tabs after a list marker.
+// Per CommonMark, 1-4 spaces are consumed as padding. If the content
+// is blank (only spaces), exactly 1 space of padding is used.
+func countListPadding(afterMarker string) int {
+	spaces := 0
+	bytes := 0
+	for bytes < len(afterMarker) {
+		switch afterMarker[bytes] {
+		case ' ':
+			spaces++
+			bytes++
+		case '\t':
+			spaces += 4 - spaces%4
+			bytes++
+		default:
+			if spaces > 4 {
+				return 1 // content starts with indented code
+			}
+			return bytes
+		}
+	}
+	// All spaces — blank content, use 1 space padding.
+	return 1
 }
 
 func listBlockData(item ListData) ListData {
