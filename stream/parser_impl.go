@@ -1748,6 +1748,20 @@ func matchingLinkLabelEnd(text string) int {
 			escaped = true
 			continue
 		}
+		// Code spans take precedence over link structure (CommonMark
+		// spec §6.3). Skip over any code span so that brackets inside
+		// it are not counted.
+		if c == '`' {
+			n := countRun(text[i:], '`')
+			close := findClosingBackticks(text[i+n:], n)
+			if close < 0 {
+				// No matching close — the backticks are literal.
+				i += n - 1
+				continue
+			}
+			i += n + close + n - 1
+			continue
+		}
 		switch c {
 		case '[':
 			depth++
@@ -1757,6 +1771,24 @@ func matchingLinkLabelEnd(text string) int {
 			}
 			depth--
 		}
+	}
+	return -1
+}
+
+// findClosingBackticks finds the position of a closing backtick sequence
+// of exactly n backticks in text. Returns the byte offset of the start of
+// the closing sequence, or -1 if not found.
+func findClosingBackticks(text string, n int) int {
+	for i := 0; i < len(text); {
+		if text[i] != '`' {
+			i++
+			continue
+		}
+		run := countRun(text[i:], '`')
+		if run == n {
+			return i
+		}
+		i += run
 	}
 	return -1
 }

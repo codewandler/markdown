@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   400,
-		statusKnownGap:    188,
+		statusSupported:   439,
+		statusKnownGap:    149,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -631,6 +631,138 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	},
 	471: expectTextStyle("bar baz", InlineStyle{Strong: true}),
 	472: expectTextStyle("bar baz", InlineStyle{Emphasis: true}),
+	// Emphasis containing inline links.
+	404: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Link: "/url"})(t, events)
+	},
+	422: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Strong: true, Link: "/url"})(t, events)
+	},
+	// Emphasis delimiters consumed by link text.
+	473: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("*")(t, events)
+		expectTextStyle("bar*", InlineStyle{Link: "/url"})(t, events)
+	},
+	474: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("_foo ")(t, events)
+		expectTextStyle("bar_", InlineStyle{Link: "/url"})(t, events)
+	},
+	// Code spans take priority over emphasis and links.
+	341: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("*foo")(t, events)
+		expectTextStyle("*", InlineStyle{Code: true})(t, events)
+	},
+	342: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[not a ")(t, events)
+		expectTextStyle("link](/foo", InlineStyle{Code: true})(t, events)
+		expectParagraphText(")")(t, events)
+	},
+	// Emphasis delimiters inside code spans.
+	478: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("a ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("*", InlineStyle{Emphasis: true, Code: true})(t, events)
+	},
+	479: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("a ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("_", InlineStyle{Emphasis: true, Code: true})(t, events)
+	},
+	// Emphasis delimiters inside autolinks.
+	480: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("**a")(t, events)
+		expectTextStyle("https://foo.bar/?q=**", InlineStyle{Link: "https://foo.bar/?q=**"})(t, events)
+	},
+	481: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("__a")(t, events)
+		expectTextStyle("https://foo.bar/?q=__", InlineStyle{Link: "https://foo.bar/?q=__"})(t, events)
+	},
+	// Backslash escapes in link destinations and titles.
+	22: expectTextStyle("foo", InlineStyle{Link: "/bar*", LinkTitle: "ti*tle"}),
+	23: expectTextStyle("foo", InlineStyle{Link: "/bar*", LinkTitle: "ti*tle"}),
+	// Link reference definitions — forward references and first-wins.
+	203: expectTextStyle("foo", InlineStyle{Link: "url"}),
+	204: expectTextStyle("foo", InlineStyle{Link: "first"}),
+	// Links — bracket edge cases.
+	494: expectParagraphText("[a](<b)c", "[a](<b)c>", "[a](<b>c)"),
+	513: expectParagraphText("[link] bar](/uri)"),
+	514: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[link ")(t, events)
+		expectTextStyle("bar", InlineStyle{Link: "/uri"})(t, events)
+	},
+	515: expectTextStyle("link [bar", InlineStyle{Link: "/uri"}),
+	521: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("*")(t, events)
+		expectTextStyle("foo*", InlineStyle{Link: "/uri"})(t, events)
+	},
+	522: expectTextStyle("foo *bar", InlineStyle{Link: "baz*"}),
+	523: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo [bar", InlineStyle{Emphasis: true})(t, events)
+		expectParagraphText(" baz]")(t, events)
+	},
+	525: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo")(t, events)
+		expectTextStyle("](/uri)", InlineStyle{Code: true})(t, events)
+	},
+	527: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	529: expectTextStyle("link [bar", InlineStyle{Link: "/uri"}),
+	539: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	553: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	555: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	557: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	560: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[[bar ")(t, events)
+		expectTextStyle("foo", InlineStyle{Link: "/url"})(t, events)
+	},
+	561: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	562: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Link: "/url"})(t, events)
+		expectParagraphText(" bar")(t, events)
+	},
+	563: expectParagraphText("[foo]"),
+	564: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("*")(t, events)
+		expectTextStyle("foo*", InlineStyle{Link: "/url"})(t, events)
+	},
+	565: expectTextStyle("foo", InlineStyle{Link: "/url2"}),
+	566: expectTextStyle("foo", InlineStyle{Link: "/url1"}),
+	568: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Link: "/url1"})(t, events)
+		expectParagraphText("(not a link)")(t, events)
+	},
+	569: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo]")(t, events)
+		expectTextStyle("bar", InlineStyle{Link: "/url"})(t, events)
+	},
+	570: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Link: "/url2"})(t, events)
+		expectTextStyle("baz", InlineStyle{Link: "/url1"})(t, events)
+	},
+	571: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[foo]")(t, events)
+		expectTextStyle("bar", InlineStyle{Link: "/url1"})(t, events)
+	},
 }
 
 func expectBlocks(pairs ...any) func(*testing.T, []eventView) {
