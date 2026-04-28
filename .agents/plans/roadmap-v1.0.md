@@ -111,8 +111,8 @@ the terminal output as an animated GIF/video for the README.
   - `--clear` flag (clear screen, default true)
   - File argument support for custom Markdown
 - [x] Add `demo.tape` for vhs recording
-- [ ] Record a ~15-second terminal session showing streaming rendering
-- [ ] Convert to GIF for README embedding
+- [x] Record a ~15-second terminal session showing streaming rendering
+- [x] Convert to GIF for README embedding
 - [x] Update README.md with demo section and current compliance stats
 
 ### Definition of done
@@ -195,12 +195,81 @@ Each fix is 1-3 examples and requires significant new features.
 
 ---
 
+## 7. `cmd/mdview` — Terminal Markdown Viewer
+
+**Priority: high — user-facing tool**
+
+Build a standalone CLI tool for viewing Markdown files in the terminal,
+using Bubble Tea v2 (charmbracelet/bubbletea) for a scrollable viewport
+with keyboard navigation.
+
+### Tasks
+
+- [ ] Create `cmd/mdview/main.go` with Bubble Tea v2 viewport
+- [ ] Accept file argument or stdin pipe
+- [ ] Render Markdown through `stream.Parser` + `terminal.Renderer`
+  into a string buffer, then display in viewport
+- [ ] Keyboard: `j`/`k`/arrows for scroll, `q`/`Esc` to quit,
+  `g`/`G` for top/bottom, `/` for search
+- [ ] Mouse scroll support
+- [ ] `--width` flag to override wrap width
+- [ ] `--theme` flag (monokai default, plain for no color)
+- [ ] `--no-pager` flag to dump output without viewport (like current demo)
+- [ ] Add `task view` and `task view -- file.md` to Taskfile
+- [ ] Add to README as primary usage example
+
+### Definition of done
+
+- `go run ./cmd/mdview README.md` opens a scrollable, styled Markdown view
+- Keyboard and mouse navigation work
+- Piping works: `cat README.md | go run ./cmd/mdview`
+- Installable: `go install github.com/codewandler/markdown/cmd/mdview@latest`
+
+---
+
+## 8. Comparison with Other Renderers
+
+**Priority: medium — credibility and positioning**
+
+Publish a comparison of this library against other Go Markdown
+renderers (goldmark, blackfriday, glamour) covering performance,
+memory usage, and spec completeness.
+
+### Tasks
+
+- [ ] Benchmark throughput (MB/s) against goldmark and blackfriday
+  on real-world documents (CommonMark spec, large changelogs, READMEs)
+- [ ] Benchmark memory allocation per document (bytes/op, allocs/op)
+- [ ] Benchmark streaming memory: peak RSS for 1MB+ documents
+  (this library should stay flat; batch parsers grow linearly)
+- [ ] Benchmark pathological inputs (deeply nested, long delimiter runs)
+- [ ] Compare CommonMark spec pass rates across libraries
+- [ ] Compare GFM extension coverage
+- [ ] Compare feature matrix: streaming, terminal output, syntax
+  highlighting, hyperlinks, word wrapping
+- [ ] Write `COMPARISON.md` with tables, methodology, and reproduction
+  commands
+- [ ] Add comparison summary to README
+- [ ] Add `task bench` and `task bench:compare` to Taskfile
+
+### Definition of done
+
+- `COMPARISON.md` with reproducible benchmarks and clear methodology
+- README includes a summary table or link to comparison
+- All benchmark code is in-repo and runnable via `task bench`
+
+---
+
 ## Release Plan
 
 | Version | Content |
 |---------|---------|
 | v0.35.1 | Fuzz testing + findings fixed |
 | v0.36.0 | Stronger GFM assertions |
+| v0.36.1 | GFM table parsing fixes |
 | v0.37.0 | Demo application + README GIF |
 | v0.38.0 | CommonMark gaps (target ≥98%) |
 | v0.39.0 | Performance benchmarks + documentation |
+| v0.40.0 | `cmd/mdview` terminal viewer |
+| v0.41.0 | Comparison with other renderers |
+| v1.0.0  | Stable API, full documentation, polished README |
