@@ -10,6 +10,39 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-28
+
+### Added
+
+- Added Go native fuzz tests (`testing.F`) for the streaming parser in
+  `stream/fuzz_test.go` with three targets:
+  - `FuzzParser`: crash/panic/invariant detection on arbitrary input.
+  - `FuzzParserChunkBoundary`: split at one random position, verify
+    output equivalence with single-write parsing.
+  - `FuzzParserMultiChunk`: split at multiple random positions, verify
+    output equivalence.
+- Seeded fuzz corpus with CommonMark 0.31.2 (652) and GFM 0.29 (672)
+  spec examples plus 40+ pathological inputs: deeply nested
+  lists/blockquotes, long delimiter runs, huge lines, empty input,
+  binary data, malformed UTF-8, CRLF, and tabs.
+- Added 6 minimized regression corpus files in `stream/testdata/fuzz/`
+  from fuzzer findings.
+
+### Fixed
+
+- Fixed `closeBlockquote` to close all nested lists inside the
+  blockquote, not just the innermost one.
+- Fixed `closeListItem` emitting a duplicate `exit list_item` event
+  after `closeBlockquote` already closed the item.
+- Fixed `parseTableAlign` panic on single-colon table separator cells
+  (e.g. `|:`).
+- Fixed `closeListItem` and `closeList` unconditionally closing the
+  blockquote even when the list was inside the blockquote (not the
+  other way around). Now gated on `bqInsideListItem`.
+- Fixed non-`>` lines inside a blockquote being matched as list item
+  continuation before the blockquote could close. The blockquote now
+  closes before list continuation is checked.
+
 ## [0.32.0] - 2026-04-28
 
 ### Added

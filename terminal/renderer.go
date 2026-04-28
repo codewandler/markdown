@@ -45,6 +45,7 @@ type Renderer struct {
 	listItem    string
 	spaced      bool
 	pending     bool
+	style       styler
 }
 
 // RendererOption configures a terminal renderer.
@@ -119,15 +120,22 @@ func DefaultCodeBlockStyle() CodeBlockStyle {
 
 // NewRenderer creates a terminal renderer that writes to w.
 func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
-	if !isTerminal(w) {
-		w = newPlainWriter(w)
+	var st styler
+	var hl CodeHighlighter
+	if isTerminal(w) {
+		st = ansiStyler{}
+		hl = NewHybridHighlighter()
+	} else {
+		st = plainStyler{}
+		hl = NewPlainHighlighter()
 	}
 	r := &Renderer{
 		w:           w,
-		highlighter: NewHybridHighlighter(),
+		highlighter: hl,
 		codeBlock:   defaultCodeBlockStyle(),
 		wrapWidth:   detectWrapWidth(w),
 		lineStart:   true,
+		style:       st,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -310,15 +318,15 @@ func (r *Renderer) enterBlock(event stream.Event) error {
 		return nil
 	}
 	if event.Block == stream.BlockHeading {
-		_, err := fmt.Fprint(r.w, bold, monokaiGreen)
+		_, err := fmt.Fprint(r.w, r.style.code(bold), r.style.code(monokaiGreen))
 		return err
 	}
 	if event.Block == stream.BlockParagraph {
-		_, err := fmt.Fprint(r.w, monokaiForeground)
+		_, err := fmt.Fprint(r.w, r.style.code(monokaiForeground))
 		return err
 	}
 	if event.Block == stream.BlockThematicBreak {
-		_, err := fmt.Fprint(r.w, monokaiComment, strings.Repeat("─", 24), reset, "\n")
+		_, err := fmt.Fprint(r.w, r.style.code(monokaiComment), strings.Repeat("─", 24), r.style.reset(), "\n")
 		r.pending = true
 		r.lineStart = true
 		r.lineWidth = 0
@@ -330,13 +338,13 @@ func (r *Renderer) enterBlock(event stream.Event) error {
 func (r *Renderer) exitBlock(event stream.Event) error {
 	switch event.Block {
 	case stream.BlockHeading:
-		_, err := fmt.Fprint(r.w, reset, "\n")
+		_, err := fmt.Fprint(r.w, r.style.reset(), "\n")
 		r.pending = true
 		r.lineStart = true
 		r.lineWidth = 0
 		return err
 	case stream.BlockParagraph:
-		_, err := fmt.Fprint(r.w, reset, "\n")
+		_, err := fmt.Fprint(r.w, r.style.reset(), "\n")
 		r.lineStart = true
 		r.lineWidth = 0
 		r.pending = true
@@ -411,14 +419,14 @@ func (r *Renderer) writeLinePrefix() error {
 	r.lineWidth = 0
 	if r.quoteDepth > 0 {
 		for range r.quoteDepth {
-			if _, err := fmt.Fprint(r.w, monokaiComment, "│ ", reset); err != nil {
+			if _, err := fmt.Fprint(r.w, r.style.code(monokaiComment), "│ ", r.style.reset()); err != nil {
 				return err
 			}
 			r.lineWidth += 2
 		}
 	}
 	if r.listItem != "" {
-		if _, err := fmt.Fprint(r.w, strings.Repeat("  ", max(0, r.listDepth-1)), monokaiComment, r.listItem, reset); err != nil {
+		if _, err := fmt.Fprint(r.w, strings.Repeat("  ", max(0, r.listDepth-1)), r.style.code(monokaiComment), r.listItem, r.style.reset()); err != nil {
 			return err
 		}
 		r.lineWidth += 2*max(0, r.listDepth-1) + visibleWidth(r.listItem)
@@ -486,9 +494,9 @@ func (r *Renderer) writeTableRow(cells []string, widths []int) error {
 		return err
 	}
 	var out strings.Builder
-	out.WriteString(monokaiComment)
+	out.WriteString(r.style.code(monokaiComment))
 	out.WriteString("│")
-	out.WriteString(reset)
+	out.WriteString(r.style.reset())
 	for i := 0; i < len(widths); i++ {
 		out.WriteByte(' ')
 		cell := ""
@@ -502,9 +510,9 @@ func (r *Renderer) writeTableRow(cells []string, widths []int) error {
 		}
 		out.WriteString(padTableCell(cell, widths[i], width, align))
 		out.WriteByte(' ')
-		out.WriteString(monokaiComment)
+		out.WriteString(r.style.code(monokaiComment))
 		out.WriteString("│")
-		out.WriteString(reset)
+		out.WriteString(r.style.reset())
 	}
 	out.WriteByte('\n')
 	if _, err := io.WriteString(r.w, out.String()); err != nil {
@@ -532,38 +540,33 @@ func padTableCell(cell string, targetWidth, visibleWidth int, align stream.Table
 }
 
 func (r *Renderer) styleText(event stream.Event) string {
-	return styledText(event.Style, event.Text)
+	return styledText(r.style, event.Style, event.Text)
 }
 
-func styledText(style stream.InlineStyle, text string) string {
+func styledText(st styler, style stream.InlineStyle, text string) string {
 	if text == "" {
 		return ""
 	}
+	if style.Link != "" {
+		return st.link(style.Link, text)
+	}
 	var out strings.Builder
 	if style.Code {
-		out.WriteString(monokaiYellow)
+		out.WriteString(st.code(monokaiYellow))
 	}
 	if style.Emphasis {
-		out.WriteString(italic)
+		out.WriteString(st.code(italic))
 	}
 	if style.Strong {
-		out.WriteString(bold)
+		out.WriteString(st.code(bold))
 	}
 	if style.Strike {
-		out.WriteString(strike)
-	}
-	if style.Link != "" {
-		out.WriteString(underline)
-		out.WriteString(monokaiBlue)
-		out.WriteString(osc8Open(style.Link))
+		out.WriteString(st.code(strike))
 	}
 	out.WriteString(text)
-	if style.Link != "" {
-		out.WriteString(osc8Close())
-	}
-	out.WriteString(reset)
-	if style.Code || style.Emphasis || style.Strong || style.Strike || style.Link != "" {
-		out.WriteString(monokaiForeground)
+	out.WriteString(st.reset())
+	if style.Code || style.Emphasis || style.Strong || style.Strike {
+		out.WriteString(st.code(monokaiForeground))
 	}
 	return out.String()
 }
@@ -573,7 +576,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 		return err
 	}
 	if r.wrapWidth <= 0 {
-		_, err := fmt.Fprint(r.w, styledText(event.Style, event.Text))
+		_, err := fmt.Fprint(r.w, styledText(r.style, event.Style, event.Text))
 		r.lineWidth += visibleWidth(event.Text)
 		return err
 	}
@@ -584,7 +587,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 		// emit the rest on one line to avoid degenerate one-rune-
 		// per-line output in deeply nested containers.
 		if remaining <= 0 {
-			if _, err := fmt.Fprint(r.w, styledText(event.Style, text)); err != nil {
+			if _, err := fmt.Fprint(r.w, styledText(r.style, event.Style, text)); err != nil {
 				return err
 			}
 			r.lineWidth += visibleWidth(text)
@@ -594,7 +597,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 		if segment == "" {
 			segment, rest = text[:firstRuneIndex(text)], text[firstRuneIndex(text):]
 		}
-		if _, err := fmt.Fprint(r.w, styledText(event.Style, segment)); err != nil {
+		if _, err := fmt.Fprint(r.w, styledText(r.style, event.Style, segment)); err != nil {
 			return err
 		}
 		r.lineWidth += visibleWidth(segment)
@@ -669,11 +672,11 @@ func (r *Renderer) codePrefix() string {
 	}
 	if style.Border {
 		if style.BorderColor != "" {
-			out.WriteString(style.BorderColor)
+			out.WriteString(r.style.code(style.BorderColor))
 		}
 		out.WriteString(style.BorderText)
 		if style.BorderColor != "" {
-			out.WriteString(reset)
+			out.WriteString(r.style.reset())
 		}
 	}
 	if style.Padding > 0 {
@@ -786,34 +789,17 @@ func osc8Close() string {
 	return "\x1b]8;;\a"
 }
 
-// plainWriter wraps an io.Writer and strips ANSI SGR escape sequences from
-// all output. Used when the destination is not a TTY.
-type plainWriter struct {
-	w io.Writer
-}
-
-func newPlainWriter(w io.Writer) io.Writer {
-	return &plainWriter{w: w}
-}
-
-func (p *plainWriter) Write(b []byte) (int, error) {
-	stripped := stripANSI(string(b))
-	_, err := p.w.Write([]byte(stripped))
-	return len(b), err // return original len so callers don't see short-write errors
-}
 
 // WithPlain forces plain-text mode (no ANSI escapes) regardless of TTY detection.
 // Pass false to force colour output even when the writer is not a TTY (useful in tests).
 func WithPlain(plain bool) RendererOption {
 	return func(r *Renderer) {
 		if plain {
-			if _, ok := r.w.(*plainWriter); !ok {
-				r.w = newPlainWriter(r.w)
-			}
+			r.style = plainStyler{}
+			r.highlighter = NewPlainHighlighter()
 		} else {
-			if pw, ok := r.w.(*plainWriter); ok {
-				r.w = pw.w
-			}
+			r.style = ansiStyler{}
+			r.highlighter = NewHybridHighlighter()
 		}
 	}
 }

@@ -333,3 +333,14 @@ func firstWord(text string) string {
 	}
 	return text
 }
+
+// PlainHighlighter is a no-op CodeHighlighter that returns lines unchanged.
+// Used when the renderer is in plain (non-TTY) mode.
+type PlainHighlighter struct{}
+
+func NewPlainHighlighter() *PlainHighlighter        { return &PlainHighlighter{} }
+func (PlainHighlighter) Start(_ string, _ string)   {}
+func (PlainHighlighter) HighlightLine(line string) string { return line }
+func (PlainHighlighter) End()                        {}
+
+var _ CodeHighlighter = (*PlainHighlighter)(nil)
