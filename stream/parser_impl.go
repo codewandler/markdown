@@ -343,6 +343,26 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	// been collected.
 	p.drainPendingBlocks(events)
 
+	// When inside a blockquote and the line doesn't continue it,
+	// close the blockquote before checking list item continuation.
+	// Lists opened inside the blockquote are closed with it, so
+	// they must not be treated as continuation targets.
+	if p.inBlockquote && !p.fence.open && !p.inIndented {
+		if _, ok := blockquoteContent(line.text); !ok {
+			// Lazy continuation: a paragraph open inside the blockquote
+			// can continue without the > prefix.
+			if len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
+				if _, _, _, _, isFence := openingFence(line.text); !isFence {
+					if _, ok2 := listItem(line.text); !ok2 {
+						p.addParagraphLine(line)
+						return
+					}
+				}
+			}
+			p.closeBlockquote(line, events)
+		}
+	}
+
 	// When inside a list item, check if the line is indented enough
 	// to be continuation content. This must come before blockquote
 	// and other container checks so that indented `>` markers inside
@@ -816,12 +836,15 @@ func parseTableSeparator(line string) ([]TableAlign, bool) {
 
 func parseTableAlign(cell string) (TableAlign, bool) {
 	cell = strings.TrimSpace(cell)
+	if len(cell) == 0 {
+		return TableAlignNone, false
+	}
 	left := strings.HasPrefix(cell, ":")
 	right := strings.HasSuffix(cell, ":")
 	if left {
 		cell = cell[1:]
 	}
-	if right {
+	if right && len(cell) > 0 {
 		cell = cell[:len(cell)-1]
 	}
 	if len(cell) < 3 {
@@ -1093,22 +1116,25 @@ func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
 	// mutual recursion: closeListItem -> closeBlockquote -> closeListItem.
 	bqOpenedInsideList := p.bqInsideListItem
 	p.inBlockquote = false
-	// Close any lists that were opened inside this blockquote.
-	// Don't close the outer list if the blockquote was inside a list item.
-	if !bqOpenedInsideList && p.inList {
-		if p.inListItem {
-			p.closeParagraph(events)
-			p.drainPendingBlocks(events)
-			p.inListItem = false
-			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
+	// Close all lists that were opened inside this blockquote.
+	// Don't close any lists if the blockquote was opened inside a list item
+	// — those lists belong to the outer context.
+	if !bqOpenedInsideList {
+		for p.inList {
+			if p.inListItem {
+				p.closeParagraph(events)
+				p.drainPendingBlocks(events)
+				p.inListItem = false
+				*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
+			}
+			data := p.listData
+			data.Tight = !p.listLoose
+			p.inList = false
+			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
+			p.listData = ListData{}
+			p.listLoose = false
+			p.popList()
 		}
-		data := p.listData
-		data.Tight = !p.listLoose
-		p.inList = false
-		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
-		p.listData = ListData{}
-		p.listLoose = false
-		p.popList()
 	}
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
 }
@@ -1121,12 +1147,33 @@ func (p *parser) closeListItem(events *[]Event) {
 	p.drainPendingBlocks(events)
 	p.closeIndentedCode(events)
 	p.closeFencedCode(events)
-	if p.inBlockquote {
+	// Only close the blockquote if it was opened inside this list item.
+	// When the list item is inside the blockquote (bqInsideListItem is
+	// false), the blockquote is the outer container and must not be
+	// closed here.
+	if p.inBlockquote && p.bqInsideListItem {
 		p.closeBlockquote(lineInfo{}, events)
 	}
+	// closeBlockquote may have already closed this list item
+	// (when the list was inside the blockquote). Bail out to
+	// avoid emitting a duplicate exit event.
+	if !p.inListItem {
+		return
+	}
 	// Close any open sublists inside this list item.
-	for len(p.listStack) > 0 {
-		p.closeList(events)
+	// closeList closes the current list (and its open item), then
+	// popList restores the outer list context. We must not close
+	// the restored outer list item — only the original one.
+	if len(p.listStack) > 0 {
+		// The current list item will be closed by closeList as part
+		// of closing the innermost list. After the loop, popList may
+		// restore an outer list item — leave that alone.
+		for len(p.listStack) > 0 {
+			p.closeList(events)
+		}
+		// closeList already emitted exit list_item for the original
+		// item. Don't emit another one.
+		return
 	}
 	p.inListItem = false
 	p.listItemBlankLine = false
