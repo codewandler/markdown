@@ -55,8 +55,19 @@ type parser struct {
 	inListItem         bool
 	listItemIndent     int  // content column: marker indent + marker width + padding
 	listItemBlankLine  bool // saw a blank line inside the current list item
+	listStack          []savedList // stack for nested lists
 	inIndented         bool
 	indentedBlankLines int
+}
+
+// savedList stores the state of an outer list when entering a sublist.
+type savedList struct {
+	inList            bool
+	listData          ListData
+	listLoose         bool
+	inListItem        bool
+	listItemIndent    int
+	listItemBlankLine bool
 }
 
 // pendingBlock stores a closed paragraph whose inline content has not yet
@@ -324,6 +335,20 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		return
 	}
 
+	// When inside a list item, check if the line is indented enough
+	// to be continuation content (sublists, code, blockquotes, etc.).
+	// This must come before the top-level listItem check so that
+	// indented list markers are treated as sublists, not siblings.
+	if p.inListItem {
+		indent, _ := leadingIndent(line.text)
+		if indent >= p.listItemIndent {
+			inner := line
+			inner.text = stripIndent(line.text, p.listItemIndent)
+			p.processListItemContent(inner, events)
+			return
+		}
+	}
+
 	if item, ok := listItem(line.text); ok {
 		p.ensureDocument(events)
 		if !p.inList && len(p.paragraph.lines) > 0 && item.data.Ordered && item.data.Start != 1 {
@@ -354,16 +379,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	}
 
 	if p.inListItem {
-		// Non-blank line inside a list item (no blank line seen).
-		// Check if indented enough to be continuation content.
-		indent, _ := leadingIndent(line.text)
-		if indent >= p.listItemIndent {
-			inner := line
-			inner.text = stripIndent(line.text, p.listItemIndent)
-			p.processListItemContent(inner, events)
-			return
-		}
-		// Not enough indent and not a new list item — close list.
+		// Not enough indent and not a list item — close list.
 		p.closeParagraph(events)
 		p.closeListItem(events)
 		p.closeList(events)
@@ -895,11 +911,16 @@ func (p *parser) closeListItem(events *[]Event) {
 	if p.inBlockquote {
 		p.closeBlockquote(lineInfo{}, events)
 	}
+	// Close any open sublists inside this list item.
+	for len(p.listStack) > 0 {
+		p.closeList(events)
+	}
 	p.inListItem = false
 	p.listItemBlankLine = false
 	p.listItemIndent = 0
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
 }
+
 
 func (p *parser) closeFencedCode(events *[]Event) {
 	if !p.fence.open {
@@ -913,13 +934,51 @@ func (p *parser) closeList(events *[]Event) {
 	if !p.inList {
 		return
 	}
-	p.closeListItem(events)
+	// Close any open item in this list first.
+	if p.inListItem {
+		p.closeParagraph(events)
+		p.drainPendingBlocks(events)
+		p.closeIndentedCode(events)
+		p.closeFencedCode(events)
+		if p.inBlockquote {
+			p.closeBlockquote(lineInfo{}, events)
+		}
+		p.inListItem = false
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
+	}
 	p.inList = false
 	data := p.listData
 	data.Tight = !p.listLoose
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
 	p.listData = ListData{}
 	p.listLoose = false
+	// Restore outer list state if we were in a sublist.
+	p.popList()
+}
+
+func (p *parser) pushList() {
+	p.listStack = append(p.listStack, savedList{
+		inList:            p.inList,
+		listData:          p.listData,
+		listLoose:         p.listLoose,
+		inListItem:        p.inListItem,
+		listItemIndent:    p.listItemIndent,
+		listItemBlankLine: p.listItemBlankLine,
+	})
+}
+
+func (p *parser) popList() {
+	if len(p.listStack) == 0 {
+		return
+	}
+	saved := p.listStack[len(p.listStack)-1]
+	p.listStack = p.listStack[:len(p.listStack)-1]
+	p.inList = saved.inList
+	p.listData = saved.listData
+	p.listLoose = saved.listLoose
+	p.inListItem = saved.inListItem
+	p.listItemIndent = saved.listItemIndent
+	p.listItemBlankLine = saved.listItemBlankLine
 }
 
 // processListItemContent processes a line of content inside a list item.
@@ -988,20 +1047,19 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 	// Sublist inside list item.
 	if item, ok := listItem(line.text); ok {
 		p.closeParagraph(events)
-		if !p.inList || p.listData.Ordered != item.data.Ordered || p.listData.Marker != item.data.Marker {
-			p.closeList(events)
-			p.inList = true
-			p.listData = listBlockData(item.data)
-			p.listLoose = false
-			data := p.listData
-			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
-		}
-		p.closeListItem(events)
+		p.drainPendingBlocks(events)
+		// Save the outer list state and start a new sublist.
+		p.pushList()
+		p.inList = true
+		p.listData = listBlockData(item.data)
+		p.listLoose = false
+		data := p.listData
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
 		p.inListItem = true
 		p.listItemIndent = item.contentIndent
 		p.listItemBlankLine = false
-		data := item.data
-		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
+		idata := item.data
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &idata, Span: Span{Start: line.start, End: line.end}})
 		if strings.TrimSpace(item.content) != "" {
 			inner := line
 			inner.text = item.content
