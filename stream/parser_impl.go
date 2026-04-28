@@ -58,6 +58,9 @@ type parser struct {
 	listStack          []savedList // stack for nested lists
 	inIndented         bool
 	indentedBlankLines int
+	inHTMLBlock        bool
+	htmlBlockType      int    // 1-7 per CommonMark spec
+	htmlBlockEnd       string // end condition string for types 1-5
 }
 
 // savedList stores the state of an outer list when entering a sublist.
@@ -170,6 +173,7 @@ func (p *parser) Flush() ([]Event, error) {
 		p.fence.open = false
 		events = append(events, Event{Kind: EventExitBlock, Block: BlockFencedCode})
 	}
+	p.closeHTMLBlock(&events)
 	p.drainPendingBlocks(&events)
 	p.closeContainers(&events)
 	if p.started {
@@ -207,6 +211,12 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			p.processLine(line, events)
 			return
 		}
+	}
+
+	// HTML block continuation.
+	if p.inHTMLBlock {
+		p.processHTMLBlockLine(line, events)
+		return
 	}
 
 	// When inside a list item with an open fenced/indented code block,
@@ -460,6 +470,22 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 		p.fence = fenceState{open: true, marker: marker, length: n, indent: indent, info: info}
 		p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockFencedCode, Info: info, Span: Span{Start: line.start, End: line.end}})
 		return
+	}
+
+	// HTML block detection (types 1-6 can interrupt paragraphs,
+	// type 7 cannot).
+	if htmlType, htmlEnd := detectHTMLBlockStart(line.text); htmlType > 0 {
+		if htmlType <= 6 || len(p.paragraph.lines) == 0 {
+			p.ensureDocument(events)
+			p.closeParagraph(events)
+			p.closeIndentedCode(events)
+			p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockHTML, Span: Span{Start: line.start, End: line.end}})
+			p.inHTMLBlock = true
+			p.htmlBlockType = htmlType
+			p.htmlBlockEnd = htmlEnd
+			p.processHTMLBlockLine(line, events)
+			return
+		}
 	}
 
 	if level, text, ok := heading(line.text); ok {
@@ -942,6 +968,38 @@ func (p *parser) closeContainers(events *[]Event) {
 	if p.inBlockquote {
 		p.closeBlockquote(lineInfo{}, events)
 	}
+}
+
+// processHTMLBlockLine handles a line inside an HTML block.
+func (p *parser) processHTMLBlockLine(line lineInfo, events *[]Event) {
+	// Types 6-7: blank line closes the block.
+	if (p.htmlBlockType == 6 || p.htmlBlockType == 7) && strings.TrimSpace(line.text) == "" {
+		p.closeHTMLBlock(events)
+		return
+	}
+
+	// Emit the line as raw text.
+	*events = append(*events,
+		Event{Kind: EventText, Text: line.text, Span: Span{Start: line.start, End: line.end}},
+		Event{Kind: EventLineBreak, Span: Span{Start: line.end, End: line.end}},
+	)
+
+	// Check end condition for types 1-5.
+	if p.htmlBlockType >= 1 && p.htmlBlockType <= 5 {
+		if strings.Contains(strings.ToLower(line.text), strings.ToLower(p.htmlBlockEnd)) {
+			p.closeHTMLBlock(events)
+		}
+	}
+}
+
+func (p *parser) closeHTMLBlock(events *[]Event) {
+	if !p.inHTMLBlock {
+		return
+	}
+	p.inHTMLBlock = false
+	p.htmlBlockType = 0
+	p.htmlBlockEnd = ""
+	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHTML})
 }
 
 func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
@@ -2406,6 +2464,134 @@ func isASCIILetter(c byte) bool {
 
 func isASCIIDigit(c byte) bool {
 	return c >= '0' && c <= '9'
+}
+
+// htmlBlockType6Tags are the block-level HTML element names for type 6.
+var htmlBlockType6Tags = map[string]bool{
+	"address": true, "article": true, "aside": true, "base": true,
+	"basefont": true, "blockquote": true, "body": true, "caption": true,
+	"center": true, "col": true, "colgroup": true, "dd": true,
+	"details": true, "dialog": true, "dir": true, "div": true,
+	"dl": true, "dt": true, "fieldset": true, "figcaption": true,
+	"figure": true, "footer": true, "form": true, "frame": true,
+	"frameset": true, "h1": true, "h2": true, "h3": true,
+	"h4": true, "h5": true, "h6": true, "head": true,
+	"header": true, "hr": true, "html": true, "iframe": true,
+	"legend": true, "li": true, "link": true, "main": true,
+	"menu": true, "menuitem": true, "nav": true, "noframes": true,
+	"ol": true, "optgroup": true, "option": true, "p": true,
+	"param": true, "search": true, "section": true, "summary": true,
+	"table": true, "tbody": true, "td": true, "tfoot": true,
+	"th": true, "thead": true, "title": true, "tr": true,
+	"track": true, "ul": true,
+}
+
+// detectHTMLBlockStart checks if a line starts an HTML block.
+// Returns the block type (1-7) or 0 if not an HTML block.
+func detectHTMLBlockStart(line string) (int, string) {
+	indent, indentBytes := leadingIndent(line)
+	if indent > 3 {
+		return 0, ""
+	}
+	s := line[indentBytes:]
+	if len(s) < 2 || s[0] != '<' {
+		return 0, ""
+	}
+
+	// Type 1: <pre, <script, <style, <textarea (case-insensitive)
+	for _, tag := range []string{"pre", "script", "style", "textarea"} {
+		if matchHTMLBlockTag(s[1:], tag) {
+			return 1, "</" + tag + ">"
+		}
+	}
+
+	// Type 2: <!--
+	if strings.HasPrefix(s, "<!--") {
+		return 2, "-->"
+	}
+
+	// Type 3: <?
+	if strings.HasPrefix(s, "<?") {
+		return 3, "?>"
+	}
+
+	// Type 4: <! + ASCII letter
+	if len(s) >= 3 && s[1] == '!' && isASCIILetter(s[2]) {
+		return 4, ">"
+	}
+
+	// Type 5: <![CDATA[
+	if strings.HasPrefix(s, "<![CDATA[") {
+		return 5, "]]>"
+	}
+
+	// Type 6: block-level tag
+	closing := s[1] == '/'
+	tagStart := 1
+	if closing {
+		tagStart = 2
+	}
+	if tagStart < len(s) && isASCIILetter(s[tagStart]) {
+		i := tagStart + 1
+		for i < len(s) && (isASCIILetter(s[i]) || isASCIIDigit(s[i])) {
+			i++
+		}
+		tagName := strings.ToLower(s[tagStart:i])
+		if htmlBlockType6Tags[tagName] {
+			if i >= len(s) || s[i] == ' ' || s[i] == '\t' || s[i] == '>' || (s[i] == '/' && i+1 < len(s) && s[i+1] == '>') || s[i] == '\n' {
+				return 6, ""
+			}
+		}
+	}
+
+	// Type 7: complete open or closing tag on its own line
+	if tag, ok := parseRawHTMLTag(s); ok {
+		rest := strings.TrimSpace(s[len(tag):])
+		if rest == "" {
+			// Must not be a type-1 tag (pre, script, style, textarea)
+			tagName := extractTagName(s)
+			switch strings.ToLower(tagName) {
+			case "pre", "script", "style", "textarea":
+				// Already handled as type 1
+			default:
+				return 7, ""
+			}
+		}
+	}
+
+	return 0, ""
+}
+
+// matchHTMLBlockTag checks if text starts with a tag name (case-insensitive)
+// followed by space, tab, >, newline, or end of string.
+func matchHTMLBlockTag(text, tag string) bool {
+	if len(text) < len(tag) {
+		return false
+	}
+	if !strings.EqualFold(text[:len(tag)], tag) {
+		return false
+	}
+	if len(text) == len(tag) {
+		return true
+	}
+	c := text[len(tag)]
+	return c == ' ' || c == '\t' || c == '>' || c == '\n'
+}
+
+// extractTagName extracts the tag name from an HTML tag string like "<div ...>".
+func extractTagName(s string) string {
+	if len(s) < 2 || s[0] != '<' {
+		return ""
+	}
+	i := 1
+	if i < len(s) && s[i] == '/' {
+		i++
+	}
+	start := i
+	for i < len(s) && (isASCIILetter(s[i]) || isASCIIDigit(s[i]) || s[i] == '-') {
+		i++
+	}
+	return s[start:i]
 }
 
 func matchingLinkLabelEnd(text string) int {

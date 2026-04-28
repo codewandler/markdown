@@ -37,13 +37,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 	if counts[statusKnownGap] == 0 {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
-	if counts[statusUnsupported] == 0 {
-		t.Fatal("CommonMark corpus has no unsupported examples")
-	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   550,
-		statusKnownGap:    38,
-		statusUnsupported: 64,
+		statusSupported: 591,
+		statusKnownGap:  61,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -140,6 +136,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Entity and numeric character references",
 		"Fenced code blocks",
 		"Hard line breaks",
+		"HTML blocks",
 		"Images",
 		"Indented code blocks",
 		"Inlines",
@@ -149,6 +146,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Lists",
 		"Paragraphs",
 		"Precedence",
+		"Raw HTML",
 		"Setext headings",
 		"Soft line breaks",
 		"Tabs",
@@ -898,6 +896,48 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	197: expectParagraphText("[foo]: /url 'title", "with blank line'", "[foo]"),
 	199: expectParagraphText("[foo]:", "[foo]"),
 	201: expectParagraphText("[foo]: <bar>(baz)", "[foo]"),
+	// HTML blocks — types 1-7.
+	148: expectBlocks(BlockHTML, 2, BlockParagraph, 1),
+	149: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	150: expectBlocks(BlockHTML, 1),
+	151: expectBlocks(BlockHTML, 1),
+	152: expectBlocks(BlockHTML, 2, BlockParagraph, 1),
+	153: expectBlocks(BlockHTML, 1),
+	154: expectBlocks(BlockHTML, 1),
+	155: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	156: expectBlocks(BlockHTML, 1),
+	157: expectBlocks(BlockHTML, 1),
+	158: expectBlocks(BlockHTML, 1),
+	159: expectBlocks(BlockHTML, 1),
+	160: expectBlocks(BlockHTML, 1),
+	161: expectBlocks(BlockHTML, 1),
+	162: expectBlocks(BlockHTML, 1),
+	163: expectBlocks(BlockHTML, 1),
+	164: expectBlocks(BlockHTML, 1),
+	165: expectBlocks(BlockHTML, 1),
+	166: expectBlocks(BlockHTML, 1),
+	167: expectBlocks(BlockHTML, 2, BlockParagraph, 1),
+	169: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	170: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	171: expectBlocks(BlockHTML, 1),
+	172: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	173: expectBlocks(BlockHTML, 1),
+	174: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	176: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	177: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	178: expectBlocks(BlockHTML, 1),
+	179: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	180: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	181: expectBlocks(BlockHTML, 1),
+	182: expectBlocks(BlockHTML, 1, BlockParagraph, 1),
+	183: expectBlocks(BlockHTML, 1, BlockIndentedCode, 1),
+	184: expectBlocks(BlockHTML, 1, BlockIndentedCode, 1),
+	185: expectBlocks(BlockParagraph, 1, BlockHTML, 1),
+	186: expectBlocks(BlockHTML, 1),
+	188: expectBlocks(BlockHTML, 2, BlockParagraph, 1),
+	189: expectBlocks(BlockHTML, 1),
+	190: expectBlocks(BlockHTML, 5),
+	191: expectBlocks(BlockHTML, 4, BlockIndentedCode, 1),
 	// List items starting with indented code.
 	273: expectBlocks(BlockList, 1, BlockListItem, 1, BlockIndentedCode, 2, BlockParagraph, 1),
 	274: expectBlocks(BlockList, 1, BlockListItem, 1, BlockIndentedCode, 2, BlockParagraph, 1),
@@ -911,7 +951,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	// List items starting with blank line.
 	278: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 1, BlockFencedCode, 1, BlockIndentedCode, 1),
 	// HTML comment separating lists.
-	308: expectBlocks(BlockList, 2, BlockListItem, 4, BlockParagraph, 5),
+	308: expectBlocks(BlockList, 2, BlockListItem, 4, BlockParagraph, 4, BlockHTML, 1),
 	// Raw HTML tags shield delimiters from emphasis/link parsing.
 	475: expectParagraphText("*<img src=\"foo\" title=\"*\"/>"),
 	476: expectParagraphText("**<a href=\"**\">"),
@@ -1008,7 +1048,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	// 294 and 307 are deferred until deep nesting is fixed.
 	309: func(t *testing.T, events []eventView) {
 		t.Helper()
-		expectBlocks(BlockList, 1, BlockListItem, 2, BlockParagraph, 4)(t, events)
+		expectBlocks(BlockList, 1, BlockListItem, 2, BlockParagraph, 3, BlockHTML, 1)(t, events)
 	},
 	312: func(t *testing.T, events []eventView) {
 		t.Helper()
