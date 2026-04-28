@@ -64,3 +64,8 @@ tasks:
     desc: Run parse comparison and format as Markdown
     dir: benchmarks
     cmd: go test -bench=BenchmarkParse -benchmem -count=1 -benchtime=1s -timeout=120s | go run ./cmd/benchcompare
+
+  bench:compliance:
+    desc: Run spec compliance tests against all parsers
+    dir: benchmarks
+    cmd: go test -run "TestCommonMarkCompliance|TestGFMCompliance" -v

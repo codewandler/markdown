@@ -12,14 +12,34 @@ See [docs/competitors.md](docs/competitors.md) for detailed library profiles.
 | Parse Markdown | yes | via goldmark | via blackfriday | yes | yes | yes |
 | Terminal render | **yes** | **yes** | **yes** | no | no | no |
 | **Streaming** | **yes** | no | no | no | no | no |
-| CommonMark | 96.2% | via goldmark | no | 100% | no | partial |
-| GFM extensions | 100% | via goldmark | no | via ext | no | partial |
+| CommonMark 0.31.2 | **96.2%** | 99.1%* | 37.4% | **99.1%** | 37.4% | 40.3% |
+| GFM 0.29 | **100%**† | 97.3%* | 36.8% | 97.3% | 36.8% | 39.1% |
+
+\* glamour uses goldmark internally, so inherits its compliance.  
+† Our GFM compliance is measured at the event level (block structure,
+inline styles, text content), not HTML output. All 672 examples produce
+correct event streams.
 | Go syntax fast path | **yes** | no | no | n/a | n/a | n/a |
 | Syntax highlighting | Go + Chroma | Chroma | Chroma v1 | no | no | no |
 | Clickable hyperlinks | OSC 8 | no | no | n/a | n/a | n/a |
 | Word wrapping | auto-detect | fixed width | fixed width | n/a | n/a | n/a |
 | TTY detection | auto | no | no | n/a | n/a | n/a |
 | Direct dependencies | 2 | ~20 | ~15 | 0 | 0 | 0 |
+
+## Spec Compliance
+
+Measured by running each parser against the official spec test suites
+and comparing HTML output. Run `go test -run TestCommonMarkCompliance`
+in `benchmarks/` to reproduce.
+
+| Spec | ours | goldmark | blackfriday | gomarkdown |
+| --- | ---: | ---: | ---: | ---: |
+| CommonMark 0.31.2 | **627/652 (96.2%)** | 646/652 (99.1%) | 244/652 (37.4%) | 263/652 (40.3%) |
+| GFM 0.29 | **672/672 (100%)** | 654/672 (97.3%) | 247/672 (36.8%) | 263/672 (39.1%) |
+
+Note: Our compliance is measured at the event level (block structure,
+inline styles, text content) since we don't produce HTML. goldmark is
+measured with XHTML output, unsafe HTML enabled, and GFM extensions.
 
 ## Terminal Rendering (parse + render to ANSI string)
 
