@@ -38,8 +38,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported: 616,
-		statusKnownGap:  36,
+		statusSupported: 620,
+		statusKnownGap:  32,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -938,6 +938,15 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	189: expectBlocks(BlockHTML, 1),
 	190: expectBlocks(BlockHTML, 5),
 	191: expectBlocks(BlockHTML, 4, BlockIndentedCode, 1),
+	// Inline HTML tags in paragraph (type 7 doesn't interrupt paragraph).
+	168: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockParagraph, 1)(t, events)
+		expectParagraphText("<del>")(t, events)
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectParagraphText("</del>")(t, events)
+	},
+	187: expectBlocks(BlockParagraph, 1),
 	// Blockquote with indented code and paragraph.
 	252: func(t *testing.T, events []eventView) {
 		t.Helper()
@@ -946,6 +955,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	// HTML blocks recognized for backslash/entity examples.
 	21: expectBlocks(BlockHTML, 1),
 	31: expectBlocks(BlockHTML, 1),
+	// Thematic break inside list item.
+	61: expectBlocks(BlockList, 1, BlockListItem, 2, BlockParagraph, 1, BlockThematicBreak, 1),
+	// Setext heading inside list item.
+	300: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 2, BlockHeading, 2, BlockParagraph, 1)(t, events)
+	},
 	// Sublist inside ordered list item.
 	109: expectBlocks(BlockList, 2, BlockListItem, 2, BlockParagraph, 2),
 	// Tab continuation with indented code.

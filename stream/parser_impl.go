@@ -1171,6 +1171,15 @@ func (p *parser) processListItemFirstLine(line lineInfo, events *[]Event) {
 		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Span: span})
 		return
 	}
+	// Thematic break inside list item.
+	if thematicBreak(line.text) {
+		span := Span{Start: line.start, End: line.end}
+		*events = append(*events,
+			Event{Kind: EventEnterBlock, Block: BlockThematicBreak, Span: span},
+			Event{Kind: EventExitBlock, Block: BlockThematicBreak, Span: span},
+		)
+		return
+	}
 	// Sublist on same line as outer marker (e.g., "- - foo").
 	if item, ok := listItem(line.text); ok {
 		p.pushList()
@@ -1231,6 +1240,24 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 	if strings.TrimSpace(line.text) == "" {
 		p.closeParagraph(events)
 		p.closeIndentedCode(events)
+		return
+	}
+
+	// Setext heading inside list item.
+	if level, ok := setextHeading(line.text); ok && len(p.paragraph.lines) > 0 {
+		p.closeSetextHeading(level, Span{Start: line.start, End: line.end}, events)
+		return
+	}
+
+	// Thematic break inside list item continuation.
+	if thematicBreak(line.text) {
+		p.closeParagraph(events)
+		p.drainPendingBlocks(events)
+		span := Span{Start: line.start, End: line.end}
+		*events = append(*events,
+			Event{Kind: EventEnterBlock, Block: BlockThematicBreak, Span: span},
+			Event{Kind: EventExitBlock, Block: BlockThematicBreak, Span: span},
+		)
 		return
 	}
 
