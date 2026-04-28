@@ -13,7 +13,7 @@ Set FontSize 14
 Set Width 960
 Set Height 600
 Set Padding 16
-Set Theme "Monokai"
+Set Theme "Molokai"
 Set TypingSpeed 0ms
 
 # Start the demo with recording-optimized settings.

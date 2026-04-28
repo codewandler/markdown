@@ -3,8 +3,7 @@
 Streaming Markdown parsing and terminal rendering in Go. Parse
 incrementally, render immediately, keep memory bounded.
 
-<!-- TODO: replace with recorded GIF once vhs capture is done -->
-<!-- ![demo](examples/demo/demo.gif) -->
+![demo](examples/demo/demo.gif)
 
 ```text
 chunks --> stream.Parser --> events --> terminal.Renderer --> output
