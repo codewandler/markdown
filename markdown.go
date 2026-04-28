@@ -22,9 +22,9 @@ import (
 
 // RenderString renders markdown to terminal output string.
 // Convenience function that handles parsing and rendering internally.
-func RenderString(markdown string) (string, error) {
+func RenderString(markdown string, opts ...terminal.RendererOption) (string, error) {
 	var buf bytes.Buffer
-	if err := RenderToWriter(&buf, markdown); err != nil {
+	if err := RenderToWriter(&buf, markdown, opts...); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
@@ -32,9 +32,9 @@ func RenderString(markdown string) (string, error) {
 
 // RenderToWriter renders markdown to the given writer.
 // Convenience function that handles parsing and rendering internally.
-func RenderToWriter(w io.Writer, markdown string) error {
+func RenderToWriter(w io.Writer, markdown string, opts ...terminal.RendererOption) error {
 	parser := stream.NewParser()
-	renderer := terminal.NewRenderer(w)
+	renderer := terminal.NewRenderer(w, opts...)
 
 	events, err := parser.Write([]byte(markdown))
 	if err != nil {

@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/codewandler/markdown"
+	"github.com/codewandler/markdown/terminal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRenderString_HeadingAndParagraph(t *testing.T) {
-	out, err := markdown.RenderString("# Hello\n\nWorld\n")
+	out, err := markdown.RenderString("# Hello\n\nWorld\n", terminal.WithAnsi(terminal.AnsiOn))
 	require.NoError(t, err)
 	assert.Contains(t, out, "Hello")
 	assert.Contains(t, out, "World")
@@ -20,7 +21,7 @@ func TestRenderString_HeadingAndParagraph(t *testing.T) {
 }
 
 func TestRenderString_FencedCode(t *testing.T) {
-	out, err := markdown.RenderString("```go\npackage main\n```\n")
+	out, err := markdown.RenderString("```go\npackage main\n```\n", terminal.WithAnsi(terminal.AnsiOn))
 	require.NoError(t, err)
 	assert.Contains(t, out, "package")
 	assert.Contains(t, out, "main")
@@ -36,7 +37,7 @@ func TestRenderString_EmptyInput(t *testing.T) {
 
 func TestRenderToWriter_WritesToProvidedWriter(t *testing.T) {
 	var buf bytes.Buffer
-	err := markdown.RenderToWriter(&buf, "**bold** and `code`\n")
+	err := markdown.RenderToWriter(&buf, "**bold** and `code`\n", terminal.WithAnsi(terminal.AnsiOn))
 	require.NoError(t, err)
 	out := buf.String()
 	assert.Contains(t, out, "bold")
@@ -58,7 +59,7 @@ func TestRenderToWriter_MatchesRenderString(t *testing.T) {
 }
 
 func TestRenderString_InlineStyles(t *testing.T) {
-	out, err := markdown.RenderString("*italic* **bold** ~~strike~~ `code`\n")
+	out, err := markdown.RenderString("*italic* **bold** ~~strike~~ `code`\n", terminal.WithAnsi(terminal.AnsiOn))
 	require.NoError(t, err)
 	assert.Contains(t, out, "\x1b[3m") // italic
 	assert.Contains(t, out, "\x1b[1m") // bold
