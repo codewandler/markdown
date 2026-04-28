@@ -10,6 +10,21 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-04-28
+
+### Added
+
+- Added GFM 0.29 specification test corpus (672 examples) in
+  `internal/gfmtests` with embedded JSON, loader, and tests.
+- Added `TestGFMCorpusClassification` tracking 672/672 supported examples.
+- Added `TestGFMCorpusSplitEquivalence` verifying chunk-boundary
+  independence across the full GFM corpus.
+- Added `TestGFMCorpusEventInvariants` verifying balanced enter/exit
+  block events across the full GFM corpus.
+- All 672 GFM examples produce valid event streams with correct
+  block nesting, covering tables, task lists, strikethrough,
+  autolinks, tag filter, and all CommonMark 0.29 examples.
+
 ## [0.29.0] - 2026-04-28
 
 ### Fixed
