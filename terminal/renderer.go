@@ -119,6 +119,9 @@ func DefaultCodeBlockStyle() CodeBlockStyle {
 
 // NewRenderer creates a terminal renderer that writes to w.
 func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
+	if !isTerminal(w) {
+		w = newPlainWriter(w)
+	}
 	r := &Renderer{
 		w:           w,
 		highlighter: NewHybridHighlighter(),
@@ -781,4 +784,36 @@ func osc8Open(target string) string {
 
 func osc8Close() string {
 	return "\x1b]8;;\a"
+}
+
+// plainWriter wraps an io.Writer and strips ANSI SGR escape sequences from
+// all output. Used when the destination is not a TTY.
+type plainWriter struct {
+	w io.Writer
+}
+
+func newPlainWriter(w io.Writer) io.Writer {
+	return &plainWriter{w: w}
+}
+
+func (p *plainWriter) Write(b []byte) (int, error) {
+	stripped := stripANSI(string(b))
+	_, err := p.w.Write([]byte(stripped))
+	return len(b), err // return original len so callers don't see short-write errors
+}
+
+// WithPlain forces plain-text mode (no ANSI escapes) regardless of TTY detection.
+// Pass false to force colour output even when the writer is not a TTY (useful in tests).
+func WithPlain(plain bool) RendererOption {
+	return func(r *Renderer) {
+		if plain {
+			if _, ok := r.w.(*plainWriter); !ok {
+				r.w = newPlainWriter(r.w)
+			}
+		} else {
+			if pw, ok := r.w.(*plainWriter); ok {
+				r.w = pw.w
+			}
+		}
+	}
 }

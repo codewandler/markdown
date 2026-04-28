@@ -11,7 +11,7 @@ import (
 
 func TestRendererDoesNotRenderFenceMarkers(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	err := renderer.Render([]stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "go"},
@@ -34,7 +34,7 @@ func TestRendererDoesNotRenderFenceMarkers(t *testing.T) {
 
 func TestRendererRendersIndentedCodeBlocks(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	err := renderer.Render([]stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockIndentedCode},
@@ -54,7 +54,7 @@ func TestRendererRendersIndentedCodeBlocks(t *testing.T) {
 
 func TestRendererConfiguresCodeBlockStyle(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithCodeBlockStyle(CodeBlockStyle{
+	renderer := NewRenderer(&out, WithPlain(false), WithCodeBlockStyle(CodeBlockStyle{
 		Indent:     2,
 		Border:     true,
 		BorderText: "#",
@@ -89,7 +89,7 @@ func (stubHighlighter) End() {}
 
 func TestRendererConfiguresCodeHighlighter(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithCodeHighlighter(stubHighlighter{}))
+	renderer := NewRenderer(&out, WithPlain(false), WithCodeHighlighter(stubHighlighter{}))
 
 	err := renderer.Render([]stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "text"},
@@ -109,7 +109,7 @@ func TestRendererConfiguresCodeHighlighter(t *testing.T) {
 
 func TestStreamRendererWritesAndFlushes(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewStreamRenderer(&out, WithCodeHighlighter(stubHighlighter{}))
+	renderer := NewStreamRenderer(&out, WithPlain(false), WithCodeHighlighter(stubHighlighter{}))
 
 	if _, err := renderer.Write([]byte("```text\nhello")); err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func TestStreamRendererWritesAndFlushes(t *testing.T) {
 
 func TestStreamRendererRejectsWritesAfterFlush(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewStreamRenderer(&out)
+	renderer := NewStreamRenderer(&out, WithPlain(false))
 
 	if err := renderer.Flush(); err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestStreamRendererRejectsWritesAfterFlush(t *testing.T) {
 
 func TestRendererStructuredBlocks(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
@@ -173,7 +173,7 @@ func TestRendererStructuredBlocks(t *testing.T) {
 
 func TestRendererSoftBreakIsSpace(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
@@ -209,7 +209,7 @@ func TestHybridHighlighter(t *testing.T) {
 
 func TestRendererUsesHybridHighlighterByDefault(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	err := renderer.Render([]stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "rust"},
@@ -229,7 +229,7 @@ func TestRendererUsesHybridHighlighterByDefault(t *testing.T) {
 
 func TestRendererTaskListsAndStrike(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockList, List: &stream.ListData{Marker: "-", Tight: true}},
@@ -256,7 +256,7 @@ func TestRendererTaskListsAndStrike(t *testing.T) {
 
 func TestRendererEmitsClickableLinks(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
@@ -298,7 +298,7 @@ func TestRendererEmitsClickableLinks(t *testing.T) {
 
 func TestRendererDoesNotWrapShortTextAtLastSpace(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithWrapWidth(80))
+	renderer := NewRenderer(&out, WithPlain(false), WithWrapWidth(80))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
@@ -317,7 +317,7 @@ func TestRendererDoesNotWrapShortTextAtLastSpace(t *testing.T) {
 
 func TestRendererWrapsClickableLinks(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithWrapWidth(12))
+	renderer := NewRenderer(&out, WithPlain(false), WithWrapWidth(12))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
@@ -340,7 +340,7 @@ func TestRendererWrapsClickableLinks(t *testing.T) {
 
 func TestRendererTightListsStayCompact(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockList, List: &stream.ListData{Marker: "-", Tight: true}},
@@ -374,7 +374,7 @@ func TestRendererWrapDoesNotDegradeInDeepNesting(t *testing.T) {
 	// wrapWidth=10 with quoteDepth=6 means the prefix alone is 12 chars,
 	// exceeding the wrap budget. The renderer must emit the full text on
 	// one line rather than splitting it one rune at a time.
-	renderer := NewRenderer(&out, WithWrapWidth(10))
+	renderer := NewRenderer(&out, WithPlain(false), WithWrapWidth(10))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
@@ -410,7 +410,7 @@ func TestRendererWrapDoesNotDegradeInDeepNesting(t *testing.T) {
 
 func TestRendererTables(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out)
+	renderer := NewRenderer(&out, WithPlain(false))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignLeft, stream.TableAlignCenter}}},
@@ -444,5 +444,33 @@ func TestRendererTables(t *testing.T) {
 	}
 	if strings.Count(visible, "│") < 6 {
 		t.Fatalf("table borders too sparse: %q", visible)
+	}
+}
+
+func TestRenderer_NoANSIWhenNotTTY(t *testing.T) {
+	// bytes.Buffer is not a *os.File so isTerminal returns false → plainWriter
+	var buf bytes.Buffer
+	renderer := NewRenderer(&buf)
+	err := renderer.Render([]stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockHeading, Level: 2},
+		{Kind: stream.EventText, Text: "file_edit"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockHeading},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "yaml"},
+		{Kind: stream.EventText, Text: "foo: bar"},
+		{Kind: stream.EventLineBreak},
+		{Kind: stream.EventExitBlock, Block: stream.BlockFencedCode},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "\x1b[") {
+		t.Fatalf("expected no ANSI escape codes in non-TTY output, got: %q", out)
+	}
+	if !strings.Contains(out, "file_edit") {
+		t.Fatalf("expected output to contain \"file_edit\", got: %q", out)
+	}
+	if !strings.Contains(out, "foo: bar") {
+		t.Fatalf("expected output to contain \"foo: bar\", got: %q", out)
 	}
 }

@@ -10,6 +10,19 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-04-28
+
+### Added
+
+- `NewRenderer` and `NewStreamRenderer` now auto-detect whether the output
+  writer is a TTY. When it is not (piped, redirected, or a `bytes.Buffer`),
+  all ANSI escape sequences are stripped from output automatically.
+- Added `WithPlain(bool)` renderer option to override TTY detection: pass
+  `true` to force plain text, `false` to force colour (useful in tests).
+- Added `plainWriter` internal wrapper that strips ANSI SGR sequences on
+  the fly without modifying any rendering logic.
+- Added `isTerminal(w io.Writer) bool` helper in the terminal package.
+
 ## [0.31.0] - 2026-04-28
 
 ### Added
