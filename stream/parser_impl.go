@@ -1039,12 +1039,13 @@ func (p *parser) closeIndentedCode(events *[]Event) {
 func (p *parser) closeContainers(events *[]Event) {
 	p.closeTable(events)
 	p.closeIndentedCode(events)
+	// Close blockquote before list — the list may be inside the blockquote.
+	if p.inBlockquote {
+		p.closeBlockquote(lineInfo{}, events)
+	}
 	if p.inList {
 		p.closeListItem(events)
 		p.closeList(events)
-	}
-	if p.inBlockquote {
-		p.closeBlockquote(lineInfo{}, events)
 	}
 }
 
