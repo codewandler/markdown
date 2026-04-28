@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   530,
-		statusKnownGap:    58,
+		statusSupported:   536,
+		statusKnownGap:    52,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -892,6 +892,23 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	590: expectParagraphText("![[foo]]", "[[foo]]: /url \"title\""),
 	591: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
 	592: expectParagraphText("![foo]"),
+	// Unicode case fold in reference labels.
+	540: expectTextStyle("ẞ", InlineStyle{Link: "/url"}),
+	// Link reference definitions — edge cases.
+	197: expectParagraphText("[foo]: /url 'title", "with blank line'", "[foo]"),
+	199: expectParagraphText("[foo]:", "[foo]"),
+	// List items starting with blank line.
+	278: expectBlocks(BlockList, 1, BlockListItem, 3, BlockParagraph, 1, BlockFencedCode, 1, BlockIndentedCode, 1),
+	// HTML comment separating lists.
+	308: expectBlocks(BlockList, 2, BlockListItem, 4, BlockParagraph, 5),
+	// Shortcut ref with leading [.
+	559: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectParagraphText("[")(t, events)
+		expectTextStyle("foo", InlineStyle{Emphasis: true, Link: "/url", LinkTitle: "title"})(t, events)
+		expectTextStyle(" bar", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+		expectParagraphText("]")(t, events)
+	},
 	// List items — non-continuation examples that already pass.
 	253: func(t *testing.T, events []eventView) {
 		t.Helper()

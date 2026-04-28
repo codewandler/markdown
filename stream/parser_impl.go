@@ -1653,6 +1653,14 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 				continue
 			}
 		}
+		// If [ failed as a link opener, emit just the [ as text
+		// so the next character gets a chance to be a link opener.
+		if text[0] == '[' {
+			tokens = append(tokens, inlineToken{kind: inlineTokenText, text: "["})
+			prevSource = text[:1]
+			text = text[1:]
+			continue
+		}
 		if text[0] == '<' && autolinkPossible {
 			if ev, rest, ok := parseAutolink(text, span); ok {
 				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
@@ -2205,7 +2213,25 @@ func normalizeReferenceLabel(label string) string {
 	if len(fields) == 0 {
 		return ""
 	}
-	return strings.ToLower(strings.Join(fields, " "))
+	return unicodeCaseFold(strings.Join(fields, " "))
+}
+
+// unicodeCaseFold performs a simple Unicode case fold. It handles
+// the standard ToLower mapping plus the special case of
+// U+1E9E LATIN CAPITAL LETTER SHARP S (ẞ) which folds to "ss".
+func unicodeCaseFold(s string) string {
+	if !strings.ContainsRune(s, '\u1e9e') {
+		return strings.ToLower(s)
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if r == '\u1e9e' {
+			b.WriteString("ss")
+		} else {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
 }
 
 func matchingLinkLabelEnd(text string) int {
