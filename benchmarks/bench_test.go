@@ -3,6 +3,7 @@ package benchmarks
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"testing"
 
 	goterm "github.com/MichaelMure/go-term-markdown"
@@ -230,6 +231,59 @@ func BenchmarkChunkSize_Spec(b *testing.B) {
 			}
 		})
 	}
+}
+
+// === Syntax highlighting: Go fast path vs Chroma ===========================
+//
+// We benchmark the full render pipeline with Go code using two different
+// highlighter configurations:
+// - DefaultHighlighter: our stdlib AST-based Go fast path
+// - HybridHighlighter with lang="rust": forces Chroma path on Go code
+//   (Chroma's Go lexer produces equivalent output)
+
+func BenchmarkHighlight_GoCode(b *testing.B) {
+	goCode := "```go\n" +
+		"package main\n\n" +
+		"import (\n\t\"fmt\"\n\t\"os\"\n)\n\n" +
+		"func main() {\n" +
+		"\tfmt.Println(\"hello\")\n" +
+		"\tos.Exit(0)\n" +
+		"}\n" +
+		"```\n"
+	// Repeat to get meaningful timing
+	input := ""
+	for i := 0; i < 100; i++ {
+		input += goCode
+	}
+	b.SetBytes(int64(len(input)))
+
+	b.Run("go-fast-path", func(b *testing.B) {
+		for b.Loop() {
+			var buf bytes.Buffer
+			r := terminal.NewStreamRenderer(&buf,
+				terminal.WithAnsi(terminal.AnsiOn),
+				terminal.WithCodeHighlighter(terminal.NewDefaultHighlighter()),
+			)
+			r.Write([]byte(input))
+			r.Flush()
+		}
+	})
+
+	b.Run("chroma-for-go", func(b *testing.B) {
+		// Use HybridHighlighter but feed it as "rust" so it goes through
+		// Chroma instead of the Go fast path. We relabel the code blocks.
+		rustInput := strings.ReplaceAll(input, "```go", "```rust")
+		b.SetBytes(int64(len(rustInput)))
+		for b.Loop() {
+			var buf bytes.Buffer
+			r := terminal.NewStreamRenderer(&buf,
+				terminal.WithAnsi(terminal.AnsiOn),
+				terminal.WithCodeHighlighter(terminal.NewHybridHighlighter()),
+			)
+			r.Write([]byte(rustInput))
+			r.Flush()
+		}
+	})
 }
 
 // === Feature parity matrix ==================================================

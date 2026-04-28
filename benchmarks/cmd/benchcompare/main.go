@@ -147,13 +147,8 @@ func main() {
 				row += " - |"
 			}
 		}
-		if len(variants) > 1 && baseNs > 0 {
-			if baseNs == bestNs {
-				row += " **fastest** |"
-			} else {
-				ratio := baseNs / bestNs
-				row += fmt.Sprintf(" %.1fx slower |", ratio)
-			}
+		if len(variants) > 1 {
+			row += " " + ratioVsBest(baseNs, bestNs, "faster", "slower") + " |"
 		}
 		fmt.Println(row)
 	}
@@ -178,14 +173,14 @@ func main() {
 
 	for _, gName := range groupOrder {
 		g := groupMap[gName]
-		baseAllocs := int64(0)
+		baseAllocs := float64(0)
 		if br, ok := g.variants[*baseline]; ok {
-			baseAllocs = br.allocsOp
+			baseAllocs = float64(br.allocsOp)
 		}
-		bestAllocs := int64(math.MaxInt64)
+		bestAllocs := float64(math.MaxInt64)
 		for _, r := range g.variants {
-			if r.allocsOp < bestAllocs {
-				bestAllocs = r.allocsOp
+			if float64(r.allocsOp) < bestAllocs {
+				bestAllocs = float64(r.allocsOp)
 			}
 		}
 		row := fmt.Sprintf("| %s |", g.name)
@@ -196,13 +191,8 @@ func main() {
 				row += " - |"
 			}
 		}
-		if len(variants) > 1 && baseAllocs > 0 {
-			if baseAllocs == bestAllocs {
-				row += " **fewest** |"
-			} else {
-				ratio := float64(baseAllocs) / float64(bestAllocs)
-				row += fmt.Sprintf(" %.1fx more |", ratio)
-			}
+		if len(variants) > 1 {
+			row += " " + ratioVsBest(baseAllocs, bestAllocs, "fewer", "more") + " |"
 		}
 		fmt.Println(row)
 	}
@@ -227,14 +217,14 @@ func main() {
 
 	for _, gName := range groupOrder {
 		g := groupMap[gName]
-		baseBop := int64(0)
+		baseBop := float64(0)
 		if br, ok := g.variants[*baseline]; ok {
-			baseBop = br.bOp
+			baseBop = float64(br.bOp)
 		}
-		bestBop := int64(math.MaxInt64)
+		bestBop := float64(math.MaxInt64)
 		for _, r := range g.variants {
-			if r.bOp < bestBop {
-				bestBop = r.bOp
+			if float64(r.bOp) < bestBop {
+				bestBop = float64(r.bOp)
 			}
 		}
 		row := fmt.Sprintf("| %s |", g.name)
@@ -245,17 +235,28 @@ func main() {
 				row += " - |"
 			}
 		}
-		if len(variants) > 1 && baseBop > 0 {
-			if baseBop == bestBop {
-				row += " **least** |"
-			} else {
-				ratio := float64(baseBop) / float64(bestBop)
-				row += fmt.Sprintf(" %.1fx more |", ratio)
-			}
+		if len(variants) > 1 {
+			row += " " + ratioVsBest(baseBop, bestBop, "less", "more") + " |"
 		}
 		fmt.Println(row)
 	}
 	fmt.Println()
+}
+
+func ratioVsBest(value, best float64, winWord, loseWord string) string {
+	if best <= 0 {
+		return "-"
+	}
+	if value == best {
+		return "**best**"
+	}
+	if value < best {
+		// We're better than "best" (shouldn't happen, but handle it)
+		ratio := best / value
+		return fmt.Sprintf("**%.1fx %s**", ratio, winWord)
+	}
+	ratio := value / best
+	return fmt.Sprintf("%.1fx %s", ratio, loseWord)
 }
 
 func formatNs(ns float64) string {

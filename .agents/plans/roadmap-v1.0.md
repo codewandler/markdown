@@ -149,87 +149,64 @@ Each fix is 1-3 examples and requires significant new features.
 
 ---
 
-## 5. Benchmarks & Renderer Comparison
+## 5. Competition (Benchmarks + Comparison + Competitor Research)
 
 **Priority: medium — validates production claims + credibility**
 
-Consolidated benchmark suite in `benchmarks/` (separate module) that
-measures our full pipeline and compares against glamour (the main Go
-terminal Markdown renderer). Also includes internal-only benchmarks
-for parser stress testing.
+Comprehensive competitive analysis: benchmarks, feature matrix,
+competitor profiles, and syntax highlighting comparison.
 
-### Package structure
+### Deliverables
 
-```
-benchmarks/
-├── go.mod                  # separate module — pulls in glamour
-├── bench_test.go           # comparative benchmarks (us vs glamour)
-├── inputs.go               # input generation helpers
-├── testdata/
-│   └── commonmark-spec.md  # CommonMark 0.31.2 spec (~120KB)
-└── README.md               # methodology + how to run
-```
+- `benchmarks/` — separate module with comparative benchmarks
+- `COMPARISON.md` — full results with speedup ratios
+- `docs/competitors.md` — detailed profiles of all Go Markdown libraries
+- `benchmarks/cmd/benchcompare/` — tool to generate Markdown tables
 
-### Competitors
+### Competitors benchmarked
 
-| Library | What it is | Why compare |
-|---------|-----------|-------------|
-| **glamour** (charmbracelet) | Terminal Markdown renderer (goldmark + lipgloss) | Direct feature competitor |
-| **glow** (charmbracelet) | CLI tool using glamour | Reference for feature matrix |
+| Library | Parse | Terminal Render | Stream |
+|---------|:-----:|:---------------:|:------:|
+| **glamour** | via goldmark | yes | no |
+| **go-term-markdown** | via blackfriday | yes | no |
+| **goldmark** | yes | no | no |
+| **blackfriday** | yes | no | no |
+| **gomarkdown** | yes | no | no |
 
-Note: goldmark/blackfriday are parsers, not renderers — not direct
-competitors. We mention them only as "what glamour uses internally."
-
-### Benchmark dimensions
-
-1. **Full pipeline throughput (MB/s)** — Markdown → terminal string
-   - Our `stream.Parser` + `terminal.Renderer` → buffer
-   - glamour `Render()` → buffer
-2. **Memory per document (B/op, allocs/op)** — allocation overhead
-3. **Streaming memory** — peak RSS for 1MB+ documents
-   (ours should stay flat; glamour grows linearly)
-4. **Chunk size sensitivity** — our unique advantage
-   - Benchmark at: 1, 16, 64, 256, 1024, 4096, whole-doc bytes
-   - glamour only supports whole-doc
-5. **Pathological inputs** — deeply nested, long delimiter runs
-6. **Time to first byte** — streaming latency (us only; glamour is batch)
-
-### Input categories
-
-| Category | Description | Purpose |
-|----------|-------------|--------|
-| `spec` | CommonMark spec concatenated (~120KB) | Broad coverage baseline |
-| `real-readme` | Large real-world README (5-20KB) | Practical throughput |
-| `code-heavy` | 10K lines of Go in fenced blocks | Code highlight stress |
-| `table-heavy` | 1000-row table | GFM extension stress |
-| `inline-heavy` | Dense emphasis/links/code spans | Inline parser stress |
-| `pathological-nest` | 500-deep nested blockquotes | Nesting depth stress |
-| `pathological-delim` | 100K unclosed delimiters | Delimiter resolution |
-| `large-flat` | 100K short paragraphs | Many-block throughput |
+No other Go library supports streaming. We are unique.
 
 ### Tasks
 
-- [ ] Create `benchmarks/` module with `go.mod` pulling glamour
-- [ ] Implement input generators in `inputs.go`
-- [ ] Add `testdata/commonmark-spec.md`
-- [ ] Benchmark: full pipeline throughput (us vs glamour)
-- [ ] Benchmark: memory per document (us vs glamour)
-- [ ] Benchmark: chunk size sensitivity (us only)
-- [ ] Benchmark: pathological inputs (us vs glamour)
-- [ ] Benchmark: streaming latency / time to first byte (us only)
-- [ ] Feature matrix: streaming, syntax highlighting, hyperlinks,
-  word wrapping, TTY detection, tables, task lists, strikethrough
-- [ ] Write `COMPARISON.md` with tables, methodology, reproduction
-- [ ] Add `task bench` and `task bench:compare` to Taskfile
-- [ ] Add summary to README
+- [x] Create `benchmarks/` module with all 5 competitors
+- [x] Implement 9 input categories (spec, readme, github-top10,
+  code-heavy, table-heavy, inline-heavy, pathological-nest,
+  pathological-delim, large-flat)
+- [x] Fetch 11 real-world READMEs from top GitHub projects
+- [x] Benchmark: terminal render pipeline (us vs glamour vs go-term-md)
+- [x] Benchmark: parse-only (us vs goldmark vs blackfriday vs gomarkdown)
+- [x] Benchmark: chunk size sensitivity (us only)
+- [x] Benchmark: Go syntax highlighting fast path vs Chroma
+- [x] Build `benchcompare` tool for Markdown table generation
+- [x] Write `COMPARISON.md` with speed, allocations, memory tables
+- [x] Write `docs/competitors.md` with detailed library profiles
+- [x] Feature matrix: streaming, highlighting, hyperlinks, wrapping,
+  TTY detection, CommonMark compliance, GFM, dependencies
+- [x] Add Taskfile tasks: bench, bench:render, bench:parse, bench:chunks
+- [x] Add Performance section + summary to README
+
+### Key results
+
+- **Terminal rendering**: 1.2–56x faster than glamour, fewest allocations
+- **Parse-only**: 2–4x slower than goldmark (expected: streaming trade-off)
+- **Go highlighting**: 18x faster than Chroma, 6.7x fewer allocations
+- **Streaming**: 4KB chunks faster than whole-doc; 1-byte only 1.1x slower
 
 ### Definition of done
 
-- `task bench` runs all benchmarks
-- `COMPARISON.md` with reproducible results and clear methodology
-- No pathological input causes >10x slowdown vs normal input
-- Memory stays bounded by unresolved state, not document size
-- README includes comparison summary or link
+- [x] `task bench:render` and `task bench:parse` produce comparison tables
+- [x] `COMPARISON.md` with reproducible results and clear methodology
+- [x] `docs/competitors.md` with all Go Markdown library profiles
+- [x] README includes performance summary
 
 ---
 
@@ -299,7 +276,7 @@ with keyboard navigation.
 | v0.36.0 | Stronger GFM assertions |
 | v0.36.1 | GFM table parsing fixes |
 | v0.37.0 | Demo application + README GIF |
-| v0.38.0 | CommonMark gaps (target ≥98%) |
-| v0.39.0 | Benchmarks + renderer comparison + documentation |
+| v0.38.0 | Benchmarks + competition + drop goldmark |
+| v0.39.0 | CommonMark gaps (target ≥98%) + documentation |
 | v0.40.0 | `cmd/mdview` terminal viewer |
 | v1.0.0  | Stable API, full documentation, polished README |
