@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   439,
-		statusKnownGap:    149,
+		statusSupported:   450,
+		statusKnownGap:    138,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -690,6 +690,28 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	// Backslash escapes in link destinations and titles.
 	22: expectTextStyle("foo", InlineStyle{Link: "/bar*", LinkTitle: "ti*tle"}),
 	23: expectTextStyle("foo", InlineStyle{Link: "/bar*", LinkTitle: "ti*tle"}),
+	// Entity references in link destinations and titles.
+	32: expectTextStyle("foo", InlineStyle{Link: "/föö", LinkTitle: "föö"}),
+	33: expectTextStyle("foo", InlineStyle{Link: "/föö", LinkTitle: "föö"}),
+	41: expectParagraphText("[a](url \"tit\")"),
+	// Thematic break: setext heading takes precedence over thematic break.
+	59: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectHeadingLevels(2)(t, events)
+		expectParagraphText("bar")(t, events)
+	},
+	// Fenced code blocks — edge cases.
+	121: expectTextStyle("foo", InlineStyle{Code: true}),
+	127: expectBlocks(BlockFencedCode, 1),
+	138: expectTextStyle(" ", InlineStyle{Code: true}),
+	139: expectBlocks(BlockFencedCode, 1),
+	141: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectHeadingLevels(2, 1)(t, events)
+		expectBlocks(BlockFencedCode, 1)(t, events)
+	},
+	145: expectTextStyle("aa", InlineStyle{Code: true}),
+	146: expectBlocks(BlockFencedCode, 1),
 	// Link reference definitions — forward references and first-wins.
 	203: expectTextStyle("foo", InlineStyle{Link: "url"}),
 	204: expectTextStyle("foo", InlineStyle{Link: "first"}),
