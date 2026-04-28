@@ -79,17 +79,30 @@ strikethrough, autolinks, and fenced code highlighting.
 
 ## Conformance And Testing
 
-The repository uses the pinned CommonMark `0.31.2` corpus for parser split
-equivalence and supported/known-gap/unsupported accounting. The test suite also
-includes parser invariants, responsiveness checks, memory-retention checks, and
-renderer behavior tests.
+The parser passes **627 / 652** CommonMark 0.31.2 spec examples (96.2%) and
+**672 / 672** GFM 0.29 spec examples (100%). The test suite includes:
+
+- **Corpus classification** — supported / known-gap / unsupported accounting
+  for every CommonMark and GFM example.
+- **Split equivalence** — every corpus example is parsed at every possible
+  chunk boundary and verified to produce identical events.
+- **Event invariants** — balanced enter/exit blocks, correct nesting, no
+  orphan events.
+- **Fuzz testing** — three `testing.F` targets (`FuzzParser`,
+  `FuzzParserChunkBoundary`, `FuzzParserMultiChunk`) seeded with 1300+
+  corpus examples and 40+ pathological inputs.
+- **Responsiveness** — events are emitted at block boundaries, not deferred
+  until flush.
+- **Memory retention** — completed paragraphs and code lines are released
+  promptly.
 
 For local verification:
 
 ```bash
 go test ./stream
 go test ./terminal
-cd ../examples/stream-readme && go test ./...
+go test .
+cd examples/stream-readme && go test ./...
 ```
 
 ## Design Rules

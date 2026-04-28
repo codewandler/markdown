@@ -10,7 +10,7 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-04-28
+## [0.35.1] - 2026-04-28
 
 ### Added
 
@@ -43,6 +43,35 @@ match these entries as the project starts publishing releases.
   continuation before the blockquote could close. The blockquote now
   closes before list continuation is checked.
 
+## [0.35.0] - 2026-04-28
+
+### Changed
+
+- `RenderString` and `RenderToWriter` now accept variadic `RendererOption`
+  so callers can control ANSI mode (e.g. `WithAnsi(AnsiOn)` in tests).
+
+## [0.34.0] - 2026-04-28
+
+### Changed
+
+- Replaced `WithPlain(bool)` with `WithAnsi(AnsiMode)`. `AnsiMode` has
+  three explicit states: `AnsiAuto` (detect from writer, default),
+  `AnsiOn` (force ANSI colour), `AnsiOff` (force plain text).
+
+## [0.33.0] - 2026-04-28
+
+### Changed
+
+- Replaced `plainWriter` strip-after-the-fact approach with a `styler`
+  interface (`ansiStyler` / `plainStyler`) so ANSI escapes are never
+  generated in non-TTY mode.
+- Added `PlainHighlighter` no-op `CodeHighlighter` that skips Chroma in
+  plain mode.
+- `NewRenderer` auto-selects styler and highlighter pair based on
+  `isTerminal()`. `WithPlain(bool)` swaps both.
+- All styled text, block colour, border, and list marker emit sites now
+  route through `r.style` instead of raw ANSI constants.
+
 ## [0.32.0] - 2026-04-28
 
 ### Added
@@ -55,6 +84,11 @@ match these entries as the project starts publishing releases.
 - Added `plainWriter` internal wrapper that strips ANSI SGR sequences on
   the fly without modifying any rendering logic.
 - Added `isTerminal(w io.Writer) bool` helper in the terminal package.
+
+### Changed
+
+- Removed the empty `adapters/chroma` stub module (Chroma is now a direct
+  dependency of the main module).
 
 ## [0.31.0] - 2026-04-28
 

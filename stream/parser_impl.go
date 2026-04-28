@@ -1213,7 +1213,10 @@ func (p *parser) closeList(events *[]Event) {
 		p.drainPendingBlocks(events)
 		p.closeIndentedCode(events)
 		p.closeFencedCode(events)
-		if p.inBlockquote {
+		// Only close the blockquote if it was opened inside this
+		// list item. When the list is inside the blockquote, the
+		// blockquote is the outer container.
+		if p.inBlockquote && p.bqInsideListItem {
 			p.closeBlockquote(lineInfo{}, events)
 		}
 		p.inListItem = false
