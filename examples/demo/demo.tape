@@ -2,9 +2,10 @@
 # Install vhs: https://github.com/charmbracelet/vhs
 #
 # Usage:
-#   vhs examples/demo/demo.tape
+#   task demo:record
+#   # or: cd examples/demo && vhs demo.tape
 #
-# This produces demo.gif in the current directory.
+# This produces demo.gif in examples/demo/.
 
 Output demo.gif
 
@@ -17,6 +18,6 @@ Set Theme "Molokai"
 Set TypingSpeed 0ms
 
 # Start the demo with recording-optimized settings.
-Type "go run ./examples/demo --record --clear=false"
+Type "go run . --record --clear=false"
 Enter
-Sleep 18s
+Sleep 9s

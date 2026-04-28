@@ -36,7 +36,7 @@ func main() {
 	// Recording mode overrides chunk and delay for optimal GIF output.
 	if *record {
 		*chunk = 10
-		*delay = 25 * time.Millisecond
+		*delay = 12 * time.Millisecond
 	}
 	if *instant {
 		*delay = 0
