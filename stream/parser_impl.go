@@ -383,18 +383,68 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		}
 		if strings.TrimSpace(content) == "" {
 			p.closeParagraph(events)
+			p.closeIndentedCode(events)
 			return
 		}
 		inner := line
 		inner.text = content
+		// Route blockquote content through full block detection
+		// so that list items, fenced code, headings, etc. work
+		// inside blockquotes.
+		if p.fence.open {
+			if p.isClosingFence(inner.text) {
+				p.fence.open = false
+				*events = append(*events, Event{Kind: EventExitBlock, Block: BlockFencedCode, Span: Span{Start: inner.start, End: inner.end}})
+				return
+			}
+			*events = append(*events,
+				Event{Kind: EventText, Text: stripFenceIndent(inner.text, p.fence.indent), Span: Span{Start: inner.start, End: inner.end}},
+				Event{Kind: EventLineBreak, Span: Span{Start: inner.end, End: inner.end}},
+			)
+			return
+		}
+		if p.inIndented {
+			if indentedCode(inner.text) {
+				p.emitIndentedCodeLine(inner, events)
+				return
+			}
+			p.closeIndentedCode(events)
+		}
+		if item, ok := listItem(inner.text); ok {
+			p.closeParagraph(events)
+			if !p.inList || p.listData.Ordered != item.data.Ordered || p.listData.Marker != item.data.Marker {
+				p.closeList(events)
+				p.inList = true
+				p.listData = listBlockData(item.data)
+				p.listLoose = false
+				data := p.listData
+				*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: inner.start, End: inner.end}})
+			}
+			p.closeListItem(events)
+			p.inListItem = true
+			p.listItemIndent = item.contentIndent
+			p.listItemBlankLine = false
+			data := item.data
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: inner.start, End: inner.end}})
+			if strings.TrimSpace(item.content) != "" {
+				ci := inner
+				ci.text = item.content
+				p.processListItemFirstLine(ci, events)
+			}
+			return
+		}
 		p.processNonContainerLine(inner, events)
 		return
 	}
 
 	if p.inBlockquote {
 		if len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
-			p.addParagraphLine(line)
-			return
+			if _, _, _, _, isFence := openingFence(line.text); !isFence {
+				if _, ok := listItem(line.text); !ok {
+					p.addParagraphLine(line)
+					return
+				}
+			}
 		}
 		p.closeBlockquote(line, events)
 	}
@@ -1008,6 +1058,8 @@ func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
 	}
 	p.closeParagraph(events)
 	p.drainPendingBlocks(events)
+	p.closeIndentedCode(events)
+	p.closeFencedCode(events)
 	p.inBlockquote = false
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
 }
