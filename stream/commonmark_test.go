@@ -38,8 +38,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported: 605,
-		statusKnownGap:  47,
+		statusSupported: 609,
+		statusKnownGap:  43,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -938,6 +938,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	189: expectBlocks(BlockHTML, 1),
 	190: expectBlocks(BlockHTML, 5),
 	191: expectBlocks(BlockHTML, 4, BlockIndentedCode, 1),
+	// HTML blocks recognized for backslash/entity examples.
+	21: expectBlocks(BlockHTML, 1),
+	31: expectBlocks(BlockHTML, 1),
+	// Sublist inside ordered list item.
+	109: expectBlocks(BlockList, 2, BlockListItem, 2, BlockParagraph, 2),
+	// Tab continuation with indented code.
+	5: expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 1, BlockIndentedCode, 1),
 	// Emphasis inside link text with inner emphasis.
 	419: func(t *testing.T, events []eventView) {
 		t.Helper()
