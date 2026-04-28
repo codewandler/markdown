@@ -77,6 +77,18 @@ func WithCodeBlockStyle(style CodeBlockStyle) RendererOption {
 	}
 }
 
+// WithCodeHighlighter configures fenced-code highlighting.
+//
+// Passing nil restores the dependency-free default highlighter.
+func WithCodeHighlighter(highlighter CodeHighlighter) RendererOption {
+	return func(r *Renderer) {
+		if highlighter == nil {
+			highlighter = NewDefaultHighlighter()
+		}
+		r.highlighter = highlighter
+	}
+}
+
 // DefaultCodeBlockStyle returns the default fenced-code block layout.
 func DefaultCodeBlockStyle() CodeBlockStyle {
 	return defaultCodeBlockStyle()
@@ -96,16 +108,6 @@ func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 		}
 	}
 	return r
-}
-
-// SetCodeHighlighter sets the renderer's fenced-code highlighter.
-//
-// Passing nil restores the dependency-free default highlighter.
-func (r *Renderer) SetCodeHighlighter(highlighter CodeHighlighter) {
-	if highlighter == nil {
-		highlighter = NewDefaultHighlighter()
-	}
-	r.highlighter = highlighter
 }
 
 // SetCodeBlockStyle changes fenced-code block layout.
@@ -174,8 +176,7 @@ func (r *Renderer) render(event stream.Event) error {
 	case stream.EventText:
 		return r.text(event)
 	case stream.EventSoftBreak:
-		_, err := fmt.Fprint(r.w, "\n")
-		r.lineStart = true
+		_, err := fmt.Fprint(r.w, " ")
 		return err
 	case stream.EventLineBreak:
 		_, err := fmt.Fprint(r.w, "\n")

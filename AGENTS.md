@@ -6,7 +6,7 @@ Repository guidance for Codex and other agents working in this workspace.
 
 - Repository: `github.com/codewandler/markdown`
 - Goal: production-ready streaming Markdown parsing and terminal rendering
-- Main packages: `stream`, `terminal`, `adapters/chroma`, `examples/stream-readme`
+- Main packages: `stream`, `terminal`, `examples/stream-readme`
 
 ## Working Rules
 
@@ -33,8 +33,8 @@ Repository guidance for Codex and other agents working in this workspace.
 - GFM support includes tables, task lists, strikethrough, and autolink
   literals.
 - Code blocks use Monokai-themed terminal styling.
-- `adapters/chroma` is an optional separate module for broader language
-  highlighting.
+- The terminal package includes the built-in Go fast path and a small generic
+  fallback for non-Go fenced code.
 
 ## Verification
 
@@ -45,10 +45,9 @@ env GOCACHE=/tmp/go-cache GOMODCACHE=/tmp/go-mod-cache go test ./stream
 env GOCACHE=/tmp/go-cache GOMODCACHE=/tmp/go-mod-cache go test ./terminal
 ```
 
-For the submodules:
+For the example module:
 
 ```bash
-cd adapters/chroma && env GOCACHE=/tmp/go-cache GOMODCACHE=/tmp/go-mod-cache go test ./...
 cd examples/stream-readme && env GOCACHE=/tmp/go-cache GOMODCACHE=/tmp/go-mod-cache go test ./...
 ```
 

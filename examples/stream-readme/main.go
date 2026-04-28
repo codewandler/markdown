@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	chromaadapter "github.com/codewandler/markdown/adapters/chroma"
 	"github.com/codewandler/markdown/stream"
 	"github.com/codewandler/markdown/terminal"
 )
@@ -41,8 +40,11 @@ func main() {
 	codeStyle.Border = *codeBorder
 	codeStyle.BorderText = *codeBorderText
 	codeStyle.Padding = *codePadding
-	renderer := terminal.NewRenderer(os.Stdout, terminal.WithCodeBlockStyle(codeStyle))
-	renderer.SetCodeHighlighter(chromaadapter.NewHybrid())
+	renderer := terminal.NewRenderer(
+		os.Stdout,
+		terminal.WithCodeBlockStyle(codeStyle),
+		terminal.WithCodeHighlighter(terminal.NewHybridHighlighter()),
+	)
 
 	for len(input) > 0 {
 		n := *chunkSize

@@ -50,20 +50,14 @@ render with a configurable left prefix, border, and padding.
 
 The renderer does not parse Markdown syntax. It only consumes parser events.
 That keeps table layout, list prefixes, blockquote prefixes, and ANSI styling
-local to presentation code.
-
-## Optional Highlighting Adapter
-
-`adapters/chroma` is an optional separate module that keeps broad language
-highlighting outside the core dependency graph. It keeps Go on the fast stdlib
-highlighting path and uses a generic fallback for other fences such as Rust and
-JavaScript.
+local to presentation code. The built-in highlighter keeps Go on the stdlib
+fast path and applies a small generic fallback for other fenced code languages
+such as Rust, JavaScript, Python, and shell.
 
 ## Packages
 
 - `stream`: incremental parser API and canonical event model.
 - `terminal`: terminal renderer over `stream.Event`.
-- `adapters/chroma`: optional code-highlighting adapter module.
 - `examples/stream-readme`: separate example module that uses local `replace`
   directives.
 
@@ -91,7 +85,6 @@ For local verification:
 ```bash
 go test ./stream
 go test ./terminal
-cd adapters/chroma && go test ./...
 cd ../examples/stream-readme && go test ./...
 ```
 

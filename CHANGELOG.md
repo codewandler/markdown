@@ -10,6 +10,14 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-04-28
+
+### Changed
+
+- Integrated non-Go fenced-code fallback highlighting into the core terminal
+  package and removed the separate highlighting module.
+- Updated the example module to use the terminal package directly.
+
 ## [0.25.0] - 2026-04-28
 
 ### Added
