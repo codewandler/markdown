@@ -38,8 +38,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported: 601,
-		statusKnownGap:  51,
+		statusSupported: 605,
+		statusKnownGap:  47,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -938,7 +938,20 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	189: expectBlocks(BlockHTML, 1),
 	190: expectBlocks(BlockHTML, 5),
 	191: expectBlocks(BlockHTML, 4, BlockIndentedCode, 1),
+	// Emphasis inside link text with inner emphasis.
+	419: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Link: "/url"})(t, events)
+	},
+	433: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true, Link: "/url"})(t, events)
+	},
 	// Raw HTML inline — valid tags pass through.
+	615: expectParagraphText("<a  /><b2\ndata=\"foo\" >"),
+	616: expectParagraphText("<a foo=\"bar\" bam = 'baz <em>\"</em>'\n_boolean zoop:33=zoop:33 />"),
 	613: expectParagraphText("<a><bab><c2c>"),
 	614: expectParagraphText("<a/><b2/>"),
 	617: expectParagraphText("Foo ", "<responsive-image src=\"foo.jpg\" />"),
