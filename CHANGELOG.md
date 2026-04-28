@@ -10,6 +10,30 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-04-29
+
+### Added
+
+- Added `docs/competitors.md` with detailed profiles of all Go Markdown
+  libraries: glamour, go-term-markdown, goldmark, blackfriday, gomarkdown,
+  streamd, plus non-Go streaming renderers for reference.
+- Added spec compliance tests (`benchmarks/compliance_test.go`) that run
+  CommonMark 0.31.2 and GFM 0.29 test suites against goldmark, blackfriday,
+  and gomarkdown, producing hard compliance numbers.
+- Added Go syntax highlighting benchmark: stdlib fast path is 18x faster
+  than Chroma with 6.7x fewer allocations.
+- Added `task bench:compliance` to Taskfile.
+- Added spec compliance table to `COMPARISON.md` with measured pass rates.
+
+### Changed
+
+- Rewrote `README.md` with evidence-backed claims: fastest Go terminal
+  renderer, only streaming option, 3-7x faster than glamour, 100% GFM,
+  18x faster Go highlighting. Every claim links to benchmark or test code.
+- Improved `benchcompare` tool output: "x faster"/"x slower", "x fewer"/
+  "x more" ratio columns with bold **best** markers.
+- Consolidated roadmap sections 5+8 into "Competition" (fully complete).
+
 ## [0.38.0] - 2026-04-29
 
 ### Added
