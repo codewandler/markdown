@@ -209,6 +209,24 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		}
 	}
 
+	// When inside a list item with an open fenced/indented code block,
+	// route through list item continuation so that indentation is
+	// interpreted relative to the item's content column.
+	if p.inListItem && (p.fence.open || p.inIndented) {
+		indent, _ := leadingIndent(line.text)
+		if indent >= p.listItemIndent || strings.TrimSpace(line.text) == "" {
+			inner := line
+			if strings.TrimSpace(line.text) != "" {
+				inner.text = stripIndent(line.text, p.listItemIndent)
+			}
+			p.processListItemContent(inner, events)
+			return
+		}
+		// Not enough indent — close the code block and fall through.
+		p.closeIndentedCode(events)
+		p.closeFencedCode(events)
+	}
+
 	if p.fence.open {
 		if p.isClosingFence(line.text) {
 			p.fence.open = false
@@ -295,6 +313,56 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	// been collected.
 	p.drainPendingBlocks(events)
 
+	// When inside a list item, check if the line is indented enough
+	// to be continuation content. This must come before blockquote
+	// and other container checks so that indented `>` markers inside
+	// list items are treated as list item content, not top-level
+	// blockquotes.
+	if p.inListItem && !p.fence.open && !p.inIndented {
+		indent, _ := leadingIndent(line.text)
+		// Unwind sublists that don't match.
+		for p.inListItem && indent < p.listItemIndent && len(p.listStack) > 0 {
+			p.closeParagraph(events)
+			p.drainPendingBlocks(events)
+			p.closeIndentedCode(events)
+			p.closeFencedCode(events)
+			p.inListItem = false
+			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
+			// Check for sibling in the sublist.
+			if item, ok := listItem(line.text); ok {
+				stripped := stripIndent(line.text, p.listStack[len(p.listStack)-1].listItemIndent)
+				if sItem, ok2 := listItem(stripped); ok2 && p.listData.Ordered == sItem.data.Ordered && p.listData.Marker == sItem.data.Marker {
+					_ = item
+					p.inListItem = true
+					p.listItemIndent = sItem.contentIndent
+					p.listItemBlankLine = false
+					data := sItem.data
+					*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
+					if strings.TrimSpace(sItem.content) != "" {
+						inner := line
+						inner.text = sItem.content
+						p.processListItemFirstLine(inner, events)
+					}
+					return
+				}
+			}
+			// Not a sibling — close the sublist.
+			p.inList = false
+			data := p.listData
+			data.Tight = !p.listLoose
+			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
+			p.listData = ListData{}
+			p.listLoose = false
+			p.popList()
+		}
+		if p.inListItem && indent >= p.listItemIndent {
+			inner := line
+			inner.text = stripIndent(line.text, p.listItemIndent)
+			p.processListItemContent(inner, events)
+			return
+		}
+	}
+
 	if content, ok := blockquoteContent(line.text); ok {
 		p.ensureDocument(events)
 		if !p.inBlockquote {
@@ -333,62 +401,6 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		p.closeList(events)
 		p.emitThematicBreak(line, events)
 		return
-	}
-
-	// When inside a list item, check if the line is indented enough
-	// to be continuation content (sublists, code, blockquotes, etc.).
-	// This must come before the top-level listItem check so that
-	// indented list markers are treated as sublists, not siblings.
-	// If the line doesn't fit the innermost item, close sublists
-	// until it fits an outer item or we run out of stack.
-	if p.inListItem {
-		indent, _ := leadingIndent(line.text)
-		// If the line doesn't fit the innermost sublist item,
-		// close sublist items until we find the right level.
-		// We close just the item (not the list) first, so that
-		// sibling items can be added to the same sublist.
-		if indent < p.listItemIndent && len(p.listStack) > 0 {
-			p.closeParagraph(events)
-			p.drainPendingBlocks(events)
-			// Close the sublist item but keep the sublist open.
-			p.closeIndentedCode(events)
-			p.closeFencedCode(events)
-			p.inListItem = false
-			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
-			// Now check: is this line a sibling in the current sublist?
-			if item, ok := listItem(line.text); ok {
-				stripped := stripIndent(line.text, p.listStack[len(p.listStack)-1].listItemIndent)
-				if sItem, ok2 := listItem(stripped); ok2 && p.listData.Ordered == sItem.data.Ordered && p.listData.Marker == sItem.data.Marker {
-					_ = item
-					// Sibling in the sublist.
-					p.inListItem = true
-					p.listItemIndent = sItem.contentIndent
-					p.listItemBlankLine = false
-					data := sItem.data
-					*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
-					if strings.TrimSpace(sItem.content) != "" {
-						inner := line
-						inner.text = sItem.content
-						p.processListItemFirstLine(inner, events)
-					}
-					return
-				}
-			}
-			// Not a sibling — close the sublist entirely and try outer.
-			p.inList = false
-			data := p.listData
-			data.Tight = !p.listLoose
-			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
-			p.listData = ListData{}
-			p.listLoose = false
-			p.popList()
-		}
-		if p.inListItem && indent >= p.listItemIndent {
-			inner := line
-			inner.text = stripIndent(line.text, p.listItemIndent)
-			p.processListItemContent(inner, events)
-			return
-		}
 	}
 
 	if item, ok := listItem(line.text); ok {
@@ -1108,6 +1120,7 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 	// Blockquote inside list item.
 	if content, ok := blockquoteContent(line.text); ok {
 		p.closeParagraph(events)
+		p.drainPendingBlocks(events)
 		if !p.inBlockquote {
 			p.inBlockquote = true
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})

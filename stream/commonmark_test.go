@@ -41,8 +41,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   524,
-		statusKnownGap:    64,
+		statusSupported:   530,
+		statusKnownGap:    58,
 		statusUnsupported: 64,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
@@ -931,6 +931,32 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	326: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectBlocks(BlockList, 3, BlockListItem, 6, BlockParagraph, 6)(t, events)
+	},
+	// List items with continuation: paragraph + code + blockquote.
+	254: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2, BlockIndentedCode, 1, BlockBlockquote, 1)(t, events)
+	},
+	263: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 3, BlockFencedCode, 1, BlockBlockquote, 1)(t, events)
+	},
+	286: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2, BlockIndentedCode, 1, BlockBlockquote, 1)(t, events)
+	},
+	287: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2, BlockIndentedCode, 1, BlockBlockquote, 1)(t, events)
+	},
+	288: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 1, BlockParagraph, 2, BlockIndentedCode, 1, BlockBlockquote, 1)(t, events)
+	},
+	// Blockquote inside list item.
+	320: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectBlocks(BlockList, 1, BlockListItem, 2, BlockParagraph, 3, BlockBlockquote, 1)(t, events)
 	},
 	// Fenced code inside list items.
 	318: expectBlocks(BlockList, 1, BlockListItem, 3, BlockFencedCode, 1, BlockParagraph, 2),
