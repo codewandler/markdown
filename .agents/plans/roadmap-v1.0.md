@@ -266,6 +266,60 @@ with keyboard navigation.
 
 ---
 
+## 8. Built-in Syntax Highlighters (Drop Chroma)
+
+**Priority: medium — reduce dependencies, improve performance**
+
+Extend the Go stdlib AST fast path approach to more languages. Each
+built-in highlighter replaces Chroma for that language, making it
+18x+ faster with zero external dependencies. Chroma remains as the
+fallback for languages without a built-in highlighter.
+
+### Approach
+
+The `HybridHighlighter` already dispatches Go to the fast path and
+everything else to Chroma. Adding a new language means:
+
+1. Write `highlightXxxLine(line string) string` in `terminal/highlight.go`
+2. Add the language to the `HybridHighlighter.HighlightLine` switch
+3. Add a benchmark in `benchmarks/bench_test.go` comparing fast path vs Chroma
+4. Verify output looks correct in the demo
+
+The highlighters don't need to be perfect — they need to handle
+keywords, strings, numbers, comments, and punctuation. Chroma handles
+edge cases for users who need pixel-perfect highlighting.
+
+### Languages (in priority order)
+
+| Language | Why | Complexity |
+|----------|-----|------------|
+| JSON | Config files, API responses, ubiquitous | Low — strings, numbers, booleans, null, punctuation |
+| YAML | Config files, Kubernetes, CI/CD | Low — keys, strings, comments, indentation |
+| TOML | Go config files (cargo, pyproject) | Low — keys, strings, numbers, comments, sections |
+| Bash/Shell | READMEs, CI scripts, examples | Medium — keywords, strings, comments, variables |
+| Python | Popular in AI/ML docs | Medium — keywords, strings, comments, decorators |
+| TypeScript | Web ecosystem | Medium — keywords, strings, types, comments |
+| Rust | Systems programming | Medium — keywords, lifetimes, macros, strings |
+| SQL | Database docs | Low — keywords, strings, comments |
+
+### Tasks
+
+- [ ] JSON highlighter (strings, numbers, booleans, null, braces)
+- [ ] YAML highlighter (keys, values, comments, anchors)
+- [ ] TOML highlighter (keys, values, comments, section headers)
+- [ ] Bash highlighter (keywords, strings, comments, variables, pipes)
+- [ ] Python highlighter (keywords, strings, comments, decorators)
+- [ ] Benchmark each new highlighter vs Chroma
+- [ ] Consider making Chroma an optional build tag so pure-stdlib
+  builds are possible
+
+### Definition of done
+
+- JSON, YAML, TOML have built-in highlighters
+- Each is benchmarked at 10x+ faster than Chroma
+- Chroma remains as fallback for unlisted languages
+- `go run ./examples/demo` renders all languages correctly
+
 ---
 
 ## Release Plan
@@ -279,4 +333,5 @@ with keyboard navigation.
 | v0.38.0 | Benchmarks + competition + drop goldmark |
 | v0.39.0 | CommonMark gaps (target ≥98%) + documentation |
 | v0.40.0 | `cmd/mdview` terminal viewer |
+| v0.41.0 | Built-in highlighters (JSON, YAML, TOML) |
 | v1.0.0  | Stable API, full documentation, polished README |
