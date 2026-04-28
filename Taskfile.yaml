@@ -3,12 +3,14 @@ version: "3"
 tasks:
   demo:
     desc: Run the streaming Markdown demo
-    cmd: go run ./examples/demo {{.CLI_ARGS}}
+    dir: examples/demo
+    cmd: go run . {{.CLI_ARGS}}
 
   demo:record:
     desc: Record the demo as a GIF using vhs
     deps: [demo:check-vhs]
-    cmd: vhs examples/demo/demo.tape
+    dir: examples/demo
+    cmd: vhs demo.tape
 
   demo:check-vhs:
     desc: Check that vhs is installed
