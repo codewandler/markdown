@@ -10,6 +10,17 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-04-28
+
+### Fixed
+
+- Fixed all event invariant violations (0 test failures across all packages).
+- Fixed `closeContainers` to close blockquote before list, resolving
+  phantom `list_item` exit events when lists are inside blockquotes.
+- Fixed `closeBlockquote` to properly close lists opened inside the
+  blockquote using `bqInsideListItem` flag to distinguish inner vs
+  outer lists.
+
 ## [0.28.0] - 2026-04-28
 
 ### Added
