@@ -1,0 +1,39 @@
+version: "3"
+
+tasks:
+  demo:
+    desc: Run the streaming Markdown demo
+    cmd: go run ./examples/demo {{.CLI_ARGS}}
+
+  demo:record:
+    desc: Record the demo as a GIF using vhs
+    deps: [demo:check-vhs]
+    cmd: vhs examples/demo/demo.tape
+
+  demo:check-vhs:
+    desc: Check that vhs is installed
+    internal: true
+    silent: true
+    preconditions:
+      - sh: command -v vhs
+        msg: "vhs is not installed. Install it: https://github.com/charmbracelet/vhs"
+
+  test:
+    desc: Run all tests
+    cmd: go test ./stream ./terminal .
+
+  test:stream:
+    desc: Run stream package tests
+    cmd: go test ./stream
+
+  test:terminal:
+    desc: Run terminal package tests
+    cmd: go test ./terminal
+
+  lint:
+    desc: Run go vet
+    cmd: go vet ./...
+
+  build:
+    desc: Build all packages
+    cmd: go build ./...
