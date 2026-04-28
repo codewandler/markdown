@@ -10,6 +10,41 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-04-29
+
+### Added
+
+- Added `benchmarks/` module with comparative benchmarks against 5
+  Go Markdown libraries: glamour, go-term-markdown, goldmark,
+  blackfriday, and gomarkdown.
+- Benchmarks cover 3 dimensions: parse-only, terminal render (parse +
+  render), and chunk size sensitivity (streaming, ours only).
+- 9 input categories: spec, readme, github-top10, code-heavy,
+  table-heavy, inline-heavy, pathological-nest, pathological-delim,
+  large-flat.
+- 11 real-world README files from top GitHub projects in
+  `benchmarks/testdata/github-top10/`.
+- Added `benchcompare` tool (`benchmarks/cmd/benchcompare/`) that
+  reads `go test -bench` output and generates Markdown comparison
+  tables with speedup ratios.
+- Added `COMPARISON.md` with full benchmark results, feature matrix,
+  and reproduction instructions.
+- Added Taskfile tasks: `bench`, `bench:compare`, `bench:chunks`,
+  `bench:render`, `bench:parse`.
+- Added Performance section to README with summary table.
+
+### Removed
+
+- Removed `buffer.go` and `buffer_test.go` — the legacy goldmark-based
+  Buffer type was unused.
+- Dropped `goldmark`, `testify`, and 5 transitive dependencies from
+  the main module. Dependencies: 7 -> 2 (chroma + regexp2).
+
+### Changed
+
+- Rewrote `markdown_test.go` to use stdlib assertions only.
+- Added Dependencies and Roadmap sections to README.
+
 ## [0.37.0] - 2026-04-28
 
 ### Added
