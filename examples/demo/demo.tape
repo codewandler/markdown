@@ -20,4 +20,4 @@ Set TypingSpeed 0ms
 # Start the demo with recording-optimized settings.
 Type "go run . --record --clear=false"
 Enter
-Sleep 18s
+Sleep 15s
