@@ -10,6 +10,68 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-04-28
+
+### Added
+
+- Expanded CommonMark corpus coverage from 307 to 616 supported examples
+  (94.5% pass rate, up from 47%).
+- Implemented the full CommonMark emphasis resolution algorithm with
+  rule-of-three checks and proper delimiter stack management.
+- Added forward link reference definition support via deferred paragraph
+  inline parsing (`pendingBlocks` mechanism).
+- Added recursive inline parsing in link text so emphasis, strong, code
+  spans, and nested links resolve correctly inside link labels.
+- Added inline raw HTML tag parsing (open/close tags, comments, processing
+  instructions, declarations, CDATA) per CommonMark spec section 6.6.
+- Added HTML block detection for all 7 CommonMark block types with proper
+  start and end conditions.
+- Added list item continuation after blank lines with content indent
+  tracking and proper loose/tight list detection.
+- Added sublist nesting with push/pop list stack for arbitrarily deep
+  nested lists.
+- Added block-level content inside list items: fenced code, indented code,
+  blockquotes, headings, sublists, and link reference definitions.
+- Added lists inside blockquotes.
+- Added Unicode case fold (U+1E9E sharp S) for reference label matching.
+- Added strict link label validation rejecting unescaped brackets.
+- Added nested link rejection (links cannot contain other links; images
+  can contain links).
+- Added `StreamRenderer` convenience type implementing `io.Writer` for
+  streaming Markdown input to terminal output.
+- Added terminal word-wrapping with configurable width and auto-detection.
+- Added OSC 8 clickable terminal hyperlinks for inline and reference links.
+- Added tight list rendering support (suppress blank lines between items).
+- Added indented code block rendering.
+- Added `WithWrapWidth` renderer option.
+- Updated `AGENTS.md` with CommonMark compliance process and architecture
+  notes.
+
+### Changed
+
+- Default terminal highlighter is now `HybridHighlighter` (Go fast path +
+  generic fallback).
+- Reference label normalization uses raw text without backslash unescaping
+  or entity decoding, matching the CommonMark spec.
+- Link reference definition title must be separated from destination by
+  whitespace.
+- Code spans, autolinks, and raw HTML tags take precedence over link
+  structure in `matchingBracketEnd`.
+- Failed `[` link openers now emit a single `[` as text and retry from
+  the next character, enabling `[[foo]]` shortcut references.
+- Blockquote lazy continuation no longer swallows fenced code openers or
+  list items.
+- Moved HTML blocks and Raw HTML from unsupported to known gap (all
+  CommonMark sections now tracked).
+
+### Fixed
+
+- Removed unused `kind`/`level` fields from `pendingBlock` struct.
+- Documented in-place filter invariant in `drainPendingBlocksEager`.
+- Fixed degenerate single-character-per-line wrapping when line prefix
+  exceeds wrap width in deeply nested containers.
+- Removed dead `hyperlink()` function.
+
 ## [0.26.0] - 2026-04-28
 
 ### Changed
