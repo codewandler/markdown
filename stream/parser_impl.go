@@ -238,29 +238,48 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	}
 
 	if p.fence.open {
-		if p.isClosingFence(line.text) {
-			p.fence.open = false
-			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockFencedCode, Span: Span{Start: line.start, End: line.end}})
+		// Inside a blockquote, non-> lines close the blockquote
+		// (and the fence inside it).
+		if p.inBlockquote {
+			if _, ok := blockquoteContent(line.text); !ok {
+				p.closeFencedCode(events)
+				p.closeBlockquote(line, events)
+				// Fall through to process the line normally.
+			} else {
+				p.processFenceLine(line, events)
+				return
+			}
+		} else {
+			p.processFenceLine(line, events)
 			return
 		}
-		p.ensureDocument(events)
-		*events = append(*events,
-			Event{Kind: EventText, Text: stripFenceIndent(line.text, p.fence.indent), Span: Span{Start: line.start, End: line.end}},
-			Event{Kind: EventLineBreak, Span: Span{Start: line.end, End: line.end}},
-		)
-		return
 	}
 
 	if p.inIndented {
-		if indentedCode(line.text) {
-			p.emitIndentedCodeLine(line, events)
-			return
+		// Inside a blockquote, non-> lines close the blockquote.
+		if p.inBlockquote {
+			if _, ok := blockquoteContent(line.text); !ok {
+				p.closeIndentedCode(events)
+				p.closeBlockquote(line, events)
+				// Fall through to process normally.
+			} else {
+				if indentedCode(line.text) {
+					p.emitIndentedCodeLine(line, events)
+					return
+				}
+				p.closeIndentedCode(events)
+			}
+		} else {
+			if indentedCode(line.text) {
+				p.emitIndentedCodeLine(line, events)
+				return
+			}
+			if strings.TrimSpace(line.text) == "" {
+				p.indentedBlankLines++
+				return
+			}
+			p.closeIndentedCode(events)
 		}
-		if strings.TrimSpace(line.text) == "" {
-			p.indentedBlankLines++
-			return
-		}
-		p.closeIndentedCode(events)
 	}
 
 	if p.refDef.active {
@@ -1093,6 +1112,19 @@ func (p *parser) closeListItem(events *[]Event) {
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
 }
 
+
+func (p *parser) processFenceLine(line lineInfo, events *[]Event) {
+	if p.isClosingFence(line.text) {
+		p.fence.open = false
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockFencedCode, Span: Span{Start: line.start, End: line.end}})
+		return
+	}
+	p.ensureDocument(events)
+	*events = append(*events,
+		Event{Kind: EventText, Text: stripFenceIndent(line.text, p.fence.indent), Span: Span{Start: line.start, End: line.end}},
+		Event{Kind: EventLineBreak, Span: Span{Start: line.end, End: line.end}},
+	)
+}
 
 func (p *parser) closeFencedCode(events *[]Event) {
 	if !p.fence.open {
