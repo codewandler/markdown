@@ -1,114 +1,121 @@
 # markdown
 
-Streaming Markdown parsing and rendering primitives for Codewandler projects.
+Streaming Markdown parsing and terminal rendering in Go. Parse
+incrementally, render immediately, keep memory bounded.
 
-This module is a rewrite of the streaming Markdown model. It owns its own
-parser and renderer architecture instead of cloning `agentsdk/markdown`.
-
-## What It Does
-
-The core pipeline is:
+<!-- TODO: replace with recorded GIF once vhs capture is done -->
+<!-- ![demo](examples/demo/demo.gif) -->
 
 ```text
-incoming chunks
-  -> stream.Parser
-  -> append-only parser events
-  -> renderer-specific lowering
-  -> terminal output
+chunks --> stream.Parser --> events --> terminal.Renderer --> output
 ```
 
-The parser emits Markdown structure, not terminal layout. The terminal
-renderer consumes those events and owns presentation details such as spacing,
-indentation, borders, colors, and code highlighting.
+## Demo
 
-## Supported Surface
+See the streaming renderer in action:
 
-The supported product path is terminal-first and CommonMark-aware, with GFM
-extensions where they fit the incremental model.
+```bash
+# Stream the built-in showcase
+go run ./examples/demo
 
-Supported blocks and inlines include:
+# Stream any Markdown file
+go run ./examples/demo README.md
 
-- ATX headings
-- paragraphs and soft line breaks
-- thematic breaks
-- fenced code and indented code
-- blockquotes
-- ordered and unordered lists
-- pipe tables with alignment metadata
-- paragraph-boundary inline parsing
-- links, references, images, code spans, emphasis, and strong emphasis
-- GFM task lists, strikethrough, and autolink literals
+# Tune the streaming effect
+go run ./examples/demo --chunk 10 --delay 30ms
 
-Unsupported Markdown is handled intentionally and should remain stable under
-split input and `Flush`.
+# Render instantly
+go run ./examples/demo --instant
+```
 
-## Terminal Renderer
+## Features
 
-The terminal renderer stays low-level and dependency-light. It uses Monokai as
-the default palette for Markdown structure and code fences. Fenced code blocks
-render with a configurable left prefix, border, and padding.
-
-Inline and reference links render as OSC 8 terminal hyperlinks. When the
-renderer can determine a terminal width, it wraps visible text itself so
-hyperlinks remain clickable across physical line breaks.
-
-The renderer does not parse Markdown syntax. It only consumes parser events.
-That keeps table layout, list prefixes, blockquote prefixes, and ANSI styling
-local to presentation code. The built-in default highlighter keeps Go on the
-stdlib fast path and applies a small generic fallback for other fenced code
-languages such as Rust, JavaScript, Python, and shell.
+| Feature            | Status    | Notes                          |
+| ------------------ | --------- | ------------------------------ |
+| ATX headings       | supported | levels 1-6                     |
+| Paragraphs         | supported | soft wraps, hard breaks        |
+| Fenced code        | supported | Go fast path + Chroma fallback |
+| Indented code      | supported | 4-space blocks                 |
+| Tables             | supported | alignment, pipe-less rows      |
+| Task lists         | supported | checked and unchecked items    |
+| Blockquotes        | supported | nested, lazy continuation      |
+| Ordered lists      | supported | start number, marker changes   |
+| Unordered lists    | supported | nested sublists                |
+| Emphasis / strong  | supported | `*` and `_` delimiters         |
+| ~~Strikethrough~~  | supported | GFM extension                  |
+| `Code spans`       | supported | backtick runs                  |
+| Links              | supported | inline, reference, autolinks   |
+| Images             | supported | alt text as link               |
+| Thematic breaks    | supported | `---`, `***`, `___`            |
+| Setext headings    | supported | `=` and `-` underlines         |
+| HTML blocks        | supported | all 7 CommonMark types         |
 
 ## Packages
 
-- `stream`: incremental parser API and canonical event model.
-- `terminal`: terminal renderer over `stream.Event`.
-- `examples/stream-readme`: separate example module that uses local `replace`
-  directives.
+- **`stream`** — incremental parser, append-only event model
+- **`terminal`** — terminal renderer over `stream.Event`
+- **`examples/demo`** — streaming showcase with recording support
+- **`examples/stream-readme`** — minimal streaming example
 
-## Example
+## Quick Start
 
-Run the streaming README example with chunked input:
+```go
+package main
 
-```bash
-cd examples/stream-readme
-go run . -chunk 32 -delay 20ms
+import (
+    "os"
+    "github.com/codewandler/markdown/terminal"
+)
+
+func main() {
+    r := terminal.NewStreamRenderer(os.Stdout)
+    r.Write([]byte("# Hello\n\nThis is **streaming** Markdown.\n"))
+    r.Flush()
+}
 ```
 
-The example demonstrates streaming rendering, table output, task lists,
-strikethrough, autolinks, and fenced code highlighting.
+## Terminal Renderer
 
-## Conformance And Testing
+The renderer uses a Monokai-inspired palette with configurable code block
+borders, padding, and indentation. Key features:
 
-The parser passes **627 / 652** CommonMark 0.31.2 spec examples (96.2%) and
-**672 / 672** GFM 0.29 spec examples (100%). The test suite includes:
+- **Syntax highlighting** — Go via stdlib AST (fast path), other languages
+  via Chroma with 24-bit truecolor
+- **OSC 8 hyperlinks** — inline and reference links are clickable in
+  supported terminals
+- **Word wrapping** — auto-detected terminal width, configurable via
+  `WithWrapWidth`
+- **TTY detection** — ANSI escapes are stripped automatically when output
+  is piped or redirected
 
-- **Corpus classification** — supported / known-gap / unsupported accounting
-  for every CommonMark and GFM example.
-- **Split equivalence** — every corpus example is parsed at every possible
-  chunk boundary and verified to produce identical events.
-- **Event invariants** — balanced enter/exit blocks, correct nesting, no
-  orphan events.
-- **Fuzz testing** — three `testing.F` targets (`FuzzParser`,
-  `FuzzParserChunkBoundary`, `FuzzParserMultiChunk`) seeded with 1300+
-  corpus examples and 40+ pathological inputs.
-- **Responsiveness** — events are emitted at block boundaries, not deferred
-  until flush.
-- **Memory retention** — completed paragraphs and code lines are released
-  promptly.
+The renderer never parses Markdown syntax. It only consumes parser events.
 
-For local verification:
+## Conformance
+
+| Spec              | Pass Rate | Examples |
+| ----------------- | --------- | -------- |
+| CommonMark 0.31.2 | **96.2%** | 627/652  |
+| GFM 0.29          | **100%**  | 672/672  |
+
+The test suite includes:
+
+- **Corpus classification** — every CommonMark and GFM example tracked
+- **Split equivalence** — every example parsed at every chunk boundary
+- **Structural assertions** — 627 CommonMark + 24 GFM extension examples
+  verified for block structure, inline styles, and text content
+- **Event invariants** — balanced enter/exit, correct nesting
+- **Fuzz testing** — 3 `testing.F` targets, 1300+ seeds, 40+ pathological
+  inputs
+- **Memory retention** — completed blocks released promptly
 
 ```bash
-go test ./stream
-go test ./terminal
-go test .
-cd examples/stream-readme && go test ./...
+go test ./stream ./terminal .
 ```
 
 ## Design Rules
 
-- Keep the parser append-only.
-- Keep renderer layout out of parser events.
-- Keep memory bounded by unresolved state, not whole-document reparsing.
-- Keep HTML rendering out of the terminal product path.
-- Prefer explicit tests and corpus fixtures over heuristic behavior.
+1. Parser is **append-only** — no backtracking or re-parsing
+2. Events emit at **block boundaries** — not deferred until flush
+3. Memory bounded by **unresolved state** — not document size
+4. Renderer **never parses** Markdown syntax
+5. Terminal rendering is the **first-class output path**

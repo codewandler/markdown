@@ -98,22 +98,22 @@ the terminal output as an animated GIF/video for the README.
 
 ### Tasks
 
-- [ ] Create `examples/demo/` with a curated set of small Markdown
-      snippets covering: headings, emphasis, code blocks (Go, Rust, JS),
-      lists (nested, task lists), blockquotes, tables, links, images,
-      thematic breaks, HTML blocks
-- [ ] Build `examples/demo/main.go` that:
-  - Reads snippets from embedded files or a single demo.md
-  - Renders each snippet with a visible separator and title
-  - Uses `StreamRenderer` with configurable chunk size and delay
-  - Supports `--delay` flag for streaming effect (default 30ms)
-  - Supports `--chunk` flag for chunk size (default 16 bytes)
-  - Clears screen between snippets or renders sequentially
-- [ ] Add a `--record` mode or document how to record with `asciinema`
-      or `vhs` (charmbracelet/vhs)
+- [x] Create `examples/demo/` with curated `demo.md` covering: headings,
+      emphasis, code blocks (Go, Rust, bash), lists (nested, task lists),
+      blockquotes, tables, links, autolinks, thematic breaks, strikethrough
+- [x] Build `examples/demo/main.go` with:
+  - Embedded `demo.md` via `go:embed`
+  - `--delay` flag (default 20ms)
+  - `--chunk` flag (default 16 bytes)
+  - `--record` flag (optimized: chunk=10, delay=25ms)
+  - `--instant` flag (no streaming delay)
+  - `--width` flag (wrap width override)
+  - `--clear` flag (clear screen, default true)
+  - File argument support for custom Markdown
+- [x] Add `demo.tape` for vhs recording
 - [ ] Record a ~15-second terminal session showing streaming rendering
 - [ ] Convert to GIF for README embedding
-- [ ] Update README.md with the GIF and current feature/compliance stats
+- [x] Update README.md with demo section and current compliance stats
 
 ### Definition of done
 

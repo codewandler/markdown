@@ -10,6 +10,21 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-04-28
+
+### Added
+
+- Added `examples/demo/` showcase application with embedded `demo.md`
+  demonstrating headings, tables, task lists, blockquotes, fenced code
+  (Go, Rust, bash), inline styles, strikethrough, links, autolinks,
+  and thematic breaks.
+- Demo CLI supports `--chunk`, `--delay`, `--record`, `--instant`,
+  `--width`, and `--clear` flags for tuning the streaming effect.
+- Added `demo.tape` for reproducible terminal recording with
+  [vhs](https://github.com/charmbracelet/vhs).
+- Rewrote `README.md` with feature table, compliance stats, quick start
+  example, demo instructions, and architecture overview.
+
 ## [0.36.1] - 2026-04-28
 
 ### Fixed
