@@ -14,6 +14,7 @@ type eventView struct {
 	Level int
 	Info  string
 	List  *ListData
+	Table *TableData
 }
 
 func TestParserBlocks(t *testing.T) {
@@ -117,6 +118,38 @@ func TestParserBlocks(t *testing.T) {
 				{Kind: EventExitBlock, Block: BlockDocument},
 			},
 		},
+		{
+			name: "table",
+			in:   "| a | b | c |\n|:---|:---:|---:|\n| 1 | 2 | 3 |\n",
+			want: []eventView{
+				{Kind: EventEnterBlock, Block: BlockDocument},
+				{Kind: EventEnterBlock, Block: BlockTable, Table: &TableData{Align: []TableAlign{TableAlignLeft, TableAlignCenter, TableAlignRight}}},
+				{Kind: EventEnterBlock, Block: BlockTableRow},
+				{Kind: EventEnterBlock, Block: BlockTableCell},
+				{Kind: EventText, Text: "a"},
+				{Kind: EventExitBlock, Block: BlockTableCell},
+				{Kind: EventEnterBlock, Block: BlockTableCell},
+				{Kind: EventText, Text: "b"},
+				{Kind: EventExitBlock, Block: BlockTableCell},
+				{Kind: EventEnterBlock, Block: BlockTableCell},
+				{Kind: EventText, Text: "c"},
+				{Kind: EventExitBlock, Block: BlockTableCell},
+				{Kind: EventExitBlock, Block: BlockTableRow},
+				{Kind: EventEnterBlock, Block: BlockTableRow},
+				{Kind: EventEnterBlock, Block: BlockTableCell},
+				{Kind: EventText, Text: "1"},
+				{Kind: EventExitBlock, Block: BlockTableCell},
+				{Kind: EventEnterBlock, Block: BlockTableCell},
+				{Kind: EventText, Text: "2"},
+				{Kind: EventExitBlock, Block: BlockTableCell},
+				{Kind: EventEnterBlock, Block: BlockTableCell},
+				{Kind: EventText, Text: "3"},
+				{Kind: EventExitBlock, Block: BlockTableCell},
+				{Kind: EventExitBlock, Block: BlockTableRow},
+				{Kind: EventExitBlock, Block: BlockTable, Table: &TableData{Align: []TableAlign{TableAlignLeft, TableAlignCenter, TableAlignRight}}},
+				{Kind: EventExitBlock, Block: BlockDocument},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -171,6 +204,39 @@ func TestInlineSubset(t *testing.T) {
 	assertContains(t, got, eventView{Kind: EventText, Text: "strong", Style: InlineStyle{Strong: true}})
 	assertContains(t, got, eventView{Kind: EventText, Text: "code", Style: InlineStyle{Code: true}})
 	assertContains(t, got, eventView{Kind: EventText, Text: "link", Style: InlineStyle{Link: "https://example.com"}})
+}
+
+func TestTaskListSubset(t *testing.T) {
+	events := viewEvents(parseAll(t, "- [ ] todo\n- [x] done\n1. [X] ordered\n"))
+	assertContains(t, events, eventView{Kind: EventEnterBlock, Block: BlockListItem, List: &ListData{Marker: "-", Tight: true, Task: true, Checked: false}})
+	assertContains(t, events, eventView{Kind: EventEnterBlock, Block: BlockListItem, List: &ListData{Marker: "-", Tight: true, Task: true, Checked: true}})
+	assertContains(t, events, eventView{Kind: EventEnterBlock, Block: BlockListItem, List: &ListData{Ordered: true, Start: 1, Marker: ".", Tight: true, Task: true, Checked: true}})
+	assertContains(t, events, eventView{Kind: EventText, Text: "todo"})
+	assertContains(t, events, eventView{Kind: EventText, Text: "done"})
+	assertContains(t, events, eventView{Kind: EventText, Text: "ordered"})
+}
+
+func TestGFMInlineExtensions(t *testing.T) {
+	events := viewEvents(parseAll(t, "~~gone~~ https://example.com, www.example.org/path and foo@bar.example.com.\n"))
+	assertContains(t, events, eventView{Kind: EventText, Text: "gone", Style: InlineStyle{Strike: true}})
+	assertContains(t, events, eventView{Kind: EventText, Text: "https://example.com", Style: InlineStyle{Link: "https://example.com"}})
+	assertContains(t, events, eventView{Kind: EventText, Text: "www.example.org/path", Style: InlineStyle{Link: "http://www.example.org/path"}})
+	assertContains(t, events, eventView{Kind: EventText, Text: "foo@bar.example.com", Style: InlineStyle{Link: "mailto:foo@bar.example.com"}})
+}
+
+func TestImageSubset(t *testing.T) {
+	inline := parseAll(t, "![foo](https://example.com/logo.png)\n")
+	got := viewEvents(inline)
+	assertContains(t, got, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "https://example.com/logo.png"}})
+	ref := parseAll(t, "[bar]: /bar.png\n\n![bar]\n")
+	got = viewEvents(ref)
+	assertContains(t, got, eventView{Kind: EventText, Text: "bar", Style: InlineStyle{Link: "/bar.png"}})
+}
+
+func TestEscapedImageStartsAsText(t *testing.T) {
+	events := parseAll(t, "\\![foo]\n")
+	got := viewEvents(events)
+	assertContains(t, got, eventView{Kind: EventText, Text: "![foo]"})
 }
 
 func TestEmphasisSubset(t *testing.T) {
@@ -271,6 +337,14 @@ func viewEvents(events []Event) []eventView {
 			cp := *ev.List
 			data = &cp
 		}
+		var table *TableData
+		if ev.Table != nil {
+			cp := *ev.Table
+			if cp.Align != nil {
+				cp.Align = append([]TableAlign(nil), cp.Align...)
+			}
+			table = &cp
+		}
 		out = append(out, eventView{
 			Kind:  ev.Kind,
 			Block: ev.Block,
@@ -279,6 +353,7 @@ func viewEvents(events []Event) []eventView {
 			Level: ev.Level,
 			Info:  ev.Info,
 			List:  data,
+			Table: table,
 		})
 	}
 	return out

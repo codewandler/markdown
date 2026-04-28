@@ -41,9 +41,9 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no unsupported examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported:   285,
-		statusKnownGap:    161,
-		statusUnsupported: 206,
+		statusSupported:   307,
+		statusKnownGap:    174,
+		statusUnsupported: 171,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -135,6 +135,7 @@ func classifyCommonMarkExample(ex commonmarktests.Example) corpusStatus {
 		"Backslash escapes",
 		"Blank lines",
 		"Block quotes",
+		"Images",
 		"Code spans",
 		"Entity and numeric character references",
 		"Fenced code blocks",
@@ -296,6 +297,10 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	355: expectTextStyle("bar", InlineStyle{Emphasis: true}),
 	357: expectTextStyle("foo bar", InlineStyle{Emphasis: true}),
 	364: expectTextStyle("(bar)", InlineStyle{Emphasis: true}),
+	356: expectTextStyle("6", InlineStyle{Emphasis: true}),
+	370: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	376: expectTextStyle("foo_bar_baz", InlineStyle{Emphasis: true}),
+	377: expectTextStyle("(bar)", InlineStyle{Emphasis: true}),
 	378: expectTextStyle("foo bar", InlineStyle{Strong: true}),
 	381: expectTextStyle("bar", InlineStyle{Strong: true}),
 	382: expectTextStyle("foo bar", InlineStyle{Strong: true}),
@@ -309,6 +314,15 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	},
 	396: expectTextStyle("foo", InlineStyle{Strong: true}),
 	399: expectTextStyle("foo", InlineStyle{Emphasis: true, Strong: true}),
+	460: expectTextStyle("foo", InlineStyle{Strong: true}),
+	461: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	462: expectTextStyle("foo", InlineStyle{Strong: true}),
+	463: expectTextStyle("foo", InlineStyle{Emphasis: true}),
+	464: expectTextStyle("foo", InlineStyle{Strong: true}),
+	465: expectTextStyle("foo", InlineStyle{Strong: true}),
+	466: expectTextStyle("foo", InlineStyle{Strong: true}),
+	467: expectTextStyle("foo", InlineStyle{Emphasis: true, Strong: true}),
+	468: expectTextStyle("foo", InlineStyle{Emphasis: true, Strong: true}),
 	209: expectParagraphText("[foo]: /url \"title\" ok"),
 	210: expectParagraphText("\"title\" ok"),
 	211: expectBlocks(BlockIndentedCode, 1, BlockParagraph, 1),
@@ -419,6 +433,18 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	510: expectTextStyle("link", InlineStyle{Link: "/uri", LinkTitle: "title"}),
 	511: expectParagraphText("[link] (/uri)"),
 	512: expectTextStyle("link [foo [bar]]", InlineStyle{Link: "/uri"}),
+	638: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true})(t, events)
+		expectLineBreaks(1)(t, events)
+	},
+	639: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true})(t, events)
+		expectLineBreaks(1)(t, events)
+	},
 	594: expectTextStyle("http://foo.bar.baz", InlineStyle{Link: "http://foo.bar.baz"}),
 	595: expectTextStyle("https://foo.bar.baz/test?q=hello&id=22&boolean", InlineStyle{Link: "https://foo.bar.baz/test?q=hello&id=22&boolean"}),
 	596: expectTextStyle("irc://foo.bar:2233/baz", InlineStyle{Link: "irc://foo.bar:2233/baz"}),
@@ -454,6 +480,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	650: expectParagraphText("hello $.;'there"),
 	651: expectParagraphText("Foo χρῆν"),
 	652: expectParagraphText("Multiple     spaces"),
+	572: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	574: expectTextStyle("foo ![bar](/url)", InlineStyle{Link: "/url2"}),
+	575: expectTextStyle("foo [bar](/url)", InlineStyle{Link: "/url2"}),
+	578: expectTextStyle("foo", InlineStyle{Link: "train.jpg"}),
+	579: expectTextStyle("foo bar", InlineStyle{Link: "/path/to/train.jpg", LinkTitle: "title"}),
+	580: expectTextStyle("foo", InlineStyle{Link: "url"}),
+	581: expectTextStyle("", InlineStyle{Link: "/url"}),
 }
 
 func expectBlocks(pairs ...any) func(*testing.T, []eventView) {

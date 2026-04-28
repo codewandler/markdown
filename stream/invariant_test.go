@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/codewandler/markdown/internal/commonmarktests"
@@ -19,6 +20,7 @@ func TestParserEventInvariants(t *testing.T) {
 		{name: "unfinished fenced code", in: "```go\npackage main\n"},
 		{name: "list", in: "- one\n- two\n\n"},
 		{name: "blockquote", in: "> quote\n\n"},
+		{name: "table", in: "| a | b |\n| --- | :---: |\n| one | two |\n"},
 		{name: "thematic break", in: "---\n"},
 	}
 	for _, sample := range samples {
@@ -132,13 +134,15 @@ func equalEventViews(a, b []eventView) bool {
 	}
 	for i := range a {
 		if a[i] != b[i] {
-			if a[i].List == nil || b[i].List == nil {
+			if a[i].List == nil || b[i].List == nil || a[i].Table == nil || b[i].Table == nil {
 				return false
 			}
 			av, bv := *a[i].List, *b[i].List
+			at, bt := *a[i].Table, *b[i].Table
 			aa, bb := a[i], b[i]
 			aa.List, bb.List = nil, nil
-			if aa != bb || av != bv {
+			aa.Table, bb.Table = nil, nil
+			if aa != bb || av != bv || !reflect.DeepEqual(at, bt) {
 				return false
 			}
 		}

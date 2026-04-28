@@ -1,10 +1,10 @@
-# Chroma Adapter
+# Highlight Adapter
 
 Optional fenced-code highlighting for `github.com/codewandler/markdown`.
 
-This module adapts Chroma to the core terminal renderer's `CodeHighlighter`
-interface. It does not render Markdown and is intentionally kept outside the
-core module dependency graph.
+This module keeps the core Markdown module free of optional language
+highlighting dependencies. It implements the terminal renderer's
+`CodeHighlighter` interface and stays outside the core module dependency graph.
 
 ```go
 renderer := terminal.NewRenderer(os.Stdout)

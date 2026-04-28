@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"bytes"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -89,7 +88,68 @@ func TestRendererStructuredBlocks(t *testing.T) {
 	}
 }
 
-func stripANSI(s string) string {
-	re := regexp.MustCompile(`\x1b\[[0-9;:]*m`)
-	return re.ReplaceAllString(s, "")
+func TestRendererTaskListsAndStrike(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out)
+
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockList, List: &stream.ListData{Marker: "-", Tight: true}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockListItem, List: &stream.ListData{Marker: "-", Tight: true, Task: true, Checked: true}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventText, Text: "done", Style: stream.InlineStyle{Strike: true}},
+		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
+		{Kind: stream.EventExitBlock, Block: stream.BlockListItem},
+		{Kind: stream.EventExitBlock, Block: stream.BlockList},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+
+	raw := out.String()
+	if !strings.Contains(raw, "\x1b[9m") {
+		t.Fatalf("missing strikethrough escape: %q", raw)
+	}
+	visible := stripANSI(raw)
+	if !strings.Contains(visible, "- [x] done") {
+		t.Fatalf("missing task list output: %q", visible)
+	}
+}
+
+func TestRendererTables(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out)
+
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignLeft, stream.TableAlignCenter}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "alpha"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "beta"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "one"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "two"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+
+	visible := stripANSI(out.String())
+	for _, want := range []string{"alpha", "beta", "one", "two", "│"} {
+		if !strings.Contains(visible, want) {
+			t.Fatalf("missing %q in %q", want, visible)
+		}
+	}
+	if strings.Count(visible, "│") < 6 {
+		t.Fatalf("table borders too sparse: %q", visible)
+	}
 }
