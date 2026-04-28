@@ -1190,6 +1190,15 @@ func (p *parser) popList() {
 // same line. It checks for block-level constructs before falling back to
 // paragraph text.
 func (p *parser) processListItemFirstLine(line lineInfo, events *[]Event) {
+	// HTML block inside list item.
+	if htmlType, htmlEnd := detectHTMLBlockStart(line.text); htmlType > 0 {
+		p.inHTMLBlock = true
+		p.htmlBlockType = htmlType
+		p.htmlBlockEnd = htmlEnd
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHTML, Span: Span{Start: line.start, End: line.end}})
+		p.processHTMLBlockLine(line, events)
+		return
+	}
 	// Indented code block (4+ spaces of content indent).
 	if indentedCode(line.text) {
 		p.inIndented = true
@@ -1328,6 +1337,20 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 			}
 		}
 		p.closeBlockquote(line, events)
+	}
+
+	// HTML block inside list item continuation.
+	if htmlType, htmlEnd := detectHTMLBlockStart(line.text); htmlType > 0 {
+		if htmlType <= 6 || len(p.paragraph.lines) == 0 {
+			p.closeParagraph(events)
+			p.drainPendingBlocks(events)
+			p.inHTMLBlock = true
+			p.htmlBlockType = htmlType
+			p.htmlBlockEnd = htmlEnd
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHTML, Span: Span{Start: line.start, End: line.end}})
+			p.processHTMLBlockLine(line, events)
+			return
+		}
 	}
 
 	// Sublist inside list item.

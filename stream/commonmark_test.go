@@ -38,8 +38,8 @@ func TestCommonMarkCorpusClassification(t *testing.T) {
 		t.Fatal("CommonMark corpus has no known-gap examples")
 	}
 	wantCounts := map[corpusStatus]int{
-		statusSupported: 626,
-		statusKnownGap:  26,
+		statusSupported: 627,
+		statusKnownGap:  25,
 	}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("CommonMark corpus classification changed\nwant: %#v\n got: %#v", wantCounts, counts)
@@ -952,6 +952,8 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		t.Helper()
 		expectBlocks(BlockBlockquote, 2, BlockIndentedCode, 1, BlockParagraph, 1)(t, events)
 	},
+	// HTML block inside list item (type 6 consumes until blank line).
+	175: expectBlocks(BlockList, 1, BlockListItem, 1, BlockHTML, 1),
 	// Blockquote with non-> lines closing the blockquote.
 	236: expectBlocks(BlockBlockquote, 1, BlockIndentedCode, 2),
 	237: func(t *testing.T, events []eventView) {
