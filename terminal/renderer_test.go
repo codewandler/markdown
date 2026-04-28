@@ -11,7 +11,7 @@ import (
 
 func TestRendererDoesNotRenderFenceMarkers(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	err := renderer.Render([]stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "go"},
@@ -34,7 +34,7 @@ func TestRendererDoesNotRenderFenceMarkers(t *testing.T) {
 
 func TestRendererRendersIndentedCodeBlocks(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	err := renderer.Render([]stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockIndentedCode},
@@ -54,7 +54,7 @@ func TestRendererRendersIndentedCodeBlocks(t *testing.T) {
 
 func TestRendererConfiguresCodeBlockStyle(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false), WithCodeBlockStyle(CodeBlockStyle{
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn), WithCodeBlockStyle(CodeBlockStyle{
 		Indent:     2,
 		Border:     true,
 		BorderText: "#",
@@ -89,7 +89,7 @@ func (stubHighlighter) End() {}
 
 func TestRendererConfiguresCodeHighlighter(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false), WithCodeHighlighter(stubHighlighter{}))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn), WithCodeHighlighter(stubHighlighter{}))
 
 	err := renderer.Render([]stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "text"},
@@ -109,7 +109,7 @@ func TestRendererConfiguresCodeHighlighter(t *testing.T) {
 
 func TestStreamRendererWritesAndFlushes(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewStreamRenderer(&out, WithPlain(false), WithCodeHighlighter(stubHighlighter{}))
+	renderer := NewStreamRenderer(&out, WithAnsi(AnsiOn), WithCodeHighlighter(stubHighlighter{}))
 
 	if _, err := renderer.Write([]byte("```text\nhello")); err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func TestStreamRendererWritesAndFlushes(t *testing.T) {
 
 func TestStreamRendererRejectsWritesAfterFlush(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewStreamRenderer(&out, WithPlain(false))
+	renderer := NewStreamRenderer(&out, WithAnsi(AnsiOn))
 
 	if err := renderer.Flush(); err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestStreamRendererRejectsWritesAfterFlush(t *testing.T) {
 
 func TestRendererStructuredBlocks(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
@@ -173,7 +173,7 @@ func TestRendererStructuredBlocks(t *testing.T) {
 
 func TestRendererSoftBreakIsSpace(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
@@ -209,7 +209,7 @@ func TestHybridHighlighter(t *testing.T) {
 
 func TestRendererUsesHybridHighlighterByDefault(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	err := renderer.Render([]stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "rust"},
@@ -229,7 +229,7 @@ func TestRendererUsesHybridHighlighterByDefault(t *testing.T) {
 
 func TestRendererTaskListsAndStrike(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockList, List: &stream.ListData{Marker: "-", Tight: true}},
@@ -256,7 +256,7 @@ func TestRendererTaskListsAndStrike(t *testing.T) {
 
 func TestRendererEmitsClickableLinks(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
@@ -298,7 +298,7 @@ func TestRendererEmitsClickableLinks(t *testing.T) {
 
 func TestRendererDoesNotWrapShortTextAtLastSpace(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false), WithWrapWidth(80))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn), WithWrapWidth(80))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
@@ -317,7 +317,7 @@ func TestRendererDoesNotWrapShortTextAtLastSpace(t *testing.T) {
 
 func TestRendererWrapsClickableLinks(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false), WithWrapWidth(12))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn), WithWrapWidth(12))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
@@ -340,7 +340,7 @@ func TestRendererWrapsClickableLinks(t *testing.T) {
 
 func TestRendererTightListsStayCompact(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockList, List: &stream.ListData{Marker: "-", Tight: true}},
@@ -374,7 +374,7 @@ func TestRendererWrapDoesNotDegradeInDeepNesting(t *testing.T) {
 	// wrapWidth=10 with quoteDepth=6 means the prefix alone is 12 chars,
 	// exceeding the wrap budget. The renderer must emit the full text on
 	// one line rather than splitting it one rune at a time.
-	renderer := NewRenderer(&out, WithPlain(false), WithWrapWidth(10))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn), WithWrapWidth(10))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockBlockquote},
@@ -410,7 +410,7 @@ func TestRendererWrapDoesNotDegradeInDeepNesting(t *testing.T) {
 
 func TestRendererTables(t *testing.T) {
 	var out bytes.Buffer
-	renderer := NewRenderer(&out, WithPlain(false))
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn))
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignLeft, stream.TableAlignCenter}}},

@@ -790,16 +790,28 @@ func osc8Close() string {
 }
 
 
-// WithPlain forces plain-text mode (no ANSI escapes) regardless of TTY detection.
-// Pass false to force colour output even when the writer is not a TTY (useful in tests).
-func WithPlain(plain bool) RendererOption {
+// AnsiMode controls ANSI escape sequence emission.
+type AnsiMode int
+
+const (
+	AnsiAuto AnsiMode = iota // auto-detect from writer (default)
+	AnsiOn                   // force ANSI colour regardless of TTY
+	AnsiOff                  // force plain text regardless of TTY
+)
+
+// WithAnsi sets the ANSI mode for the renderer.
+// AnsiAuto (default) detects from the writer; AnsiOn forces colour;
+// AnsiOff forces plain. Use AnsiOn in tests that assert escape sequences.
+func WithAnsi(mode AnsiMode) RendererOption {
 	return func(r *Renderer) {
-		if plain {
-			r.style = plainStyler{}
-			r.highlighter = NewPlainHighlighter()
-		} else {
+		switch mode {
+		case AnsiOn:
 			r.style = ansiStyler{}
 			r.highlighter = NewHybridHighlighter()
+		case AnsiOff:
+			r.style = plainStyler{}
+			r.highlighter = NewPlainHighlighter()
+		// AnsiAuto: no-op, NewRenderer already set the correct pair
 		}
 	}
 }
