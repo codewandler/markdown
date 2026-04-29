@@ -354,14 +354,25 @@ func (r *renderer) text(ev stream.Event) {
 	r.write(escapeHTML(ev.Text))
 }
 
-// transitionStyle closes tags from openStyle that are not in s,
-// then opens tags in s that are not in openStyle.
+// transitionStyle manages open inline tags. When the style is
+// identical to what's already open, nothing happens (common case
+// for emphasis spanning across soft/line breaks). When the style
+// changes, close tags that are being removed (innermost first),
+// then open tags that are being added (outermost first).
+//
+// Nesting order (outermost to innermost):
+//   strong > em > del > link
 func (r *renderer) transitionStyle(s stream.InlineStyle) {
-	o := r.openStyle
-	if o == s {
+	if r.openStyle == s {
 		return
 	}
-	// Close in reverse order: del, em, strong, link.
+	o := r.openStyle
+
+	// Close innermost first: link, del, em, strong.
+	// Only close tags that are actually being removed.
+	if o.Link != "" && (o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
+		r.write("</a>")
+	}
 	if o.Strike && !s.Strike {
 		r.write("</del>")
 	}
@@ -371,17 +382,9 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	if o.Strong && !s.Strong {
 		r.write("</strong>")
 	}
-	if o.Link != "" && o.Link != s.Link {
-		r.write("</a>")
-	}
-	// Open in forward order: link, strong, em, del.
-	if s.Link != "" && o.Link != s.Link {
-		r.write("<a href=\"" + escapeAttrURL(s.Link) + "\"")
-		if s.LinkTitle != "" {
-			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
-		}
-		r.write(">")
-	}
+
+	// Open outermost first: strong, em, del, link.
+	// Only open tags that are actually being added.
 	if s.Strong && !o.Strong {
 		r.write("<strong>")
 	}
@@ -391,6 +394,14 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	if s.Strike && !o.Strike {
 		r.write("<del>")
 	}
+	if s.Link != "" && (o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
+		r.write("<a href=\"" + escapeAttrURL(s.Link) + "\"")
+		if s.LinkTitle != "" {
+			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
+		}
+		r.write(">")
+	}
+
 	r.openStyle = s
 }
 
