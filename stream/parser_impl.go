@@ -50,6 +50,7 @@ type parser struct {
 
 	blockquoteDepth    int  // nesting depth of open blockquotes
 	bqInsideListItem   bool // true if blockquote was opened inside a list item
+	bqDepthBeforeList  int  // blockquote depth when the list was entered
 	inList             bool
 	listData           ListData
 	listLoose          bool
@@ -92,12 +93,17 @@ type linkReference struct {
 }
 
 type linkReferenceDefinitionState struct {
-	active  bool
-	label   string
-	dest    string
-	hasDest bool
-	title   string
-	lines   []lineInfo
+	active       bool
+	label        string
+	dest         string
+	hasDest      bool
+	title        string
+	lines        []lineInfo
+	pendingTitle bool   // title opener found but not yet closed
+	titleOpener  byte   // the opening quote character (' or ")
+	titleBuf     string // accumulated title content so far
+	pendingLabel bool   // label opener [ found but ] not yet found
+	labelBuf     string // accumulated label content so far
 }
 
 type lineInfo struct {
@@ -318,7 +324,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		}
 	}
 
-	if p.refDef.active {
+	if p.refDef.active && p.blockquoteDepth == 0 {
 		if p.continueLinkReferenceDefinition(line, events) {
 			return
 		}
@@ -347,23 +353,92 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	if p.inListItem && p.listItemBlankLine {
 		p.listItemBlankLine = false
 		indent, _ := leadingIndent(line.text)
+		// When inside a blockquote, strip the > prefixes first to
+		// check the content's indent against the list item indent.
+		checkText := line.text
+		if p.blockquoteDepth > 0 {
+			tmp := line.text
+			for d := 0; d < p.blockquoteDepth; d++ {
+				if c, ok := blockquoteContent(tmp); ok {
+					tmp = c
+				} else {
+					break
+				}
+			}
+			checkText = tmp
+			indent, _ = leadingIndent(checkText)
+		}
 		if indent >= p.listItemIndent && p.listItemHasContent {
-			// Continuation after blank line — the list becomes loose.
-			p.listLoose = true
-			inner := line
-			inner.text = stripIndent(line.text, p.listItemIndent)
-			p.processListItemContent(inner, events)
-			return
-		}
-		// Check if this is a new list item — blank line between items
-		// makes the list loose.
-		if _, ok := listItem(line.text); ok {
-			p.listLoose = true
-		}
-		// Not enough indent — close the list item.
-		p.closeListItem(events)
-		if _, ok := listItem(line.text); !ok {
-			p.closeList(events)
+			// Check if the stripped content starts a blockquote inside
+			// an existing blockquote context — if so, let the blockquote
+			// handler deal with it rather than treating as list content.
+			stripped := stripIndent(line.text, p.listItemIndent)
+			isBQContinuation := false
+			if p.blockquoteDepth > 0 {
+				_, isBQContinuation = blockquoteContent(stripped)
+			}
+			if !isBQContinuation {
+				// Continuation after blank line — the list becomes loose.
+				p.listLoose = true
+				inner := line
+				inner.text = stripped
+				p.processListItemContent(inner, events)
+				return
+			}
+			// Blockquote content after blank line — fall through to
+			// let the blockquote handler process it. Restore the
+			// blank line flag so the BQ handler can close the item.
+			p.listItemBlankLine = true
+		} else {
+			// Not enough indent for current (inner) item.
+			// Close the inner item and unwind sublists.
+			p.closeParagraph(events)
+			p.drainPendingBlocks(events)
+			p.inListItem = false
+			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
+			closeSublist := false
+			if len(p.listStack) > 0 {
+				outerIndent := p.listStack[len(p.listStack)-1].listItemIndent
+				if indent < outerIndent {
+					closeSublist = true
+				} else {
+					stripped := stripIndent(line.text, outerIndent)
+					if sItem, ok := listItem(stripped); ok && p.listData.Ordered == sItem.data.Ordered && p.listData.Marker == sItem.data.Marker {
+						_ = sItem
+					} else {
+						closeSublist = true
+					}
+				}
+			} else if _, ok := listItem(line.text); !ok {
+				data := p.listData
+				data.Tight = !p.listLoose
+				p.inList = false
+				*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
+				p.listData = ListData{}
+				p.listLoose = false
+			} else {
+				p.listLoose = true
+			}
+			if closeSublist {
+				data := p.listData
+				data.Tight = !p.listLoose
+				p.inList = false
+				*events = append(*events, Event{Kind: EventExitBlock, Block: BlockList, List: &data})
+				p.listData = ListData{}
+				p.listLoose = false
+				p.popList()
+				p.listLoose = true
+			}
+			// After unwinding, check if the line continues an outer item.
+			if p.inListItem {
+				indent2, _ := leadingIndent(line.text)
+				if indent2 >= p.listItemIndent {
+					inner := line
+					inner.text = stripIndent(line.text, p.listItemIndent)
+					p.processListItemContent(inner, events)
+					return
+				}
+			}
 		}
 	}
 
@@ -374,9 +449,15 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	}
 
 	// If we reach here, the line is non-blank and not a ref def continuation.
-	// Drain any pending blocks now — all definitions before this point have
-	// been collected.
-	p.drainPendingBlocks(events)
+	// Drain pending blocks that can't benefit from forward references.
+	// If the line starts a blockquote, it may contain link reference
+	// definitions that pending blocks with brackets need, so only do
+	// an eager drain in that case.
+	if _, isBQ := blockquoteContent(line.text); isBQ && len(p.pendingBlocks) > 0 {
+		p.drainPendingBlocksEager(events)
+	} else {
+		p.drainPendingBlocks(events)
+	}
 
 	// When inside a blockquote and the line doesn't continue it,
 	// close the blockquote before checking list item continuation.
@@ -403,7 +484,9 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	// and other container checks so that indented `>` markers inside
 	// list items are treated as list item content, not top-level
 	// blockquotes.
-	if p.inListItem && !p.fence.open && !p.inIndented {
+	// Skip this when a blank line was seen and the content is a
+	// blockquote line — let the blockquote handler close the item.
+	if p.inListItem && !p.fence.open && !p.inIndented && !(p.listItemBlankLine && p.blockquoteDepth > 0) {
 		indent, _ := leadingIndent(line.text)
 		// Unwind sublists that don't match.
 		for p.inListItem && indent < p.listItemIndent && len(p.listStack) > 0 {
@@ -413,22 +496,27 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			p.closeFencedCode(events)
 			p.inListItem = false
 			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
-			// Check for sibling in the sublist.
-			if item, ok := listItem(line.text); ok {
-				stripped := stripIndent(line.text, p.listStack[len(p.listStack)-1].listItemIndent)
-				if sItem, ok2 := listItem(stripped); ok2 && p.listData.Ordered == sItem.data.Ordered && p.listData.Marker == sItem.data.Marker {
-					_ = item
-					p.inListItem = true
-					p.listItemIndent = sItem.contentIndent
-					p.listItemBlankLine = false
-					data := sItem.data
-					*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
-					if strings.TrimSpace(sItem.content) != "" {
-						inner := line
-						inner.text = sItem.content
-						p.processListItemFirstLine(inner, events)
+			// Check for sibling in the sublist. The line must have
+			// enough indent to be at the sublist's level (i.e., at
+			// least the outer item's content indent).
+			outerItemIndent := p.listStack[len(p.listStack)-1].listItemIndent
+			if indent >= outerItemIndent {
+				if item, ok := listItem(line.text); ok {
+					stripped := stripIndent(line.text, outerItemIndent)
+					if sItem, ok2 := listItem(stripped); ok2 && p.listData.Ordered == sItem.data.Ordered && p.listData.Marker == sItem.data.Marker {
+						_ = item
+						p.inListItem = true
+						p.listItemIndent = outerItemIndent + sItem.contentIndent
+						p.listItemBlankLine = false
+						data := sItem.data
+						*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
+						if strings.TrimSpace(sItem.content) != "" {
+							inner := line
+							inner.text = sItem.content
+							p.processListItemFirstLine(inner, events)
+						}
+						return
 					}
-					return
 				}
 			}
 			// Not a sibling — close the sublist.
@@ -448,10 +536,14 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		}
 		// Lazy continuation: if a paragraph is open inside the list
 		// item, a non-blank line continues it even without enough indent.
+		// But not if the line is a blockquote continuation — let the
+		// blockquote handler strip the > prefix first.
 		if p.inListItem && len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
 			if _, ok := listItem(line.text); !ok {
-				p.addParagraphLine(line)
-				return
+				if _, isBQ := blockquoteContent(line.text); !isBQ || p.blockquoteDepth == 0 {
+					p.addParagraphLine(line)
+					return
+				}
 			}
 		}
 	}
@@ -472,9 +564,33 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		content = inner
 		if p.blockquoteDepth == 0 {
 			p.closeParagraph(events)
+			// If the blockquote content is a link reference definition,
+			// collect it before draining pending blocks so that forward
+			// references resolve correctly.
+			if strings.TrimSpace(content) != "" {
+				if label, text, rest, startOK := parseLinkReferenceDefinitionStart(content); startOK {
+					dest, _, hasDest, _, _, tailOK := parseLinkReferenceDefinitionTail(text, rest)
+					if tailOK && hasDest {
+						if p.refs == nil {
+							p.refs = make(map[string]linkReference)
+						}
+						if _, exists := p.refs[label]; !exists {
+							p.refs[label] = linkReference{dest: dest}
+						}
+					}
+				}
+			}
 			p.drainPendingBlocks(events)
 			p.closeList(events)
 			p.bqInsideListItem = p.inListItem
+		}
+		// Lazy continuation: if the line has fewer > prefixes than
+		// the current depth but a paragraph is open, continue it.
+		if newDepth < p.blockquoteDepth && len(p.paragraph.lines) > 0 {
+			bqInner := line
+			bqInner.text = content
+			p.addParagraphLine(bqInner)
+			return
 		}
 		// Open new blockquote levels as needed.
 		for p.blockquoteDepth < newDepth {
@@ -486,8 +602,17 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
 		}
 		if strings.TrimSpace(content) == "" {
+			if p.refDef.active {
+				bqBlank := line
+				bqBlank.text = ""
+				p.continueLinkReferenceDefinition(bqBlank, events)
+			}
 			p.closeParagraph(events)
 			p.closeIndentedCode(events)
+			// Propagate blank line to list item inside blockquote.
+			if p.inListItem {
+				p.listItemBlankLine = true
+			}
 			return
 		}
 		bqInner := line
@@ -514,6 +639,34 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			}
 			p.closeIndentedCode(events)
 		}
+		// Ref def continuation inside blockquote.
+		if p.refDef.active {
+			if p.continueLinkReferenceDefinition(bqInner, events) {
+				return
+			}
+		}
+		// List item continuation inside blockquote.
+		if p.inListItem {
+			bqIndent, _ := leadingIndent(bqInner.text)
+			if p.listItemBlankLine {
+				p.listItemBlankLine = false
+				if bqIndent >= p.listItemIndent && p.listItemHasContent {
+					p.listLoose = true
+					ci := bqInner
+					ci.text = stripIndent(bqInner.text, p.listItemIndent)
+					p.processListItemContent(ci, events)
+					return
+				}
+				// Not enough indent after blank line — close the list item.
+				p.closeListItem(events)
+				p.closeList(events)
+			} else if bqIndent >= p.listItemIndent {
+				ci := bqInner
+				ci.text = stripIndent(bqInner.text, p.listItemIndent)
+				p.processListItemContent(ci, events)
+				return
+			}
+		}
 		if item, ok := listItem(bqInner.text); ok {
 			p.closeParagraph(events)
 			if !p.inList || p.listData.Ordered != item.data.Ordered || p.listData.Marker != item.data.Marker {
@@ -528,14 +681,21 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 			p.inListItem = true
 			p.listItemIndent = item.contentIndent
 			p.listItemBlankLine = false
+			p.listItemHasContent = strings.TrimSpace(item.content) != ""
 			data := item.data
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: bqInner.start, End: bqInner.end}})
-			if strings.TrimSpace(item.content) != "" {
-					ci := bqInner
+			if p.listItemHasContent {
+				ci := bqInner
 				ci.text = item.content
 				p.processListItemFirstLine(ci, events)
 			}
 			return
+		}
+		// Link reference definition inside blockquote.
+		if len(p.paragraph.lines) == 0 && !p.inList && !p.inListItem {
+			if p.startLinkReferenceDefinition(bqInner) {
+				return
+			}
 		}
 		p.processNonContainerLine(bqInner, events)
 		return
@@ -1055,8 +1215,13 @@ func splitTableRow(line string) ([]string, bool) {
 }
 
 func (p *parser) startLinkReferenceDefinition(line lineInfo) bool {
+	// Try multiline label: [\nfoo\n]: /url
 	label, text, rest, ok := parseLinkReferenceDefinitionStart(line.text)
 	if !ok {
+		// Check for multiline label start: line starts with [ but no ] on this line.
+		if p.tryStartMultilineLabel(line) {
+			return true
+		}
 		return false
 	}
 	state := linkReferenceDefinitionState{
@@ -1066,6 +1231,28 @@ func (p *parser) startLinkReferenceDefinition(line lineInfo) bool {
 	}
 	dest, title, hasDest, hasTitle, pending, ok := parseLinkReferenceDefinitionTail(text, rest)
 	if !ok {
+		// Check for multiline title: dest found but title opener without closer.
+		if state.label != "" {
+			// Re-parse to find dest and check for pending title.
+			i := skipMarkdownSpace(text, rest)
+			if i < len(text) {
+				d, next, dok := parseInlineLinkDestination(text, i)
+				if dok && next > i {
+					spaceAfterDest := skipMarkdownSpace(text, next)
+					if spaceAfterDest > next {
+						if opener, content, pok := detectPendingTitle(text, spaceAfterDest); pok {
+							state.dest = d
+							state.hasDest = true
+							state.pendingTitle = true
+							state.titleOpener = opener
+							state.titleBuf = content
+							p.refDef = state
+							return true
+						}
+					}
+				}
+			}
+		}
 		return false
 	}
 	state.dest = dest
@@ -1083,7 +1270,51 @@ func (p *parser) startLinkReferenceDefinition(line lineInfo) bool {
 	return true
 }
 
+// tryStartMultilineLabel checks if a line starts a link reference definition
+// with a label that spans multiple lines, e.g. "[\nfoo\n]: /url".
+func (p *parser) tryStartMultilineLabel(line lineInfo) bool {
+	indent, indentBytes := leadingIndent(line.text)
+	if indent > 3 {
+		return false
+	}
+	text := line.text[indentBytes:]
+	if len(text) == 0 || text[0] != '[' {
+		return false
+	}
+	// Check that there's no ] on this line (otherwise parseLinkReferenceDefinitionStart
+	// would have handled it).
+	for i := 1; i < len(text); i++ {
+		if text[i] == '\\' && i+1 < len(text) {
+			i++ // skip escaped char
+			continue
+		}
+		if text[i] == '[' {
+			return false // nested [ not allowed in labels
+		}
+		if text[i] == ']' {
+			return false // ] found on same line
+		}
+	}
+	p.refDef = linkReferenceDefinitionState{
+		active:       true,
+		pendingLabel: true,
+		labelBuf:     text[1:], // content after [
+		lines:        []lineInfo{line},
+	}
+	return true
+}
+
 func (p *parser) continueLinkReferenceDefinition(line lineInfo, events *[]Event) bool {
+	// Handle pending multiline label: accumulate until ] found.
+	if p.refDef.pendingLabel {
+		return p.continueMultilineLabel(line, events)
+	}
+
+	// Handle pending multiline title: accumulate until closer found.
+	if p.refDef.pendingTitle {
+		return p.continueMultilineTitle(line, events)
+	}
+
 	if strings.TrimSpace(line.text) == "" {
 		if !p.refDef.hasDest {
 			p.failLinkReferenceDefinition()
@@ -1126,6 +1357,150 @@ func (p *parser) continueLinkReferenceDefinition(line lineInfo, events *[]Event)
 	p.refDef.lines = append(p.refDef.lines, line)
 	p.refDef.title = title
 	p.finishLinkReferenceDefinition()
+	return true
+}
+
+// continueMultilineLabel handles continuation lines for a label that
+// started with [ on a previous line.
+func (p *parser) continueMultilineLabel(line lineInfo, events *[]Event) bool {
+	if strings.TrimSpace(line.text) == "" {
+		p.failLinkReferenceDefinition()
+		return false
+	}
+	text := line.text
+	// Look for ] in this line.
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\\' && i+1 < len(text) {
+			i++
+			continue
+		}
+		if text[i] == '[' {
+			// Unescaped [ inside label — fail.
+			p.failLinkReferenceDefinition()
+			return false
+		}
+		if text[i] == ']' {
+			// Found closing ]. Must be followed by :
+			if i+1 >= len(text) || text[i+1] != ':' {
+				p.failLinkReferenceDefinition()
+				return false
+			}
+			// Build the full label from accumulated content.
+			fullLabel := p.refDef.labelBuf + "\n" + text[:i]
+			label := normalizeReferenceLabel(fullLabel)
+			if label == "" || len(fullLabel) > 999 {
+				p.failLinkReferenceDefinition()
+				return false
+			}
+			p.refDef.pendingLabel = false
+			p.refDef.label = label
+			p.refDef.lines = append(p.refDef.lines, line)
+			// Now parse the tail (dest + optional title) from after the :
+			tailStart := i + 2
+			dest, title, hasDest, hasTitle, pending, ok := parseLinkReferenceDefinitionTail(text, tailStart)
+			if !ok {
+				// Check for pending multiline title.
+				ii := skipMarkdownSpace(text, tailStart)
+				if ii < len(text) {
+					d, next, dok := parseInlineLinkDestination(text, ii)
+					if dok && next > ii {
+						spaceAfterDest := skipMarkdownSpace(text, next)
+						if spaceAfterDest > next {
+							if opener, content, pok := detectPendingTitle(text, spaceAfterDest); pok {
+								p.refDef.dest = d
+								p.refDef.hasDest = true
+								p.refDef.pendingTitle = true
+								p.refDef.titleOpener = opener
+								p.refDef.titleBuf = content
+								return true
+							}
+						}
+					}
+				}
+				p.failLinkReferenceDefinition()
+				return false
+			}
+			p.refDef.dest = dest
+			p.refDef.hasDest = hasDest
+			p.refDef.title = title
+			if hasTitle {
+				p.finishLinkReferenceDefinition()
+				return true
+			}
+			if pending {
+				return true
+			}
+			p.finishLinkReferenceDefinition()
+			return true
+		}
+	}
+	// No ] found — accumulate more label content.
+	// CommonMark limits labels to 999 characters.
+	p.refDef.labelBuf += "\n" + text
+	if len(p.refDef.labelBuf) > 999 {
+		p.failLinkReferenceDefinition()
+		return false
+	}
+	p.refDef.lines = append(p.refDef.lines, line)
+	return true
+}
+
+// continueMultilineTitle handles continuation lines for a title that
+// started on a previous line but hasn't been closed yet.
+func (p *parser) continueMultilineTitle(line lineInfo, events *[]Event) bool {
+	if strings.TrimSpace(line.text) == "" {
+		// Blank line inside a title — the entire definition is invalid.
+		p.refDef.pendingTitle = false
+		p.refDef.titleBuf = ""
+		p.failLinkReferenceDefinition()
+		return false
+	}
+	closer := p.refDef.titleOpener
+	if closer == '(' {
+		closer = ')'
+	}
+	text := line.text
+	escaped := false
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' {
+			escaped = true
+			continue
+		}
+		if c == closer {
+			// Found the closing quote. Rest of line must be blank.
+			rest := text[i+1:]
+			if strings.TrimSpace(rest) != "" {
+				// Non-blank after closer — fail the title but keep dest.
+				p.refDef.pendingTitle = false
+				p.refDef.titleBuf = ""
+				p.finishLinkReferenceDefinition()
+				return false
+			}
+			// Success — build the full title.
+			fullTitle := p.refDef.titleBuf + "\n" + text[:i]
+			p.refDef.title = decodeCharacterReferences(unescapeBackslashPunctuation(fullTitle))
+			p.refDef.pendingTitle = false
+			p.refDef.titleBuf = ""
+			p.refDef.lines = append(p.refDef.lines, line)
+			p.finishLinkReferenceDefinition()
+			return true
+		}
+		if p.refDef.titleOpener == '(' && c == '(' {
+			// Unescaped ( in paren title — fail.
+			p.refDef.pendingTitle = false
+			p.refDef.titleBuf = ""
+			p.finishLinkReferenceDefinition()
+			return false
+		}
+	}
+	// No closer found — accumulate.
+	p.refDef.titleBuf += "\n" + text
+	p.refDef.lines = append(p.refDef.lines, line)
 	return true
 }
 
@@ -1201,13 +1576,18 @@ func (p *parser) closeIndentedCode(events *[]Event) {
 func (p *parser) closeContainers(events *[]Event) {
 	p.closeTable(events)
 	p.closeIndentedCode(events)
-	// Close blockquote before list — the list may be inside the blockquote.
-	if p.blockquoteDepth > 0 {
+	// Close inner blockquotes (those opened inside list items) first.
+	if p.blockquoteDepth > 0 && p.bqInsideListItem {
 		p.closeBlockquote(lineInfo{}, events)
 	}
+	// Close lists.
 	if p.inList {
 		p.closeListItem(events)
 		p.closeList(events)
+	}
+	// Close any remaining outer blockquotes.
+	if p.blockquoteDepth > 0 {
+		p.closeBlockquote(lineInfo{}, events)
 	}
 }
 
@@ -1255,7 +1635,15 @@ func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
 	// mutual recursion: closeListItem -> closeBlockquote -> closeListItem.
 	bqOpenedInsideList := p.bqInsideListItem
 	depth := p.blockquoteDepth
-	p.blockquoteDepth = 0
+	// When the blockquote was opened inside a list item, only close
+	// the levels that were opened inside the list, not the outer ones.
+	levelsToClose := depth
+	if bqOpenedInsideList && p.bqDepthBeforeList < depth {
+		levelsToClose = depth - p.bqDepthBeforeList
+		p.blockquoteDepth = p.bqDepthBeforeList
+	} else {
+		p.blockquoteDepth = 0
+	}
 	// Close all lists that were opened inside this blockquote.
 	// Don't close any lists if the blockquote was opened inside a list item
 	// — those lists belong to the outer context.
@@ -1276,7 +1664,8 @@ func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
 			p.popList()
 		}
 	}
-	for i := 0; i < depth; i++ {
+	p.bqInsideListItem = false
+	for i := 0; i < levelsToClose; i++ {
 		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
 	}
 }
@@ -1445,6 +1834,19 @@ func (p *parser) processListItemFirstLine(line lineInfo, events *[]Event) {
 		)
 		return
 	}
+	// Blockquote inside list item (e.g., "> 1. > Blockquote").
+	if content, ok := blockquoteContent(line.text); ok {
+		p.bqDepthBeforeList = p.blockquoteDepth
+		p.blockquoteDepth++
+		p.bqInsideListItem = true
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
+		if strings.TrimSpace(content) != "" {
+			inner := line
+			inner.text = content
+			p.addParagraphLine(inner)
+		}
+		return
+	}
 	// Sublist on same line as outer marker (e.g., "- - foo").
 	if item, ok := listItem(line.text); ok {
 		p.pushList()
@@ -1531,7 +1933,9 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 		p.closeParagraph(events)
 		p.drainPendingBlocks(events)
 		if p.blockquoteDepth == 0 {
-			p.blockquoteDepth++; p.bqInsideListItem = p.inListItem
+			p.bqDepthBeforeList = 0
+			p.blockquoteDepth++
+			p.bqInsideListItem = p.inListItem
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
 		}
 		if strings.TrimSpace(content) == "" {
@@ -1543,7 +1947,7 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 		p.processNonContainerLine(inner, events)
 		return
 	}
-	if p.blockquoteDepth > 0 {
+	if p.blockquoteDepth > 0 && p.bqInsideListItem {
 		if len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
 			if _, _, _, _, isFence := openingFence(line.text); !isFence {
 				if _, ok := listItem(line.text); !ok {
@@ -1573,33 +1977,20 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 	if item, ok := listItem(line.text); ok {
 		p.closeParagraph(events)
 		p.drainPendingBlocks(events)
-		// Check if this is a sibling in an existing sublist (not the outer list).
-		// A sibling must be at indent 0 (same level as existing sublist items).
-		// An indented list item creates a deeper sublist.
-		itemIndent, _ := leadingIndent(line.text)
-		inSublist := len(p.listStack) > 0 && p.inList
-		if inSublist && itemIndent == 0 && p.listData.Ordered == item.data.Ordered && p.listData.Marker == item.data.Marker {
-			// Sibling item in the existing sublist.
-			// Close just the current item, not the sublist.
-			if p.inListItem {
-				p.closeParagraph(events)
-				p.drainPendingBlocks(events)
-				p.closeIndentedCode(events)
-				p.closeFencedCode(events)
-				p.inListItem = false
-				*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
-			}
-		} else {
-			// New sublist — save outer state.
-			p.pushList()
-			p.inList = true
-			p.listData = listBlockData(item.data)
-			p.listLoose = false
-			data := p.listData
-			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
-		}
+		// A list item found inside the current item's content always
+		// starts a new sublist (deeper nesting). Sibling detection
+		// happens at the processLine level when unwinding indent.
+		p.pushList()
+		p.inList = true
+		p.listData = listBlockData(item.data)
+		p.listLoose = false
+		data := p.listData
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: line.start, End: line.end}})
 		p.inListItem = true
-		p.listItemIndent = item.contentIndent
+		// Content indent is relative to the stripped text. Convert to
+		// absolute by adding the outer item's indent.
+		outerIndent := p.listStack[len(p.listStack)-1].listItemIndent
+		p.listItemIndent = outerIndent + item.contentIndent
 		p.listItemBlankLine = false
 		idata := item.data
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &idata, Span: Span{Start: line.start, End: line.end}})
@@ -1622,6 +2013,9 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 }
 
 // stripIndent removes up to n columns of leading indentation from a line.
+// When a tab partially overlaps the strip boundary, the remainder is
+// expanded to spaces and subsequent tabs are also expanded so that their
+// column alignment is preserved.
 func stripIndent(line string, n int) string {
 	col := 0
 	for i := 0; i < len(line); i++ {
@@ -1632,11 +2026,30 @@ func stripIndent(line string, n int) string {
 		case ' ':
 			col++
 		case '\t':
-			col += 4 - col%4
-			if col > n {
-				// Tab extends past the indent boundary; replace with spaces.
-				return strings.Repeat(" ", col-n) + line[i+1:]
+			newCol := col + 4 - col%4
+			if newCol > n {
+				// Tab extends past the strip boundary. Expand the
+				// remainder and all subsequent leading tabs to spaces
+				// so that column alignment is preserved.
+				var b strings.Builder
+				absCol := newCol
+				b.WriteString(strings.Repeat(" ", absCol-n))
+				for j := i + 1; j < len(line); j++ {
+					if line[j] == '\t' {
+						w := 4 - absCol%4
+						b.WriteString(strings.Repeat(" ", w))
+						absCol += w
+					} else if line[j] == ' ' {
+						b.WriteByte(' ')
+						absCol++
+					} else {
+						b.WriteString(line[j:])
+						return b.String()
+					}
+				}
+				return b.String()
 			}
+			col = newCol
 		default:
 			return line[i:]
 		}
@@ -1799,8 +2212,35 @@ func blockquoteContent(line string) (string, bool) {
 		return "", false
 	}
 	content := line[indentBytes+1:]
-	if strings.HasPrefix(content, " ") || strings.HasPrefix(content, "\t") {
+	if len(content) > 0 && content[0] == ' ' {
 		content = content[1:]
+	} else if len(content) > 0 && content[0] == '\t' {
+		// A tab after >: the > is at column `indent`, so the tab starts
+		// at column indent+1. Consuming 1 space of the tab leaves the
+		// remaining expansion as spaces. Expand all leading tabs to
+		// preserve absolute column alignment.
+		absCol := indent + 1
+		// Skip 1 column (the optional space).
+		firstTabWidth := 4 - absCol%4
+		absCol += firstTabWidth
+		var b strings.Builder
+		if firstTabWidth > 1 {
+			b.WriteString(strings.Repeat(" ", firstTabWidth-1))
+		}
+		for i := 1; i < len(content); i++ {
+			if content[i] == '\t' {
+				w := 4 - absCol%4
+				b.WriteString(strings.Repeat(" ", w))
+				absCol += w
+			} else if content[i] == ' ' {
+				b.WriteByte(' ')
+				absCol++
+			} else {
+				b.WriteString(content[i:])
+				return b.String(), true
+			}
+		}
+		return b.String(), true
 	}
 	return content, true
 }
@@ -1836,14 +2276,13 @@ func listItem(line string) (listItemData, bool) {
 			goto tryOrdered
 		}
 		// Count spaces after marker (1-4, per spec).
-		padding := countListPadding(trimmed[markerWidth:])
+		padCols, _, content := countListPadding(trimmed[markerWidth:], indent+markerWidth)
 		data := ListData{Ordered: false, Marker: string(trimmed[0]), Tight: true}
-		content := trimmed[markerWidth+padding:]
 		data.Task, data.Checked, content = parseTaskListItem(content)
 		return listItemData{
 			data:          data,
 			content:       content,
-			contentIndent: indent + markerWidth + padding,
+			contentIndent: indent + markerWidth + padCols,
 		}, true
 	}
 
@@ -1875,40 +2314,125 @@ tryOrdered:
 	if trimmed[markerWidth] != ' ' && trimmed[markerWidth] != '\t' {
 		return listItemData{}, false
 	}
-	padding := countListPadding(trimmed[markerWidth:])
+	padCols, _, content := countListPadding(trimmed[markerWidth:], indent+markerWidth)
 	data := ListData{Ordered: true, Start: start, Marker: string(marker), Tight: true}
-	content := trimmed[markerWidth+padding:]
 	data.Task, data.Checked, content = parseTaskListItem(content)
 	return listItemData{
 		data:          data,
 		content:       content,
-		contentIndent: indent + markerWidth + padding,
+		contentIndent: indent + markerWidth + padCols,
 	}, true
 }
 
 // countListPadding counts the spaces/tabs after a list marker.
 // Per CommonMark, 1-4 spaces are consumed as padding. If the content
 // is blank (only spaces), exactly 1 space of padding is used.
-func countListPadding(afterMarker string) int {
-	spaces := 0
+// startCol is the absolute column of the first character after the marker.
+// Returns (columns consumed as padding, bytes consumed, remaining content
+// with partial tab expansion).
+func countListPadding(afterMarker string, startCol int) (int, int, string) {
+	col := startCol
 	bytes := 0
 	for bytes < len(afterMarker) {
 		switch afterMarker[bytes] {
 		case ' ':
-			spaces++
+			col++
 			bytes++
 		case '\t':
-			spaces += 4 - spaces%4
+			col += 4 - col%4
 			bytes++
 		default:
-			if spaces > 4 {
-				return 1 // content starts with indented code
+			padCols := col - startCol
+			if padCols > 4 {
+				// Content starts with indented code; use 1 space padding.
+				// The first whitespace character contributes 1 column of
+				// padding; any remaining expansion is content.
+				content := expandTabsFromSkipCols(afterMarker, startCol, 1)
+				return 1, 0, content
 			}
-			return bytes
+			// Normal padding — expand remaining leading tabs.
+			content := expandTabsFromSkipCols(afterMarker, startCol, padCols)
+			return padCols, 0, content
 		}
 	}
 	// All spaces — blank content, use 1 space padding.
-	return 1
+	return 1, 0, ""
+}
+
+// expandTabsFromSkipCols expands leading tabs in s to spaces, starting from
+// absolute column startCol, skipping the first skipCols columns.
+// Any partial tab remainder after skipping is emitted as spaces.
+// Non-whitespace characters and everything after them are kept as-is.
+func expandTabsFromSkipCols(s string, startCol int, skipCols int) string {
+	absCol := startCol
+	skipped := 0
+	byteStart := 0
+	// Skip skipCols columns.
+	for byteStart < len(s) && skipped < skipCols {
+		if s[byteStart] == '\t' {
+			w := 4 - absCol%4
+			if skipped+w > skipCols {
+				// Tab partially consumed by skip; remainder becomes spaces.
+				remainder := skipped + w - skipCols
+				absCol += w
+				byteStart++
+				// Expand remaining leading tabs.
+				var b strings.Builder
+				b.WriteString(strings.Repeat(" ", remainder))
+				for i := byteStart; i < len(s); i++ {
+					if s[i] == '\t' {
+						tw := 4 - absCol%4
+						b.WriteString(strings.Repeat(" ", tw))
+						absCol += tw
+					} else if s[i] == ' ' {
+						b.WriteByte(' ')
+						absCol++
+					} else {
+						b.WriteString(s[i:])
+						return b.String()
+					}
+				}
+				return b.String()
+			}
+			skipped += w
+			absCol += w
+		} else if s[byteStart] == ' ' {
+			skipped++
+			absCol++
+		} else {
+			break
+		}
+		byteStart++
+	}
+	// Check if remaining has tabs in leading whitespace.
+	hasTabs := false
+	for i := byteStart; i < len(s); i++ {
+		if s[i] == '\t' {
+			hasTabs = true
+			break
+		}
+		if s[i] != ' ' {
+			break
+		}
+	}
+	if !hasTabs {
+		return s[byteStart:]
+	}
+	var b strings.Builder
+	for i := byteStart; i < len(s); i++ {
+		if s[i] == '\t' {
+			w := 4 - absCol%4
+			b.WriteString(strings.Repeat(" ", w))
+			absCol += w
+		} else if s[i] == ' ' {
+			b.WriteByte(' ')
+			absCol++
+		} else {
+			b.WriteString(s[i:])
+			return b.String()
+		}
+	}
+	return b.String()
 }
 
 func listBlockData(item ListData) ListData {
@@ -1959,16 +2483,21 @@ func leadingIndent(line string) (int, int) {
 func stripIndentColumns(line string, columns int) string {
 	current := 0
 	for i := 0; i < len(line); i++ {
+		if current >= columns {
+			return line[i:]
+		}
 		switch line[i] {
 		case ' ':
 			current++
 		case '\t':
-			current += 4 - current%4
+			newCol := current + 4 - current%4
+			if newCol > columns {
+				// Tab crosses the strip boundary; replace excess with spaces.
+				return strings.Repeat(" ", newCol-columns) + line[i+1:]
+			}
+			current = newCol
 		default:
 			return line[i:]
-		}
-		if current >= columns {
-			return line[i+1:]
 		}
 	}
 	return ""
@@ -2847,6 +3376,43 @@ func parseLinkReferenceDefinitionTail(text string, start int) (dest string, titl
 		return "", "", false, false, false, false
 	}
 	return dest, title, true, title != "", title == "", true
+}
+
+// detectPendingTitle checks if text[start:] begins a title that doesn't
+// close on this line. Returns the opener byte and the content after the
+// opener, or ok=false if no pending title is detected.
+func detectPendingTitle(text string, start int) (opener byte, content string, ok bool) {
+	if start >= len(text) {
+		return 0, "", false
+	}
+	c := text[start]
+	if c != '"' && c != '\'' && c != '(' {
+		return 0, "", false
+	}
+	closer := c
+	if c == '(' {
+		closer = ')'
+	}
+	// Check that the closer is NOT on this line (otherwise parseInlineLinkTitle
+	// would have succeeded).
+	escaped := false
+	for i := start + 1; i < len(text); i++ {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if text[i] == '\\' {
+			escaped = true
+			continue
+		}
+		if text[i] == closer {
+			return 0, "", false // closer found on same line
+		}
+		if c == '(' && text[i] == '(' {
+			return 0, "", false // unescaped ( in paren title
+		}
+	}
+	return c, text[start+1:], true
 }
 
 func normalizeReferenceLabel(label string) string {

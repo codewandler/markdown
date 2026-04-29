@@ -10,6 +10,74 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-04-29
+
+### Added
+
+- **New `html/` package** — event-driven HTML renderer that walks `[]stream.Event`.
+  Zero external dependencies, non-streaming, produces spec-compliant HTML output.
+  - `html.Render(w, events, ...Option)` — write to any `io.Writer`
+  - `html.RenderString(events, ...Option)` — convenience string output
+  - `html.RenderBytes(events, ...Option)` — convenience byte output
+  - Pre-scan pattern for tight/loose list detection (O(n), no buffering)
+  - Proper tag-stack renderer with correct nesting order
+  - `html/escape.go` — HTML attribute and content escaping utilities
+- **Top-level HTML API** — `markdown.HTMLString(src)` and `markdown.HTMLBytes(src)`
+  for one-call Markdown-to-HTML conversion.
+- **100% CommonMark 0.31.2 compliance** — 652/652 spec examples pass.
+  Hard-gated in `TestHTMLCommonMarkCompliance`; the test fails if the count drops.
+- **`competition/` package** — automated benchmark pipeline for comparing against
+  other Go Markdown libraries (goldmark, blackfriday, gomarkdown, glamour,
+  go-term-markdown). Includes compliance testing, benchmark harness, report
+  generation, and CLI tools (`comprun`, `compgen`).
+- New `InlineStyle` fields for full CommonMark fidelity:
+  - `Image bool` — distinguishes images from links
+  - `HasLink bool` — distinguishes "no link" from empty link destination
+  - `RawHTML bool` — inline HTML passthrough
+  - `EmphasisDepth int` / `StrongDepth int` — nested emphasis tracking
+  - `ImageLink` / `ImageLinkTitle` — wrapping link for images inside links
+- `TableRowData` struct with `Header bool` on parser events.
+- `Parse(io.Reader)` and `ParseBytes([]byte)` top-level API functions.
+
+### Fixed
+
+- **Parser: 52+ CommonMark spec fixes** spanning every section of the spec:
+  - **Tabs** (4 fixes): Column-aware tab expansion throughout — `stripIndent`,
+    `blockquoteContent`, `countListPadding`, `stripIndentColumns` all handle
+    partial tab boundaries correctly.
+  - **Emphasis** (4 fixes): Correct `***` nesting order, partial delimiter
+    consumption, additive depth merging across links, excess delimiter text
+    emission.
+  - **Links** (8 fixes): Soft break link boundaries, image-in-link rendering,
+    autolink precedence in brackets, ref link nesting, multiline labels.
+  - **Images** (8 fixes): `!` added to inline delimiter set, alt text stripped
+    of inline markup via `plainTextFromEvents`.
+  - **Lists** (9 fixes): Empty list items can't interrupt paragraphs, blank line
+    attribution for tight/loose, sublist creation vs sibling detection, indent
+    guards, `closeSublist` helper.
+  - **Blockquotes** (4 fixes): `blockquoteDepth int` replacing `inBlockquote bool`,
+    nested blockquote support, `bqDepthBeforeList` tracking, lazy continuation.
+  - **Link ref defs** (4 fixes): Multiline titles (`detectPendingTitle`,
+    `continueMultilineTitle`), multiline labels, blockquote-scoped ref defs,
+    blank line inside pending title invalidates entire def.
+  - **HTML blocks** (4 fixes): Container prefix stripping, close on new list
+    items, `<!-->` comment fix.
+  - **Fenced code** (1 fix): Closing fence must have ≥ opening fence length.
+  - **Autolinks** (5 fixes): GFM autolinks gated by config, `[`/`]` removed
+    from URL safe set, HTML comment rejection.
+  - **Headings** (1 fix): Deferred inline parsing for forward ref resolution.
+- **Renderer: tight list in nested containers** — `containerDepthStack`
+  save/restore on list enter/exit for correct `<p>` suppression inside
+  blockquotes vs blockquotes inside tight lists.
+
+### Changed
+
+- `stream.InlineStyle` struct expanded with 7 new fields (backward-compatible;
+  zero values preserve old behavior).
+- `stream.Event` struct gains `TableRow *TableRowData` field.
+- GFM autolink extension now disabled by default (must opt in via config).
+- Regenerated `COMPARISON.md` with fresh benchmark data.
+
 ## [0.38.1] - 2026-04-29
 
 ### Added

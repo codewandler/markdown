@@ -344,8 +344,8 @@ func TestHTMLCommonMarkCompliance(t *testing.T) {
 		t.Logf("Failed examples: %v", failures)
 	}
 
-	// Hard compliance gate -- set after first run, update as renderer improves.
-	const minPass = 600
+	// Hard compliance gate -- 100% CommonMark 0.31.2 compliance.
+	const minPass = 652
 	if pass < minPass {
 		t.Errorf("compliance regressed: got %d, want >= %d", pass, minPass)
 	}

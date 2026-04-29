@@ -49,9 +49,10 @@ type renderer struct {
 	w            io.Writer
 	html5        bool
 	unsafe       bool
-	tightMap     map[int]bool // EnterBlock list event index -> tight
-	tightStack   []bool       // runtime stack for nested lists
-	containerDepth int        // depth of non-list containers (blockquote)
+	tightMap        map[int]bool // EnterBlock list event index -> tight
+	tightStack      []bool       // runtime stack for nested lists
+	containerDepth  int          // depth of non-list containers (blockquote)
+	containerSaved  []int        // saved containerDepth when entering a list
 	inHeader     bool         // current table row is a header row
 	inCode       bool         // inside fenced_code or indented_code
 	inHTML       bool         // inside html block
@@ -179,6 +180,8 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 	case stream.BlockList:
 		tight := r.tightMap[idx]
 		r.tightStack = append(r.tightStack, tight)
+		r.containerSaved = append(r.containerSaved, r.containerDepth)
+		r.containerDepth = 0
 		if ev.List != nil && ev.List.Ordered {
 			if ev.List.Start != 1 {
 				r.write("<ol start=\"" + strconv.Itoa(ev.List.Start) + "\">\n")
@@ -290,6 +293,10 @@ func (r *renderer) exitBlock(idx int, ev stream.Event, events []stream.Event) {
 	case stream.BlockList:
 		if len(r.tightStack) > 0 {
 			r.tightStack = r.tightStack[:len(r.tightStack)-1]
+		}
+		if len(r.containerSaved) > 0 {
+			r.containerDepth = r.containerSaved[len(r.containerSaved)-1]
+			r.containerSaved = r.containerSaved[:len(r.containerSaved)-1]
 		}
 		if ev.List != nil && ev.List.Ordered {
 			r.write("</ol>\n")
@@ -654,6 +661,9 @@ func (r *renderer) lineBreak() {
 }
 
 func (r *renderer) isTight() bool {
+	// A paragraph inside a tight list item is suppressed, UNLESS
+	// there's a non-list container (blockquote) between the list
+	// item and the paragraph.
 	return r.containerDepth == 0 && len(r.tightStack) > 0 && r.tightStack[len(r.tightStack)-1]
 }
 
