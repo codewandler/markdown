@@ -45,10 +45,10 @@ renderer matures.
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | InlineHeavy | 39.2ms | **30.8ms** | 88.2ms | 38.3ms | **2.2x faster** |
-| README | 1.2ms | **1.1ms** | 6.2ms | 3.9ms | **5.3x faster** |
 | TableHeavy | 6.8ms | **5.0ms** | 28.6ms | 6.7ms | **4.2x faster** |
-| Spec | 9.2ms | **7.2ms** | 40.9ms | 405.0ms | **4.4x faster** |
+| README | 1.2ms | **1.1ms** | 6.2ms | 3.9ms | **5.3x faster** |
 | CodeHeavy | 3.2ms | **3.1ms** | 9.1ms | 52.1ms | **2.8x faster** |
+| Spec | 9.2ms | **7.2ms** | 40.9ms | 405.0ms | **4.4x faster** |
 | GitHubTop10 | 32.9ms | **32.1ms** | 37.2ms | 2.77s | **1.1x faster** |
 
 ### Allocations (lower is better)
@@ -56,10 +56,10 @@ renderer matures.
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | InlineHeavy | **171.0K** | 171.6K | 811.4K | 828.7K | **4.7x fewer** |
-| README | **9.3K** | 9.3K | 49.4K | 37.8K | **5.3x fewer** |
 | TableHeavy | **47.4K** | 47.4K | 262.6K | 156.9K | **5.5x fewer** |
-| Spec | **56.1K** | 56.2K | 304.7K | 183.4K | **5.4x fewer** |
+| README | **9.3K** | 9.3K | 49.4K | 37.8K | **5.3x fewer** |
 | CodeHeavy | **33.1K** | 33.1K | 39.0K | 288.7K | **1.2x fewer** |
+| Spec | **56.1K** | 56.2K | 304.7K | 183.4K | **5.4x fewer** |
 | GitHubTop10 | **40.2K** | 40.5K | 367.3K | 1.4M | **9.1x fewer** |
 
 ### Memory (lower is better)
@@ -67,37 +67,37 @@ renderer matures.
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | InlineHeavy | 84.1 MB | 71.2 MB | 46.5 MB | **18.7 MB** | 1.8x more |
-| README | 2.6 MB | 2.5 MB | 5.1 MB | **1.0 MB** | **2.0x less** |
 | TableHeavy | 19.5 MB | 14.5 MB | 16.2 MB | **3.6 MB** | 1.2x more |
-| Spec | 21.8 MB | 16.6 MB | 36.6 MB | **5.5 MB** | **1.7x less** |
+| README | 2.6 MB | 2.5 MB | 5.1 MB | **1.0 MB** | **2.0x less** |
 | CodeHeavy | 4.4 MB | **3.5 MB** | 34.4 MB | 11.8 MB | **7.8x less** |
+| Spec | 21.8 MB | 16.6 MB | 36.6 MB | **5.5 MB** | **1.7x less** |
 | GitHubTop10 | 12.6 MB | **10.0 MB** | 19.1 MB | 119.1 MB | **1.5x less** |
 
 ## Parse-Only
 
 ### Speed (lower is better)
 
-| Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
+| Input | ours | ours-4k | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| GitHubTop10 | 5.8ms | 5.4ms | 2.5ms | **1.2ms** | 3.9ms | 2.4x slower |
-| README | 908.3us | 799.6us | **240.3us** | 379.4us | 931.5us | 3.8x slower |
-| Spec | 7.8ms | 7.1ms | **1.7ms** | 2.3ms | 392.7ms | 4.6x slower |
+| GitHubTop10 | 5.8ms | 6.0ms | 2.5ms | **1.2ms** | 3.9ms | 2.4x slower |
+| README | 908.3us | 1.1ms | **240.3us** | 379.4us | 931.5us | 3.8x slower |
+| Spec | 7.8ms | 8.6ms | **1.7ms** | 2.3ms | 392.7ms | 4.6x slower |
 
 ### Allocations (lower is better)
 
-| Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
+| Input | ours | ours-4k | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| GitHubTop10 | 19.7K | 19.6K | 13.1K | **8.0K** | 8.3K | 1.5x more |
+| GitHubTop10 | 19.7K | 19.8K | 13.1K | **8.0K** | 8.3K | 1.5x more |
 | README | 3.2K | 3.2K | **1.4K** | 3.0K | 3.6K | 2.4x more |
-| Spec | 22.3K | 22.2K | **11.4K** | 22.9K | 25.9K | 2.0x more |
+| Spec | 22.3K | 22.4K | **11.4K** | 22.9K | 25.9K | 2.0x more |
 
 ### Memory (lower is better)
 
-| Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
+| Input | ours | ours-4k | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| GitHubTop10 | 14.6 MB | 10.7 MB | 1.9 MB | 1.9 MB | **1.4 MB** | 7.8x more |
-| README | 2.8 MB | 2.2 MB | **208.6 KB** | 579.8 KB | 266.1 KB | 14.0x more |
-| Spec | 25.8 MB | 20.1 MB | **1.7 MB** | 4.1 MB | 1.8 MB | 15.5x more |
+| GitHubTop10 | 14.6 MB | 14.9 MB | 1.9 MB | 1.9 MB | **1.4 MB** | 7.8x more |
+| README | 2.8 MB | 3.4 MB | **208.6 KB** | 579.8 KB | 266.1 KB | 14.0x more |
+| Spec | 25.8 MB | 27.6 MB | **1.7 MB** | 4.1 MB | 1.8 MB | 15.5x more |
 
 **Why we use more memory**: Our parser allocates `Event` structs into a
 flat slice (the streaming output). Batch parsers build compact AST trees

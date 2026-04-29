@@ -27,7 +27,7 @@ func GenerateReport(w io.Writer, r *RunResult) error {
 
 // Variant orderings for each benchmark section.
 var renderVariants = []string{"ours", "ours-4k", "glamour", "go-term-md"}
-var parseVariants = []string{"ours", "ours-reuse", "goldmark", "blackfriday", "gomarkdown"}
+var parseVariants = []string{"ours", "ours-4k", "goldmark", "blackfriday", "gomarkdown"}
 
 // --- Report generator -------------------------------------------------------
 

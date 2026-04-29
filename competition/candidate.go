@@ -32,7 +32,7 @@ type Candidate struct {
 // (buffer sizes, highlighters, parser reuse, etc.).
 type Variant struct {
 	// Name is the display name in results.
-	// Examples: "ours", "ours-reuse", "ours-4k", "goldmark"
+	// Examples: "ours", "ours-4k", "goldmark"
 	Name string
 
 	// Description explains what this variant tests.
