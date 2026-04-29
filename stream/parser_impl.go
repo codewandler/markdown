@@ -2408,6 +2408,8 @@ func mergeInlineStyles(base, add InlineStyle) InlineStyle {
 	out.Strong = out.Strong || add.Strong
 	out.Strike = out.Strike || add.Strike
 	out.Code = out.Code || add.Code
+	out.RawHTML = out.RawHTML || add.RawHTML
+	out.Image = out.Image || add.Image
 	if add.HasLink {
 		out.Link = add.Link
 		out.LinkTitle = add.LinkTitle

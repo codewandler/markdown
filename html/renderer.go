@@ -323,7 +323,9 @@ func (r *renderer) text(ev stream.Event) {
 	s := ev.Style
 
 	// Inline raw HTML: pass through without escaping.
+	// Close any open inline styles first so tags nest correctly.
 	if s.RawHTML {
+		r.closeStyle()
 		r.write(ev.Text)
 		return
 	}
