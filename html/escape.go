@@ -106,8 +106,9 @@ var urlSafe = func() [256]bool {
 	for _, c := range "!$&'()*+,;=" {
 		t[c] = true
 	}
-	// General delimiters used in URL structure: : / ? # [ ] @
-	for _, c := range ":/?#[]@" {
+	// General delimiters used in URL structure: : / ? # @
+	// Note: [ and ] are percent-encoded per CommonMark spec.
+	for _, c := range ":/?#@" {
 		t[c] = true
 	}
 	// Percent sign (handled specially for %XX preservation).

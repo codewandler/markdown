@@ -1897,14 +1897,14 @@ func stripIndentColumns(line string, columns int) string {
 }
 
 func (p *parser) parseInline(text string, span Span) []Event {
-	return parseInline(text, span, p.refs)
+	return parseInline(text, span, p.refs, p.config.GFMAutolinks)
 }
 
-func parseInline(text string, span Span, refs map[string]linkReference) []Event {
+func parseInline(text string, span Span, refs map[string]linkReference, gfmAutolinks bool) []Event {
 	if text == "" {
 		return []Event{{Kind: EventText, Text: "", Span: span}}
 	}
-	tokens := tokenizeInline(text, span, refs)
+	tokens := tokenizeInline(text, span, refs, gfmAutolinks)
 	tokens = resolveEmphasis(tokens)
 	return coalesceInlineTokens(tokens, span)
 }
@@ -1929,7 +1929,7 @@ type inlineToken struct {
 	close   bool
 }
 
-func tokenizeInline(text string, span Span, refs map[string]linkReference) []inlineToken {
+func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAutolinks bool) []inlineToken {
 	var tokens []inlineToken
 	var prevSource string
 	imagePossible := strings.Contains(text, "](")
@@ -1993,7 +1993,7 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 		if text[0] == '[' && linkPossible {
 			if ev, rest, labelRaw, ok := parseInlineLink(text, span); ok {
 				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
-				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs)...)
+				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs, gfmAutolinks)...)
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
@@ -2004,7 +2004,7 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 			if ev, rest, labelRaw, ok := parseReferenceLink(text, span, refs); ok {
 				_ = ev
 				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
-				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs)...)
+				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs, gfmAutolinks)...)
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
@@ -2034,11 +2034,13 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 			}
 			autolinkPossible = strings.Contains(text[1:], ">")
 		}
-		if ev, rest, ok := parseAutolinkLiteral(text, span, prevSource); ok {
-			tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
-			prevSource = text[:len(text)-len(rest)]
-			text = rest
-			continue
+		if gfmAutolinks {
+			if ev, rest, ok := parseAutolinkLiteral(text, span, prevSource); ok {
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: ev.Text, style: ev.Style})
+				prevSource = text[:len(text)-len(rest)]
+				text = rest
+				continue
+			}
 		}
 		if text[0] == '&' {
 			if decoded, rest, ok := parseCharacterReference(text); ok {
@@ -2381,12 +2383,12 @@ func applyDelimiterStyle(style InlineStyle, count int, marker byte) InlineStyle 
 
 // tokenizeLinkContent tokenizes and resolves emphasis in link label
 // text, then applies the link style to every resulting token.
-func tokenizeLinkContent(labelRaw string, linkStyle InlineStyle, span Span, refs map[string]linkReference) []inlineToken {
+func tokenizeLinkContent(labelRaw string, linkStyle InlineStyle, span Span, refs map[string]linkReference, gfmAutolinks bool) []inlineToken {
 	label := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
 	if label == "" {
 		return []inlineToken{{kind: inlineTokenText, text: "", style: linkStyle}}
 	}
-	inner := tokenizeInline(label, span, refs)
+	inner := tokenizeInline(label, span, refs, gfmAutolinks)
 	inner = resolveEmphasis(inner)
 	for i := range inner {
 		inner[i].style = mergeInlineStyles(inner[i].style, linkStyle)
@@ -2686,13 +2688,15 @@ func parseRawHTMLTag(text string) (string, bool) {
 		return "", false
 	}
 	// Comment: <!-- ... -->
-	// Text must not start with > or ->. (CommonMark §6.6)
+	// Per HTML spec, <!--> and <!---> are valid (empty) comments.
 	if strings.HasPrefix(text, "<!--") {
+		// Degenerate case: <!-->
 		if len(text) > 4 && text[4] == '>' {
-			return "", false // <!-- followed immediately by >
+			return text[:5], true
 		}
+		// Degenerate case: --->
 		if len(text) > 5 && text[4] == '-' && text[5] == '>' {
-			return "", false // <!-- followed by ->
+			return text[:6], true
 		}
 		end := strings.Index(text[4:], "-->")
 		if end >= 0 {

@@ -96,7 +96,7 @@ func TestGFMSupportedExamples(t *testing.T) {
 			t.Fatalf("supported GFM example %d is missing from corpus", number)
 		}
 		t.Run(fmt.Sprintf("%03d/%s", ex.Example, ex.Section), func(t *testing.T) {
-			assert(t, viewEvents(parseAll(t, ex.Markdown)))
+			assert(t, viewEvents(parseAllGFM(t, ex.Markdown)))
 		})
 	}
 }

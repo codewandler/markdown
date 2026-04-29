@@ -217,7 +217,7 @@ func TestTaskListSubset(t *testing.T) {
 }
 
 func TestGFMInlineExtensions(t *testing.T) {
-	events := viewEvents(parseAll(t, "~~gone~~ https://example.com, www.example.org/path and foo@bar.example.com.\n"))
+	events := viewEvents(parseAllGFM(t, "~~gone~~ https://example.com, www.example.org/path and foo@bar.example.com.\n"))
 	assertContains(t, events, eventView{Kind: EventText, Text: "gone", Style: InlineStyle{Strike: true}})
 	assertContains(t, events, eventView{Kind: EventText, Text: "https://example.com", Style: InlineStyle{HasLink: true, Link: "https://example.com"}})
 	assertContains(t, events, eventView{Kind: EventText, Text: "www.example.org/path", Style: InlineStyle{HasLink: true, Link: "http://www.example.org/path"}})
@@ -315,6 +315,23 @@ func TestLinkReferenceDefinitions(t *testing.T) {
 func parseAll(t *testing.T, in string) []Event {
 	t.Helper()
 	p := NewParser()
+	var all []Event
+	events, err := p.Write([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	all = append(all, events...)
+	events, err = p.Flush()
+	if err != nil {
+		t.Fatal(err)
+	}
+	all = append(all, events...)
+	return all
+}
+
+func parseAllGFM(t *testing.T, in string) []Event {
+	t.Helper()
+	p := NewParser(WithGFMAutolinks())
 	var all []Event
 	events, err := p.Write([]byte(in))
 	if err != nil {
