@@ -1,28 +1,33 @@
 # Design: `competition/` Package
 
-Status: **draft v3**
+Status: **draft v4 — questions resolved**
 Created: 2026-04-29
 
 ## Goal
 
 A pipeline-driven competition framework where candidates are declared
-minimally (repo URL + named variant factories) and everything else is
-discovered, measured, and reported automatically. One pipeline run
-produces a single `results.json` containing all data.
+with repo URL, qualitative features, and named variant factories.
+Quantitative data (metadata, compliance, benchmarks) is discovered
+and measured automatically. Each pipeline run produces a timestamped
+results snapshot.
 
 ## Principles
 
-1. **Minimal declaration** — a candidate is a repo URL + variant
-   factories. Everything else is discovered.
+1. **Explicit declaration** — a candidate is a repo URL + qualitative
+   features + variant factories. Features (streaming, TTY detection,
+   highlighting, etc.) are declared because they require human
+   knowledge. Everything quantitative is discovered.
 2. **Variants** — same repo can have multiple named configurations
    (buffer sizes, highlighters, parser reuse). Each variant gets its
    own column in results.
 3. **Pipeline stages** — each stage produces typed output that feeds
    the next. Stages can run independently or chained.
-4. **Single output** — one `results.json` per run with everything:
-   metadata, compliance, benchmarks, system info.
-5. **Deterministic report** — `compgen` reads `results.json` and
-   produces the same COMPARISON.md every time.
+4. **Timestamped output** — each run writes
+   `results/results-{timestamp}.json`. Report generation picks the
+   most recent by default. Old snapshots accumulate in version control.
+5. **Deterministic report** — `compgen` reads a results file and
+   produces the same COMPARISON.md every time. `--latest` (default)
+   picks the newest snapshot; `--results path` uses a specific one.
 
 ## Pipeline
 
@@ -63,6 +68,8 @@ competition/
 │   ├── inputs.go               # input generators
 │   └── testdata/
 │       └── github-top10/       # real-world READMEs
+├── results/                    # timestamped result snapshots
+│   └── results-2026-04-29T01:50.json
 ├── cmd/
 │   └── compgen/
 │       └── main.go             # Stage 4: generate COMPARISON.md
@@ -74,17 +81,59 @@ competition/
 ### Candidate (source — what we declare)
 
 ```go
-// Candidate is the minimal declaration for a competitor.
-// Everything beyond this is discovered or measured by the pipeline.
+// Candidate is the declaration for a competitor.
+// Metadata (stars, deps, coverage) is discovered by the pipeline.
+// Features are declared here because they are qualitative and
+// cannot be measured automatically.
 type Candidate struct {
     // Repo is the GitHub repository URL. Primary key for metadata
     // discovery. Multiple variants can share a repo.
     Repo string
 
+    // Features describes qualitative capabilities that cannot be
+    // discovered or measured by the pipeline. These populate the
+    // feature matrix in the report.
+    Features Features
+
     // Variants are named configurations of this candidate.
     // Each variant gets its own column in benchmark results.
     // A candidate must have at least one variant.
     Variants []Variant
+}
+
+// Features describes qualitative capabilities of a library.
+// These are declared, not discovered, because they require human
+// knowledge about the library's behavior.
+type Features struct {
+    // Parser identifies the parsing engine.
+    // Examples: "custom", "goldmark", "blackfriday", "blackfriday v1"
+    Parser string
+
+    // TerminalRender indicates terminal output support.
+    TerminalRender bool
+
+    // Streaming indicates true append-only streaming support
+    // (not re-rendering the full document on each chunk).
+    Streaming bool
+
+    // SyntaxHighlighting describes code block highlighting.
+    // Examples: "Go + Chroma", "Chroma", "Chroma v1", ""
+    SyntaxHighlighting string
+
+    // ClickableLinks indicates OSC 8 terminal hyperlink support.
+    ClickableLinks bool
+
+    // WordWrap describes wrapping behavior.
+    // Examples: "auto-detect", "fixed width", ""
+    WordWrap string
+
+    // TTYDetection indicates automatic terminal detection
+    // (e.g. stripping ANSI when piped).
+    TTYDetection bool
+
+    // Notes are free-form per-candidate remarks for the report.
+    // Example: "Uses blackfriday v1 internally"
+    Notes []string
 }
 
 // Variant is a named configuration with specific adapter functions.
@@ -123,6 +172,15 @@ type Adapters struct {
 ```go
 {
     Repo: "https://github.com/codewandler/markdown",
+    Features: Features{
+        Parser:             "custom streaming",
+        TerminalRender:     true,
+        Streaming:          true,
+        SyntaxHighlighting: "Go fast path + Chroma",
+        ClickableLinks:     true,
+        WordWrap:           "auto-detect",
+        TTYDetection:       true,
+    },
     Variants: []Variant{
         {
             Name:        "ours",
@@ -180,6 +238,7 @@ type SystemInfo struct {
 // CandidateResult holds all discovered and measured data for one repo.
 type CandidateResult struct {
     Repo       string                          `json:"repo"`
+    Features   Features                        `json:"features"`
     Metadata   MetadataResult                  `json:"metadata"`
     Variants   map[string]VariantResult         `json:"variants"`
 }
@@ -316,6 +375,15 @@ func BenchmarkRender(b *testing.B) {
 var All = []Candidate{
     {
         Repo: "https://github.com/codewandler/markdown",
+        Features: Features{
+            Parser:             "custom streaming",
+            TerminalRender:     true,
+            Streaming:          true,
+            SyntaxHighlighting: "Go fast path + Chroma",
+            ClickableLinks:     true,
+            WordWrap:           "auto-detect",
+            TTYDetection:       true,
+        },
         Variants: []Variant{
             {Name: "ours", Description: "default", Adapters: defaultAdapters()},
             {Name: "ours-reuse", Description: "parser reuse", Adapters: reusableAdapters()},
@@ -324,6 +392,10 @@ var All = []Candidate{
     },
     {
         Repo: "https://github.com/yuin/goldmark",
+        Features: Features{
+            Parser: "goldmark",
+            Notes:  []string{"De facto standard Go Markdown parser"},
+        },
         Variants: []Variant{
             {Name: "goldmark", Adapters: Adapters{
                 ParseFunc:  goldmarkParse,
@@ -333,6 +405,13 @@ var All = []Candidate{
     },
     {
         Repo: "https://github.com/charmbracelet/glamour",
+        Features: Features{
+            Parser:             "goldmark",
+            TerminalRender:     true,
+            SyntaxHighlighting: "Chroma",
+            WordWrap:           "fixed width",
+            Notes:              []string{"Uses goldmark internally", "Multiple built-in themes"},
+        },
         Variants: []Variant{
             {Name: "glamour", Adapters: Adapters{
                 RenderTerminal: glamourRender,
@@ -341,6 +420,10 @@ var All = []Candidate{
     },
     {
         Repo: "https://github.com/russross/blackfriday",
+        Features: Features{
+            Parser: "blackfriday",
+            Notes:  []string{"Unmaintained since 2019", "Not CommonMark compliant"},
+        },
         Variants: []Variant{
             {Name: "blackfriday", Adapters: Adapters{
                 ParseFunc:  blackfridayParse,
@@ -350,6 +433,10 @@ var All = []Candidate{
     },
     {
         Repo: "https://github.com/gomarkdown/markdown",
+        Features: Features{
+            Parser: "gomarkdown",
+            Notes:  []string{"Active fork of blackfriday"},
+        },
         Variants: []Variant{
             {Name: "gomarkdown", Adapters: Adapters{
                 ParseFunc:  gomarkdownParse,
@@ -359,6 +446,13 @@ var All = []Candidate{
     },
     {
         Repo: "https://github.com/MichaelMure/go-term-markdown",
+        Features: Features{
+            Parser:             "blackfriday v1",
+            TerminalRender:     true,
+            SyntaxHighlighting: "Chroma v1",
+            WordWrap:           "fixed width",
+            Notes:              []string{"Inline terminal images via pixterm"},
+        },
         Variants: []Variant{
             {Name: "go-term-md", Adapters: Adapters{
                 RenderTerminal: goTermMarkdownRender,
@@ -374,22 +468,22 @@ var All = []Candidate{
 competition:metadata:
     desc: Discover metadata for all candidates
     dir: competition
-    cmd: go run . metadata -out results.json
+    cmd: go run . metadata
 
 competition:compliance:
     desc: Run compliance tests
     dir: competition
-    cmd: go run . compliance -out results.json
+    cmd: go run . compliance
 
 competition:bench:
     desc: Run benchmarks
     dir: competition
-    cmd: go test -bench=. -benchmem ./benchmarks
+    cmd: go test -bench=. -benchmem -count=5 -json ./benchmarks
 
 competition:report:
-    desc: Generate COMPARISON.md from results.json
+    desc: Generate COMPARISON.md from latest results
     dir: competition
-    cmd: go run ./cmd/compgen -in results.json -out ../COMPARISON.md
+    cmd: go run ./cmd/compgen --latest -out ../COMPARISON.md
 
 competition:full:
     desc: Full pipeline run
@@ -399,6 +493,9 @@ competition:full:
         - task: competition:bench
         - task: competition:report
 ```
+
+Each stage reads the latest `results/results-*.json`, merges its
+data, and writes a new timestamped snapshot.
 
 ## Example results.json
 
@@ -481,13 +578,132 @@ competition:full:
 8. Delete old `benchmarks/` directory
 9. Update Taskfile, README, roadmap
 
-## Open Questions
+## Resolved Questions
 
-1. **Metadata caching** — Stage 1 is slow (clones repos). Cache
-   `results.json` and only re-run metadata on demand?
-2. **Our compliance** — we can't use RenderHTML. Report event-level
-   compliance from our own test suite as a special case in results.json?
-3. **Panic recovery** — wrap adapter calls in `recover()` for
-   pathological inputs? Record "panic" as result.
-4. **Historical tracking** — keep old results.json files to show
-   trends over time?
+### 1. Metadata Caching
+
+**Decision:** Cache with 24h TTL + `--refresh` flag.
+
+Stage 1 loads existing `results.json`, skips candidates whose
+`discovered_at` is within `MaxAge` (default 24h), only clones/queries
+stale entries, then merges back.
+
+```go
+type MetadataOptions struct {
+    MaxAge   time.Duration // default 24h
+    ForceAll bool          // --refresh flag
+}
+```
+
+### 2. Our Compliance
+
+**Decision:** Use internal event-level method until HTML renderer ships.
+
+We already document the methodology difference in COMPARISON.md. The
+competition pipeline populates our compliance by running
+`TestCommonMarkCorpusClassification` and parsing the counts. No special
+struct field needed — the report generator knows our variant uses
+event-level testing and adds the footnote.
+
+Once the `html` package ships (see `PLAN-html-renderer.md`), our
+variants gain a `RenderHTML` adapter and compliance is measured
+identically to all other candidates. The footnote is then removed.
+
+### 3. Panic Recovery
+
+**Decision:** Yes, always wrap adapter calls.
+
+Unmaintained parsers (blackfriday, gomarkdown) crash on pathological
+inputs. Without recovery, one panic kills the entire run.
+
+```go
+func safeCall(fn func() error) (err error) {
+    defer func() {
+        if r := recover(); r != nil {
+            err = fmt.Errorf("panic: %v", r)
+        }
+    }()
+    return fn()
+}
+```
+
+For benchmarks: panics are recorded as `"error": "panic: ..."` and
+the variant is skipped for that input. For compliance: a panic counts
+as a failure.
+
+### 4. Historical Tracking
+
+**Decision:** Timestamp-based result files + version control.
+
+Each pipeline run writes `results-{YYYY-MM-DDTHH:MM}.json`. The report
+generator (`compgen`) reads the most recent file by default, or accepts
+`--results path` to use a specific one. Old files accumulate in the
+repo (version-controlled), giving natural history without extra
+machinery.
+
+```
+competition/
+├── results/
+│   ├── results-2026-04-29T01:50.json
+│   ├── results-2026-04-30T14:22.json
+│   └── ...
+```
+
+`compgen --latest` picks the newest. `compgen --results results/results-2026-04-29T01:50.json`
+uses a specific snapshot.
+
+### 5. Benchmark Reproducibility
+
+**Decision:** Run with `-count=5`, store all runs, report median.
+
+```go
+type BenchmarkResult struct {
+    Category     string    `json:"category"`
+    Runs         []RunData `json:"runs"`
+    MedianNsOp   float64   `json:"median_ns_op"`
+    MedianBOp    int64     `json:"median_b_op"`
+    MedianAllocs int64     `json:"median_allocs_op"`
+}
+
+type RunData struct {
+    NsOp     float64 `json:"ns_op"`
+    BOp      int64   `json:"b_op"`
+    AllocsOp int64   `json:"allocs_op"`
+}
+```
+
+`compgen` reports median values. Raw runs are preserved for anyone
+who wants to compute confidence intervals or run `benchstat`.
+
+### 6. Benchmark Output Parsing
+
+**Decision:** Shell out with `go test -json`.
+
+The pipeline runner executes:
+```bash
+go test -bench=. -benchmem -count=5 -json ./benchmarks
+```
+
+JSON output gives structured results without regex parsing. The
+pipeline collects, groups by variant+input, computes medians, and
+merges into the results file.
+
+### 7. Module Boundary
+
+**Decision:** Separate module with `replace` directive.
+
+```
+// competition/go.mod
+replace github.com/codewandler/markdown => ../
+```
+
+Benchmarks always test local code. `compgen` includes the git SHA
+in the report header so results are traceable.
+
+### 8. `benchcompare` Fate
+
+**Decision:** Subsumed by `compgen`.
+
+`compgen` reads `results-*.json` and produces COMPARISON.md with all
+tables (speed, allocations, memory, compliance, feature matrix).
+The old `benchmarks/cmd/benchcompare` is deleted in the migration.

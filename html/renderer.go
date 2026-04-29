@@ -41,17 +41,18 @@ func RenderString(events []stream.Event, opts ...Option) (string, error) {
 }
 
 type renderer struct {
-	w          io.Writer
-	html5      bool
-	unsafe     bool
-	tightMap   map[int]bool // EnterBlock list event index -> tight
-	tightStack []bool       // runtime stack for nested lists
-	inHeader   bool         // current table row is a header row
-	inCode     bool         // inside fenced_code or indented_code
-	inHTML     bool         // inside html block
-	tableCol   int          // current column index in table row
-	tableAlign []stream.TableAlign
-	err        error // sticky error
+	w            io.Writer
+	html5        bool
+	unsafe       bool
+	tightMap     map[int]bool // EnterBlock list event index -> tight
+	tightStack   []bool       // runtime stack for nested lists
+	inHeader     bool         // current table row is a header row
+	inCode       bool         // inside fenced_code or indented_code
+	inHTML       bool         // inside html block
+	headingLevel int          // current heading level (for exit)
+	tableCol     int          // current column index in table row
+	tableAlign   []stream.TableAlign
+	err          error // sticky error
 }
 
 func newRenderer(w io.Writer, opts ...Option) *renderer {
@@ -70,7 +71,7 @@ func (r *renderer) render(events []stream.Event) error {
 		}
 		switch ev.Kind {
 		case stream.EventEnterBlock:
-			r.enterBlock(i, ev)
+			r.enterBlock(i, ev, events)
 		case stream.EventExitBlock:
 			r.exitBlock(ev)
 		case stream.EventText:
@@ -78,7 +79,11 @@ func (r *renderer) render(events []stream.Event) error {
 		case stream.EventSoftBreak:
 			r.write("\n")
 		case stream.EventLineBreak:
-			r.lineBreak()
+			if r.inCode {
+				r.write("\n")
+			} else {
+				r.lineBreak()
+			}
 		}
 	}
 	return r.err
@@ -109,7 +114,7 @@ func prescanTight(events []stream.Event) map[int]bool {
 	return m
 }
 
-func (r *renderer) enterBlock(idx int, ev stream.Event) {
+func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 	switch ev.Block {
 	case stream.BlockDocument:
 		// nothing
@@ -119,6 +124,7 @@ func (r *renderer) enterBlock(idx int, ev stream.Event) {
 		}
 		r.write("<p>")
 	case stream.BlockHeading:
+		r.headingLevel = ev.Level
 		r.write(fmt.Sprintf("<h%d>", ev.Level))
 	case stream.BlockBlockquote:
 		r.write("<blockquote>\n")
@@ -141,6 +147,8 @@ func (r *renderer) enterBlock(idx int, ev stream.Event) {
 			} else {
 				r.write("<li><input type=\"checkbox\" disabled=\"\" /> ")
 			}
+		} else if r.listItemNeedsNewline(idx, events) {
+			r.write("<li>\n")
 		} else {
 			r.write("<li>")
 		}
@@ -210,14 +218,12 @@ func (r *renderer) exitBlock(ev stream.Event) {
 		// nothing
 	case stream.BlockParagraph:
 		if r.isTight() {
-			// In tight lists, paragraphs don't get <p> tags but
-			// still need a newline between items.
-			r.write("\n")
 			return
 		}
 		r.write("</p>\n")
 	case stream.BlockHeading:
-		r.write(fmt.Sprintf("</h%d>\n", ev.Level))
+		r.write(fmt.Sprintf("</h%d>\n", r.headingLevel))
+		r.headingLevel = 0
 	case stream.BlockBlockquote:
 		r.write("</blockquote>\n")
 	case stream.BlockList:
@@ -344,6 +350,29 @@ func (r *renderer) lineBreak() {
 
 func (r *renderer) isTight() bool {
 	return len(r.tightStack) > 0 && r.tightStack[len(r.tightStack)-1]
+}
+
+// listItemNeedsNewline returns true if the list item at index idx
+// should emit a newline after <li>. This is the case when:
+// - the list is loose (items contain <p> tags), OR
+// - the item's first child is a block-level element (sublist,
+//   blockquote, code block, heading, etc.) rather than inline text.
+func (r *renderer) listItemNeedsNewline(idx int, events []stream.Event) bool {
+	if !r.isTight() {
+		return true
+	}
+	// Look at the next event after this EnterBlock list_item.
+	next := idx + 1
+	if next >= len(events) {
+		return false
+	}
+	ev := events[next]
+	if ev.Kind != stream.EventEnterBlock {
+		return false
+	}
+	// A paragraph in a tight list is suppressed (no <p> tag),
+	// so it doesn't need the newline. Any other block does.
+	return ev.Block != stream.BlockParagraph
 }
 
 func (r *renderer) write(s string) {

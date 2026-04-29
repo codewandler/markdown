@@ -166,7 +166,7 @@ func TestUnorderedList(t *testing.T) {
 		exitDoc(),
 	}
 	got, _ := RenderString(events)
-	want := "<ul>\n<li>one\n</li>\n<li>two\n</li>\n</ul>\n"
+	want := "<ul>\n<li>one</li>\n<li>two</li>\n</ul>\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -184,7 +184,7 @@ func TestOrderedList(t *testing.T) {
 		exitDoc(),
 	}
 	got, _ := RenderString(events)
-	want := "<ol>\n<li>first\n</li>\n</ol>\n"
+	want := "<ol>\n<li>first</li>\n</ol>\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -202,7 +202,7 @@ func TestOrderedListStart(t *testing.T) {
 		exitDoc(),
 	}
 	got, _ := RenderString(events)
-	want := "<ol start=\"3\">\n<li>third\n</li>\n</ol>\n"
+	want := "<ol start=\"3\">\n<li>third</li>\n</ol>\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -224,7 +224,7 @@ func TestLooseList(t *testing.T) {
 		exitDoc(),
 	}
 	got, _ := RenderString(events)
-	want := "<ul>\n<li><p>one</p>\n</li>\n<li><p>two</p>\n</li>\n</ul>\n"
+	want := "<ul>\n<li>\n<p>one</p>\n</li>\n<li>\n<p>two</p>\n</li>\n</ul>\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

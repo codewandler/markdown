@@ -69,3 +69,32 @@ tasks:
     desc: Run spec compliance tests against all parsers
     dir: benchmarks
     cmd: go test -run "TestCommonMarkCompliance|TestGFMCompliance" -v
+
+  # --- Competition pipeline (replaces bench:* tasks) ---
+
+  competition:metadata:
+    desc: "Stage 1: Discover metadata for all candidates"
+    dir: competition
+    cmd: go run ./cmd/comprun metadata {{.CLI_ARGS}}
+
+  competition:compliance:
+    desc: "Stage 2: Run CommonMark + GFM spec suites"
+    dir: competition
+    cmd: go run ./cmd/comprun compliance {{.CLI_ARGS}}
+
+  competition:bench:
+    desc: "Stage 3: Run benchmarks"
+    dir: competition
+    cmd: go run ./cmd/comprun bench {{.CLI_ARGS}}
+
+  competition:report:
+    desc: "Stage 4: Generate COMPARISON.md from latest results"
+    dir: competition
+    cmd: go run ./cmd/compgen --latest --out ../COMPARISON.md
+
+  competition:full:
+    desc: Run full competition pipeline (metadata + compliance + bench + report)
+    dir: competition
+    cmds:
+      - go run ./cmd/comprun full {{.CLI_ARGS}}
+      - go run ./cmd/compgen --latest --out ../COMPARISON.md

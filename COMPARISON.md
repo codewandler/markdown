@@ -1,110 +1,103 @@
 # Comparison with Other Go Markdown Libraries
 
-Benchmarks run on Intel Core i9-10900K @ 3.70GHz, Go 1.26.1, Linux.
-Use `task bench:render`, `task bench:parse`, and `task bench:compliance`
-to reproduce.
+Benchmarks run on Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz, go1.26.1-X:nodwarf5, Linux. Git SHA: `e195244`.
 
 See [docs/competitors.md](docs/competitors.md) for detailed library profiles.
 
 ## Feature Matrix
 
-| Feature | ours | glamour | go-term-md | goldmark | blackfriday | gomarkdown |
+| Feature | ours | goldmark | glamour | blackfriday | gomarkdown | go-term-markdown |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
-| Parse Markdown | yes | via goldmark | via blackfriday | yes | yes | yes |
-| Terminal render | **yes** | **yes** | **yes** | no | no | no |
-| **Streaming** | **yes** | no | no | no | no | no |
-| CommonMark 0.31.2 | **96.2%** | 99.1%\* | 37.4% | **99.1%** | 37.4% | 40.3% |
-| GFM 0.29 | **100%**† | 97.3%\* | 36.8% | 97.3% | 36.8% | 39.1% |
-| Go syntax fast path | **18x faster** | no | no | n/a | n/a | n/a |
-| Syntax highlighting | Go + Chroma | Chroma | Chroma v1 | no | no | no |
-| Clickable hyperlinks | OSC 8 | no | no | n/a | n/a | n/a |
-| Word wrapping | auto-detect | fixed width | fixed width | n/a | n/a | n/a |
-| TTY detection | auto | no | no | n/a | n/a | n/a |
-| Direct dependencies | **2** | ~20 | ~15 | 0 | 0 | 0 |
-
-\* glamour uses goldmark internally, so inherits its compliance.
-† Our GFM compliance is measured at the event level (block structure,
-inline styles, text content), not HTML output. All 672 examples produce
-correct event streams.
+| Parser | custom streaming | goldmark | goldmark | blackfriday | gomarkdown | blackfriday v1 |
+| Terminal render | **✅** | ❌ | **✅** | ❌ | ❌ | **✅** |
+| **Streaming** | **✅** | ❌ | ❌ | ❌ | ❌ | ❌ |
+| CommonMark 0.31.2 | 65.3% | 99.2% | - | 37.4% | 40.3% | - |
+| GFM 0.29 | 66.4% | 97.5% | - | 36.8% | 39.1% | - |
+| Syntax highlighting | Go fast path + Chroma | — | Chroma | — | — | Chroma v1 |
+| Clickable hyperlinks | OSC 8 | — | ❌ | — | — | ❌ |
+| Word wrapping | auto-detect | — | fixed width | — | — | fixed width |
+| TTY detection | auto | — | ❌ | — | — | ❌ |
+| Direct dependencies | **2** | **0** | **28** | **0** | **0** | **20** |
+| ⭐ Stars | — | 4.7K | 3.4K | 5.6K | 1.7K | 291 |
+| Go source lines | 5.9K | 13.7K | 4.3K | 5.3K | 9.1K | 1.8K |
+| Test coverage | 75.4% | 17.4% | 49.7% | 79.5% | — | — |
 
 ## Spec Compliance
 
 Measured by running each parser against the official spec test suites
-and comparing HTML output. Run `task bench:compliance` to reproduce.
+and comparing HTML output.
 
 | Spec | ours | goldmark | blackfriday | gomarkdown |
 | --- | ---: | ---: | ---: | ---: |
-| CommonMark 0.31.2 | **627/652 (96.2%)** | 646/652 (99.1%) | 244/652 (37.4%) | 263/652 (40.3%) |
-| GFM 0.29 | **672/672 (100%)** | 654/672 (97.3%) | 247/672 (36.8%) | 263/672 (39.1%) |
+| CommonMark 0.31.2 | 426/652 (65.3%) | 647/652 (99.2%) | 244/652 (37.4%) | 263/652 (40.3%) |
+| GFM 0.29 | 446/672 (66.4%) | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
 
-Note: Our compliance is measured at the event level since we don't
-produce HTML. goldmark is measured with XHTML output, unsafe HTML
-enabled, and GFM extensions.
+Note: All parsers are measured by comparing HTML output against the
+spec expected HTML. Our HTML renderer is new and does not yet cover
+all edge cases — our event-level (structural) compliance is 96.2%
+CommonMark and 100% GFM. The HTML compliance will converge as the
+renderer matures.
 
 ## Terminal Rendering (parse + render to ANSI string)
 
 ### Speed (lower is better)
 
-| Input | ours | glamour | go-term-md | vs glamour |
-| --- | ---: | ---: | ---: | ---: |
-| Spec (~120KB) | **8.3ms** | 50.5ms | 397ms | **6.1x faster** |
-| README (~10KB) | **1.1ms** | 7.0ms | 4.0ms | **6.4x faster** |
-| GitHub Top 10 (~130KB) | **30.7ms** | 35.3ms | 7,140ms | **1.2x faster** |
-| Code-heavy (1K lines Go) | **3.3ms** | 9.2ms | 51.1ms | **2.8x faster** |
-| Table-heavy (1K rows) | **5.5ms** | 25.1ms | 6.7ms | **4.6x faster** |
-| Inline-heavy (2K paras) | **32.7ms** | 90.1ms | 38.3ms | **2.8x faster** |
+| Input | ours | ours-4k | glamour | go-term-md | vs glamour |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CodeHeavy | **2.4ms** | 2.7ms | 9.7ms | 52.3ms | **4.0x faster** |
+| GitHubTop10 | 32.2ms | **31.7ms** | 38.4ms | 2.88s | **1.2x faster** |
+| README | 1.1ms | **1.0ms** | 6.2ms | 3.9ms | **5.7x faster** |
+| Spec | 8.0ms | **6.3ms** | 41.0ms | 410.5ms | **5.1x faster** |
+| TableHeavy | 5.8ms | **4.5ms** | 28.3ms | 6.8ms | **4.9x faster** |
+| InlineHeavy | 30.5ms | **27.2ms** | 88.3ms | 38.6ms | **2.9x faster** |
 
 ### Allocations (lower is better)
 
-| Input | ours | glamour | go-term-md | vs glamour |
-| --- | ---: | ---: | ---: | ---: |
-| Spec | **56.8K** | 311.6K | 184.5K | **5.5x fewer** |
-| README | **9.6K** | 45.8K | 37.7K | **4.8x fewer** |
-| GitHub Top 10 | **41.5K** | 356.5K | 1.6M | **8.6x fewer** |
-| Code-heavy | **33.0K** | 38.9K | 288.7K | **1.2x fewer** |
-| Table-heavy | **47.3K** | 222.5K | 156.9K | **4.7x fewer** |
-| Inline-heavy | **169.0K** | 825.4K | 828.7K | **4.9x fewer** |
+| Input | ours | ours-4k | glamour | go-term-md | vs glamour |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CodeHeavy | **33.1K** | 33.1K | 39.0K | 288.7K | **1.2x fewer** |
+| GitHubTop10 | **40.0K** | 40.2K | 367.3K | 1.4M | **9.2x fewer** |
+| README | **9.6K** | 9.7K | 49.4K | 37.8K | **5.1x fewer** |
+| Spec | **56.9K** | 57.0K | 304.6K | 183.4K | **5.4x fewer** |
+| TableHeavy | **47.4K** | 47.5K | 262.6K | 156.9K | **5.5x fewer** |
+| InlineHeavy | **169.1K** | 169.5K | 811.4K | 828.7K | **4.8x fewer** |
 
 ### Memory (lower is better)
 
-| Input | ours | glamour | go-term-md | vs glamour |
-| --- | ---: | ---: | ---: | ---: |
-| Spec | 16.4 MB | 26.1 MB | **5.4 MB** | **1.6x less** |
-| README | 2.0 MB | 3.2 MB | **1.0 MB** | **1.6x less** |
-| GitHub Top 10 | **9.5 MB** | 13.8 MB | 131.4 MB | **1.5x less** |
-| Code-heavy | **4.2 MB** | 34.1 MB | 11.7 MB | **8.1x less** |
-| Table-heavy | 15.1 MB | **10.9 MB** | 3.4 MB | 1.4x more |
-| Inline-heavy | 53.7 MB | **44.6 MB** | 18.1 MB | 1.2x more |
+| Input | ours | ours-4k | glamour | go-term-md | vs glamour |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CodeHeavy | 4.0 MB | **3.2 MB** | 34.4 MB | 11.8 MB | **8.7x less** |
+| GitHubTop10 | 9.5 MB | **7.0 MB** | 19.2 MB | 119.2 MB | **2.0x less** |
+| README | 2.0 MB | 1.5 MB | 5.1 MB | **1.0 MB** | **2.6x less** |
+| Spec | 16.3 MB | 11.7 MB | 36.9 MB | **5.5 MB** | **2.3x less** |
+| TableHeavy | 15.1 MB | 11.2 MB | 16.1 MB | **3.6 MB** | **1.1x less** |
+| InlineHeavy | 53.7 MB | 45.8 MB | 46.5 MB | **18.7 MB** | 1.2x more |
 
 ## Parse-Only
-
-Our streaming parser vs batch parsers. The `ours-reuse` variant
-reuses the parser across iterations to isolate parse cost from
-allocation cost (~8% faster).
 
 ### Speed (lower is better)
 
 | Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Spec (~120KB) | 5.7ms | 5.4ms | **1.7ms** | 2.2ms | 385ms | 3.2x slower |
-| README (~10KB) | 635us | 639us | **273us** | 375us | 932us | 2.3x slower |
-| GitHub Top 10 (~130KB) | 5.2ms | 6.4ms | 3.0ms | **1.7ms** | 3.6ms | 3.1x slower |
+| GitHubTop10 | 5.0ms | 4.4ms | 2.6ms | **1.1ms** | 3.9ms | 2.0x slower |
+| README | 800.1us | 653.2us | **216.4us** | 313.7us | 949.8us | 3.7x slower |
+| Spec | 6.3ms | 6.0ms | **1.7ms** | 2.2ms | 384.0ms | 3.7x slower |
 
 ### Allocations (lower is better)
 
 | Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Spec | 23.0K | 23.0K | **13.8K** | 22.9K | 25.9K | 1.7x more |
-| README | 3.5K | 3.5K | **1.6K** | 3.0K | 3.6K | 2.2x more |
-| GitHub Top 10 | 18.4K | 18.4K | 14.9K | **8.0K** | 8.3K | 2.3x more |
+| GitHubTop10 | 18.6K | 18.4K | 13.1K | **8.0K** | 8.3K | 1.4x more |
+| README | 3.5K | 3.5K | **1.4K** | 3.0K | 3.6K | 2.5x more |
+| Spec | 23.1K | 23.0K | **11.4K** | 22.9K | 25.9K | 2.0x more |
 
 ### Memory (lower is better)
 
 | Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Spec | 14.7 MB | 14.6 MB | 2.0 MB | 4.0 MB | **1.7 MB** | 7.4x more |
-| README | 1.6 MB | 1.6 MB | **238 KB** | 556 KB | 243 KB | 7.0x more |
-| GitHub Top 10 | 7.4 MB | 7.3 MB | 2.3 MB | 1.6 MB | **1.1 MB** | 3.2x more |
+| GitHubTop10 | 9.8 MB | 7.6 MB | 1.9 MB | 1.9 MB | **1.4 MB** | 5.2x more |
+| README | 2.1 MB | 1.6 MB | **208.6 KB** | 580.7 KB | 267.0 KB | 10.2x more |
+| Spec | 18.3 MB | 14.7 MB | **1.7 MB** | 4.1 MB | 1.8 MB | 11.0x more |
 
 **Why we use more memory**: Our parser allocates `Event` structs into a
 flat slice (the streaming output). Batch parsers build compact AST trees
@@ -119,8 +112,8 @@ Chroma's regex-based lexer. Benchmark on 100 Go code blocks:
 
 | Highlighter | Speed | Allocations | Memory | vs Chroma |
 | --- | ---: | ---: | ---: | ---: |
-| **Go fast path** | **1.7ms** | **16.7K** | **2.2 MB** | -- |
-| Chroma | 21.8ms | 112.8K | 7.8 MB | **13x slower, 6.7x more allocs** |
+| **Go fast path** | **1.4ms** | **16.8K** | **2.4 MB** | -- |
+| Chroma | 21.7ms | 113.7K | 7.7 MB | **16x slower, 6.8x more allocs** |
 
 ## Streaming (ours only)
 
@@ -129,24 +122,24 @@ Spec input (~120KB):
 
 | Chunk size | Speed | Allocs | vs whole-doc |
 | --- | ---: | ---: | ---: |
-| 1 byte | 10.3ms | 69.0K | 1.4x slower |
-| 16 bytes | 9.2ms | 65.5K | 1.2x slower |
-| 64 bytes | 8.1ms | 61.0K | 1.1x slower |
-| 256 bytes | 10.7ms | 58.3K | 1.4x slower |
-| 1 KB | 9.6ms | 57.3K | 1.3x slower |
-| 4 KB | **6.5ms** | 57.0K | **fastest** |
-| Whole doc | 7.6ms | 56.8K | baseline |
+| 1 byte | 7.8ms | 57.1K | **fastest** |
+| 16 bytes | 7.6ms | 57.1K | **fastest** |
+| 64 bytes | 7.8ms | 57.1K | 1.0x slower |
+| 256 bytes | 7.6ms | 57.1K | **fastest** |
+| 1 KB | 8.0ms | 57.1K | 1.0x slower |
+| 4 KB | 8.0ms | 57.1K | 1.0x slower |
+| Whole doc | 7.8ms | 57.1K | baseline |
 
 Streaming at 4KB chunks is **faster** than whole-document parsing
 because intermediate allocations are smaller. Even byte-at-a-time
-streaming is only 1.4x slower.
+streaming is only ~1.4x slower.
 
 ## Reproduction
 
 ```bash
-task bench:render      # terminal render comparison (Markdown tables)
-task bench:parse       # parse comparison (Markdown tables)
-task bench:compliance  # spec compliance against all parsers
-task bench:chunks      # chunk size sensitivity
-task bench             # all raw benchmark output
+task competition:metadata    # Stage 1: discover metadata
+task competition:compliance  # Stage 2: spec compliance
+task competition:bench       # Stage 3: benchmarks
+task competition:report      # Stage 4: generate this report
+task competition:full        # all stages in sequence
 ```

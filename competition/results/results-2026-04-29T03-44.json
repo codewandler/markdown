@@ -1,0 +1,2590 @@
+{
+    "run_at": "2026-04-29T03:44:08.897004287+02:00",
+    "git_sha": "e195244",
+    "system": {
+        "os": "linux",
+        "arch": "amd64",
+        "cpu": "Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz",
+        "go_version": "go1.26.1-X:nodwarf5",
+        "hostname": "next"
+    },
+    "candidates": [
+        {
+            "repo": "https://github.com/codewandler/markdown",
+            "features": {
+                "parser": "custom streaming",
+                "terminal_render": true,
+                "streaming": true,
+                "syntax_highlighting": "Go fast path + Chroma",
+                "clickable_links": true,
+                "word_wrap": "auto-detect",
+                "tty_detection": true
+            },
+            "metadata": {
+                "name": "markdown",
+                "owner": "codewandler",
+                "description": "Incremental Markdown parser and terminal renderer for streaming AI output",
+                "license": "",
+                "stars": 0,
+                "open_issues": 0,
+                "forks": 0,
+                "last_commit": "2026-04-29T00:13:41Z",
+                "go_files": 19,
+                "go_lines": 5913,
+                "test_files": 16,
+                "test_lines": 4369,
+                "direct_deps": 2,
+                "transitive_deps": 5,
+                "dep_names": [
+                    "github.com/alecthomas/assert/v2",
+                    "github.com/alecthomas/chroma/v2",
+                    "github.com/alecthomas/repr",
+                    "github.com/dlclark/regexp2",
+                    "github.com/hexops/gotextdiff"
+                ],
+                "test_coverage": 75.35999999999999,
+                "discovered_at": "2026-04-29T03:26:54.626404361+02:00"
+            },
+            "variants": {
+                "ours": {
+                    "description": "default configuration",
+                    "compliance": {
+                        "commonmark": {
+                            "version": "0.31.2",
+                            "pass": 426,
+                            "total": 652,
+                            "percentage": 65.33742331288343,
+                            "sections": {
+                                "ATX headings": {
+                                    "pass": 18,
+                                    "total": 18
+                                },
+                                "Autolinks": {
+                                    "pass": 13,
+                                    "total": 19
+                                },
+                                "Backslash escapes": {
+                                    "pass": 12,
+                                    "total": 13
+                                },
+                                "Blank lines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Block quotes": {
+                                    "pass": 23,
+                                    "total": 25
+                                },
+                                "Code spans": {
+                                    "pass": 21,
+                                    "total": 22
+                                },
+                                "Emphasis and strong emphasis": {
+                                    "pass": 78,
+                                    "total": 132
+                                },
+                                "Entity and numeric character references": {
+                                    "pass": 16,
+                                    "total": 17
+                                },
+                                "Fenced code blocks": {
+                                    "pass": 26,
+                                    "total": 29
+                                },
+                                "HTML blocks": {
+                                    "pass": 0,
+                                    "total": 44
+                                },
+                                "Hard line breaks": {
+                                    "pass": 10,
+                                    "total": 15
+                                },
+                                "Images": {
+                                    "pass": 13,
+                                    "total": 22
+                                },
+                                "Indented code blocks": {
+                                    "pass": 9,
+                                    "total": 12
+                                },
+                                "Inlines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Link reference definitions": {
+                                    "pass": 21,
+                                    "total": 27
+                                },
+                                "Links": {
+                                    "pass": 68,
+                                    "total": 90
+                                },
+                                "List items": {
+                                    "pass": 21,
+                                    "total": 48
+                                },
+                                "Lists": {
+                                    "pass": 8,
+                                    "total": 26
+                                },
+                                "Paragraphs": {
+                                    "pass": 7,
+                                    "total": 8
+                                },
+                                "Precedence": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Raw HTML": {
+                                    "pass": 7,
+                                    "total": 20
+                                },
+                                "Setext headings": {
+                                    "pass": 24,
+                                    "total": 27
+                                },
+                                "Soft line breaks": {
+                                    "pass": 1,
+                                    "total": 2
+                                },
+                                "Tabs": {
+                                    "pass": 6,
+                                    "total": 11
+                                },
+                                "Textual content": {
+                                    "pass": 3,
+                                    "total": 3
+                                },
+                                "Thematic breaks": {
+                                    "pass": 18,
+                                    "total": 19
+                                }
+                            }
+                        },
+                        "gfm": {
+                            "version": "0.29",
+                            "pass": 446,
+                            "total": 672,
+                            "percentage": 66.36904761904762,
+                            "sections": {
+                                "ATX headings": {
+                                    "pass": 18,
+                                    "total": 18
+                                },
+                                "Autolinks": {
+                                    "pass": 22,
+                                    "total": 30
+                                },
+                                "Backslash escapes": {
+                                    "pass": 12,
+                                    "total": 13
+                                },
+                                "Blank lines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Block quotes": {
+                                    "pass": 23,
+                                    "total": 25
+                                },
+                                "Code spans": {
+                                    "pass": 21,
+                                    "total": 22
+                                },
+                                "Disallowed Raw HTML": {
+                                    "pass": 0,
+                                    "total": 1
+                                },
+                                "Emphasis and strong emphasis": {
+                                    "pass": 84,
+                                    "total": 131
+                                },
+                                "Entity and numeric character references": {
+                                    "pass": 16,
+                                    "total": 17
+                                },
+                                "Fenced code blocks": {
+                                    "pass": 26,
+                                    "total": 29
+                                },
+                                "HTML blocks": {
+                                    "pass": 0,
+                                    "total": 43
+                                },
+                                "Hard line breaks": {
+                                    "pass": 10,
+                                    "total": 15
+                                },
+                                "Images": {
+                                    "pass": 13,
+                                    "total": 22
+                                },
+                                "Indented code blocks": {
+                                    "pass": 9,
+                                    "total": 12
+                                },
+                                "Inlines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Link reference definitions": {
+                                    "pass": 22,
+                                    "total": 28
+                                },
+                                "Links": {
+                                    "pass": 66,
+                                    "total": 87
+                                },
+                                "List items": {
+                                    "pass": 21,
+                                    "total": 48
+                                },
+                                "Lists": {
+                                    "pass": 8,
+                                    "total": 26
+                                },
+                                "Paragraphs": {
+                                    "pass": 7,
+                                    "total": 8
+                                },
+                                "Precedence": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Raw HTML": {
+                                    "pass": 7,
+                                    "total": 20
+                                },
+                                "Setext headings": {
+                                    "pass": 24,
+                                    "total": 27
+                                },
+                                "Soft line breaks": {
+                                    "pass": 1,
+                                    "total": 2
+                                },
+                                "Strikethrough": {
+                                    "pass": 2,
+                                    "total": 2
+                                },
+                                "Tables": {
+                                    "pass": 4,
+                                    "total": 8
+                                },
+                                "Tabs": {
+                                    "pass": 6,
+                                    "total": 11
+                                },
+                                "Task list items": {
+                                    "pass": 0,
+                                    "total": 2
+                                },
+                                "Textual content": {
+                                    "pass": 3,
+                                    "total": 3
+                                },
+                                "Thematic breaks": {
+                                    "pass": 18,
+                                    "total": 19
+                                }
+                            }
+                        }
+                    },
+                    "benchmarks": {
+                        "chunksize/1": {
+                            "category": "chunksize",
+                            "runs": [
+                                {
+                                    "ns_op": 7778811,
+                                    "b_op": 18730440,
+                                    "allocs_op": 57063
+                                }
+                            ],
+                            "median_ns_op": 7778811,
+                            "median_b_op": 18730440,
+                            "median_allocs_op": 57063
+                        },
+                        "chunksize/16": {
+                            "category": "chunksize",
+                            "runs": [
+                                {
+                                    "ns_op": 7571570,
+                                    "b_op": 18730715,
+                                    "allocs_op": 57063
+                                }
+                            ],
+                            "median_ns_op": 7571570,
+                            "median_b_op": 18730715,
+                            "median_allocs_op": 57063
+                        },
+                        "chunksize/1K": {
+                            "category": "chunksize",
+                            "runs": [
+                                {
+                                    "ns_op": 8020915,
+                                    "b_op": 18730441,
+                                    "allocs_op": 57063
+                                }
+                            ],
+                            "median_ns_op": 8020915,
+                            "median_b_op": 18730441,
+                            "median_allocs_op": 57063
+                        },
+                        "chunksize/256": {
+                            "category": "chunksize",
+                            "runs": [
+                                {
+                                    "ns_op": 7566030,
+                                    "b_op": 18730227,
+                                    "allocs_op": 57062
+                                }
+                            ],
+                            "median_ns_op": 7566030,
+                            "median_b_op": 18730227,
+                            "median_allocs_op": 57062
+                        },
+                        "chunksize/4K": {
+                            "category": "chunksize",
+                            "runs": [
+                                {
+                                    "ns_op": 7982834,
+                                    "b_op": 18730020,
+                                    "allocs_op": 57061
+                                }
+                            ],
+                            "median_ns_op": 7982834,
+                            "median_b_op": 18730020,
+                            "median_allocs_op": 57061
+                        },
+                        "chunksize/64": {
+                            "category": "chunksize",
+                            "runs": [
+                                {
+                                    "ns_op": 7820187,
+                                    "b_op": 18730066,
+                                    "allocs_op": 57062
+                                }
+                            ],
+                            "median_ns_op": 7820187,
+                            "median_b_op": 18730066,
+                            "median_allocs_op": 57062
+                        },
+                        "chunksize/whole": {
+                            "category": "chunksize",
+                            "runs": [
+                                {
+                                    "ns_op": 7793945,
+                                    "b_op": 18730072,
+                                    "allocs_op": 57062
+                                }
+                            ],
+                            "median_ns_op": 7793945,
+                            "median_b_op": 18730072,
+                            "median_allocs_op": 57062
+                        },
+                        "highlight/chroma-for-go": {
+                            "category": "highlight",
+                            "runs": [
+                                {
+                                    "ns_op": 21682345,
+                                    "b_op": 8116272,
+                                    "allocs_op": 113685
+                                }
+                            ],
+                            "median_ns_op": 21682345,
+                            "median_b_op": 8116272,
+                            "median_allocs_op": 113685
+                        },
+                        "highlight/go-fast-path": {
+                            "category": "highlight",
+                            "runs": [
+                                {
+                                    "ns_op": 1351466,
+                                    "b_op": 2499474,
+                                    "allocs_op": 16750
+                                }
+                            ],
+                            "median_ns_op": 1351466,
+                            "median_b_op": 2499474,
+                            "median_allocs_op": 16750
+                        },
+                        "parse/GitHubTop10": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 4784575,
+                                    "b_op": 10285747,
+                                    "allocs_op": 18577
+                                },
+                                {
+                                    "ns_op": 5323193,
+                                    "b_op": 10285750,
+                                    "allocs_op": 18577
+                                },
+                                {
+                                    "ns_op": 4980474,
+                                    "b_op": 10285747,
+                                    "allocs_op": 18577
+                                }
+                            ],
+                            "median_ns_op": 4980474,
+                            "median_b_op": 10285747,
+                            "median_allocs_op": 18577
+                        },
+                        "parse/README": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 800077,
+                                    "b_op": 2189627,
+                                    "allocs_op": 3486
+                                },
+                                {
+                                    "ns_op": 802194,
+                                    "b_op": 2189627,
+                                    "allocs_op": 3486
+                                },
+                                {
+                                    "ns_op": 788469,
+                                    "b_op": 2189627,
+                                    "allocs_op": 3486
+                                }
+                            ],
+                            "median_ns_op": 800077,
+                            "median_b_op": 2189627,
+                            "median_allocs_op": 3486
+                        },
+                        "parse/Spec": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 6256629,
+                                    "b_op": 19166625,
+                                    "allocs_op": 23098
+                                },
+                                {
+                                    "ns_op": 6264019,
+                                    "b_op": 19166563,
+                                    "allocs_op": 23098
+                                },
+                                {
+                                    "ns_op": 6356809,
+                                    "b_op": 19166559,
+                                    "allocs_op": 23098
+                                }
+                            ],
+                            "median_ns_op": 6264019,
+                            "median_b_op": 19166563,
+                            "median_allocs_op": 23098
+                        },
+                        "pathological/LargeFlat": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 18724683,
+                                    "b_op": 35694884,
+                                    "allocs_op": 139977
+                                },
+                                {
+                                    "ns_op": 19179013,
+                                    "b_op": 35695026,
+                                    "allocs_op": 139977
+                                },
+                                {
+                                    "ns_op": 19070909,
+                                    "b_op": 35695092,
+                                    "allocs_op": 139977
+                                }
+                            ],
+                            "median_ns_op": 19070909,
+                            "median_b_op": 35695026,
+                            "median_allocs_op": 139977
+                        },
+                        "pathological/PathologicalDelim": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 2391586,
+                                    "b_op": 7280392,
+                                    "allocs_op": 14464
+                                },
+                                {
+                                    "ns_op": 2448810,
+                                    "b_op": 7280446,
+                                    "allocs_op": 14464
+                                },
+                                {
+                                    "ns_op": 2427708,
+                                    "b_op": 7280415,
+                                    "allocs_op": 14464
+                                }
+                            ],
+                            "median_ns_op": 2427708,
+                            "median_b_op": 7280415,
+                            "median_allocs_op": 14464
+                        },
+                        "pathological/PathologicalNest": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 324776,
+                                    "b_op": 158186,
+                                    "allocs_op": 284
+                                },
+                                {
+                                    "ns_op": 329490,
+                                    "b_op": 158184,
+                                    "allocs_op": 284
+                                },
+                                {
+                                    "ns_op": 325610,
+                                    "b_op": 158186,
+                                    "allocs_op": 284
+                                }
+                            ],
+                            "median_ns_op": 325610,
+                            "median_b_op": 158186,
+                            "median_allocs_op": 284
+                        },
+                        "render/CodeHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 2397614,
+                                    "b_op": 4162792,
+                                    "allocs_op": 33062
+                                },
+                                {
+                                    "ns_op": 2406315,
+                                    "b_op": 4162803,
+                                    "allocs_op": 33062
+                                },
+                                {
+                                    "ns_op": 2542853,
+                                    "b_op": 4162818,
+                                    "allocs_op": 33062
+                                }
+                            ],
+                            "median_ns_op": 2406315,
+                            "median_b_op": 4162803,
+                            "median_allocs_op": 33062
+                        },
+                        "render/GitHubTop10": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 32268286,
+                                    "b_op": 10101395,
+                                    "allocs_op": 41321
+                                },
+                                {
+                                    "ns_op": 32214707,
+                                    "b_op": 10008159,
+                                    "allocs_op": 39976
+                                },
+                                {
+                                    "ns_op": 32096156,
+                                    "b_op": 10013134,
+                                    "allocs_op": 39977
+                                }
+                            ],
+                            "median_ns_op": 32214707,
+                            "median_b_op": 10013134,
+                            "median_allocs_op": 39977
+                        },
+                        "render/InlineHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 30186036,
+                                    "b_op": 56341173,
+                                    "allocs_op": 169053
+                                },
+                                {
+                                    "ns_op": 30474524,
+                                    "b_op": 56340474,
+                                    "allocs_op": 169050
+                                },
+                                {
+                                    "ns_op": 30609600,
+                                    "b_op": 56341145,
+                                    "allocs_op": 169052
+                                }
+                            ],
+                            "median_ns_op": 30474524,
+                            "median_b_op": 56341145,
+                            "median_allocs_op": 169052
+                        },
+                        "render/README": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 1071046,
+                                    "b_op": 2112814,
+                                    "allocs_op": 9644
+                                },
+                                {
+                                    "ns_op": 1145647,
+                                    "b_op": 2112807,
+                                    "allocs_op": 9644
+                                },
+                                {
+                                    "ns_op": 1081557,
+                                    "b_op": 2112837,
+                                    "allocs_op": 9644
+                                }
+                            ],
+                            "median_ns_op": 1081557,
+                            "median_b_op": 2112814,
+                            "median_allocs_op": 9644
+                        },
+                        "render/Spec": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 7967700,
+                                    "b_op": 17123439,
+                                    "allocs_op": 56864
+                                },
+                                {
+                                    "ns_op": 7936018,
+                                    "b_op": 17123303,
+                                    "allocs_op": 56864
+                                },
+                                {
+                                    "ns_op": 7994874,
+                                    "b_op": 17123327,
+                                    "allocs_op": 56864
+                                }
+                            ],
+                            "median_ns_op": 7967700,
+                            "median_b_op": 17123327,
+                            "median_allocs_op": 56864
+                        },
+                        "render/TableHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 5685856,
+                                    "b_op": 15821963,
+                                    "allocs_op": 47363
+                                },
+                                {
+                                    "ns_op": 5783693,
+                                    "b_op": 15821980,
+                                    "allocs_op": 47363
+                                },
+                                {
+                                    "ns_op": 5867988,
+                                    "b_op": 15822008,
+                                    "allocs_op": 47363
+                                }
+                            ],
+                            "median_ns_op": 5783693,
+                            "median_b_op": 15821980,
+                            "median_allocs_op": 47363
+                        }
+                    }
+                },
+                "ours-4k": {
+                    "description": "ours-4k",
+                    "benchmarks": {
+                        "pathological/LargeFlat": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 16257762,
+                                    "b_op": 24038430,
+                                    "allocs_op": 140810
+                                },
+                                {
+                                    "ns_op": 15613275,
+                                    "b_op": 24038465,
+                                    "allocs_op": 140811
+                                },
+                                {
+                                    "ns_op": 15948143,
+                                    "b_op": 24038563,
+                                    "allocs_op": 140811
+                                }
+                            ],
+                            "median_ns_op": 15948143,
+                            "median_b_op": 24038465,
+                            "median_allocs_op": 140811
+                        },
+                        "pathological/PathologicalDelim": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 2416728,
+                                    "b_op": 7255220,
+                                    "allocs_op": 14455
+                                },
+                                {
+                                    "ns_op": 2402191,
+                                    "b_op": 7255258,
+                                    "allocs_op": 14456
+                                },
+                                {
+                                    "ns_op": 2458048,
+                                    "b_op": 7255232,
+                                    "allocs_op": 14455
+                                }
+                            ],
+                            "median_ns_op": 2416728,
+                            "median_b_op": 7255232,
+                            "median_allocs_op": 14455
+                        },
+                        "pathological/PathologicalNest": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 322984,
+                                    "b_op": 148885,
+                                    "allocs_op": 277
+                                },
+                                {
+                                    "ns_op": 324507,
+                                    "b_op": 148886,
+                                    "allocs_op": 277
+                                },
+                                {
+                                    "ns_op": 322261,
+                                    "b_op": 148885,
+                                    "allocs_op": 277
+                                }
+                            ],
+                            "median_ns_op": 322984,
+                            "median_b_op": 148885,
+                            "median_allocs_op": 277
+                        },
+                        "render/CodeHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 3351057,
+                                    "b_op": 3361952,
+                                    "allocs_op": 33109
+                                },
+                                {
+                                    "ns_op": 2746927,
+                                    "b_op": 3361897,
+                                    "allocs_op": 33109
+                                },
+                                {
+                                    "ns_op": 2541407,
+                                    "b_op": 3361889,
+                                    "allocs_op": 33109
+                                }
+                            ],
+                            "median_ns_op": 2746927,
+                            "median_b_op": 3361897,
+                            "median_allocs_op": 33109
+                        },
+                        "render/GitHubTop10": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 31789907,
+                                    "b_op": 7375796,
+                                    "allocs_op": 40249
+                                },
+                                {
+                                    "ns_op": 31637476,
+                                    "b_op": 7386791,
+                                    "allocs_op": 40250
+                                },
+                                {
+                                    "ns_op": 31741492,
+                                    "b_op": 7381476,
+                                    "allocs_op": 40248
+                                }
+                            ],
+                            "median_ns_op": 31741492,
+                            "median_b_op": 7381476,
+                            "median_allocs_op": 40249
+                        },
+                        "render/InlineHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 30622542,
+                                    "b_op": 48056200,
+                                    "allocs_op": 169549
+                                },
+                                {
+                                    "ns_op": 26580945,
+                                    "b_op": 48055919,
+                                    "allocs_op": 169547
+                                },
+                                {
+                                    "ns_op": 27160118,
+                                    "b_op": 48055989,
+                                    "allocs_op": 169547
+                                }
+                            ],
+                            "median_ns_op": 27160118,
+                            "median_b_op": 48055989,
+                            "median_allocs_op": 169547
+                        },
+                        "render/README": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 1014238,
+                                    "b_op": 1574013,
+                                    "allocs_op": 9654
+                                },
+                                {
+                                    "ns_op": 1009435,
+                                    "b_op": 1574029,
+                                    "allocs_op": 9654
+                                },
+                                {
+                                    "ns_op": 979221,
+                                    "b_op": 1574029,
+                                    "allocs_op": 9654
+                                }
+                            ],
+                            "median_ns_op": 1009435,
+                            "median_b_op": 1574029,
+                            "median_allocs_op": 9654
+                        },
+                        "render/Spec": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 6326496,
+                                    "b_op": 12306084,
+                                    "allocs_op": 56980
+                                },
+                                {
+                                    "ns_op": 6271032,
+                                    "b_op": 12306225,
+                                    "allocs_op": 56981
+                                },
+                                {
+                                    "ns_op": 6647920,
+                                    "b_op": 12306162,
+                                    "allocs_op": 56980
+                                }
+                            ],
+                            "median_ns_op": 6326496,
+                            "median_b_op": 12306162,
+                            "median_allocs_op": 56980
+                        },
+                        "render/TableHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 4460483,
+                                    "b_op": 11794383,
+                                    "allocs_op": 47452
+                                },
+                                {
+                                    "ns_op": 4503555,
+                                    "b_op": 11794390,
+                                    "allocs_op": 47452
+                                },
+                                {
+                                    "ns_op": 4483707,
+                                    "b_op": 11794384,
+                                    "allocs_op": 47452
+                                }
+                            ],
+                            "median_ns_op": 4483707,
+                            "median_b_op": 11794384,
+                            "median_allocs_op": 47452
+                        }
+                    }
+                },
+                "ours-reuse": {
+                    "description": "ours-reuse",
+                    "benchmarks": {
+                        "parse/GitHubTop10": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 4280963,
+                                    "b_op": 7945888,
+                                    "allocs_op": 18430
+                                },
+                                {
+                                    "ns_op": 4404089,
+                                    "b_op": 7945886,
+                                    "allocs_op": 18430
+                                },
+                                {
+                                    "ns_op": 4360429,
+                                    "b_op": 7945885,
+                                    "allocs_op": 18430
+                                }
+                            ],
+                            "median_ns_op": 4360429,
+                            "median_b_op": 7945886,
+                            "median_allocs_op": 18430
+                        },
+                        "parse/README": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 658217,
+                                    "b_op": 1721776,
+                                    "allocs_op": 3481
+                                },
+                                {
+                                    "ns_op": 650081,
+                                    "b_op": 1721776,
+                                    "allocs_op": 3481
+                                },
+                                {
+                                    "ns_op": 653201,
+                                    "b_op": 1721780,
+                                    "allocs_op": 3481
+                                }
+                            ],
+                            "median_ns_op": 653201,
+                            "median_b_op": 1721776,
+                            "median_allocs_op": 3481
+                        },
+                        "parse/Spec": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 6146037,
+                                    "b_op": 15439417,
+                                    "allocs_op": 23042
+                                },
+                                {
+                                    "ns_op": 5964583,
+                                    "b_op": 15439415,
+                                    "allocs_op": 23042
+                                },
+                                {
+                                    "ns_op": 5920241,
+                                    "b_op": 15439411,
+                                    "allocs_op": 23042
+                                }
+                            ],
+                            "median_ns_op": 5964583,
+                            "median_b_op": 15439415,
+                            "median_allocs_op": 23042
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "repo": "https://github.com/yuin/goldmark",
+            "features": {
+                "parser": "goldmark",
+                "terminal_render": false,
+                "streaming": false,
+                "clickable_links": false,
+                "tty_detection": false,
+                "notes": [
+                    "De facto standard Go Markdown parser",
+                    "Zero dependencies"
+                ]
+            },
+            "metadata": {
+                "name": "goldmark",
+                "owner": "yuin",
+                "description": ":trophy: A markdown parser written in Go. Easy to extend, standard(CommonMark) compliant, well structured.",
+                "license": "MIT License",
+                "stars": 4734,
+                "open_issues": 3,
+                "forks": 290,
+                "last_commit": "2026-03-25T05:08:07Z",
+                "go_files": 58,
+                "go_lines": 13692,
+                "test_files": 19,
+                "test_lines": 2048,
+                "direct_deps": 0,
+                "transitive_deps": 0,
+                "test_coverage": 17.359999999999996,
+                "discovered_at": "2026-04-29T03:26:58.890993091+02:00"
+            },
+            "variants": {
+                "goldmark": {
+                    "description": "default configuration",
+                    "compliance": {
+                        "commonmark": {
+                            "version": "0.31.2",
+                            "pass": 647,
+                            "total": 652,
+                            "percentage": 99.23312883435584,
+                            "sections": {
+                                "ATX headings": {
+                                    "pass": 18,
+                                    "total": 18
+                                },
+                                "Autolinks": {
+                                    "pass": 16,
+                                    "total": 19
+                                },
+                                "Backslash escapes": {
+                                    "pass": 13,
+                                    "total": 13
+                                },
+                                "Blank lines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Block quotes": {
+                                    "pass": 25,
+                                    "total": 25
+                                },
+                                "Code spans": {
+                                    "pass": 22,
+                                    "total": 22
+                                },
+                                "Emphasis and strong emphasis": {
+                                    "pass": 132,
+                                    "total": 132
+                                },
+                                "Entity and numeric character references": {
+                                    "pass": 17,
+                                    "total": 17
+                                },
+                                "Fenced code blocks": {
+                                    "pass": 29,
+                                    "total": 29
+                                },
+                                "HTML blocks": {
+                                    "pass": 44,
+                                    "total": 44
+                                },
+                                "Hard line breaks": {
+                                    "pass": 14,
+                                    "total": 15
+                                },
+                                "Images": {
+                                    "pass": 22,
+                                    "total": 22
+                                },
+                                "Indented code blocks": {
+                                    "pass": 12,
+                                    "total": 12
+                                },
+                                "Inlines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Link reference definitions": {
+                                    "pass": 27,
+                                    "total": 27
+                                },
+                                "Links": {
+                                    "pass": 90,
+                                    "total": 90
+                                },
+                                "List items": {
+                                    "pass": 48,
+                                    "total": 48
+                                },
+                                "Lists": {
+                                    "pass": 26,
+                                    "total": 26
+                                },
+                                "Paragraphs": {
+                                    "pass": 7,
+                                    "total": 8
+                                },
+                                "Precedence": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Raw HTML": {
+                                    "pass": 20,
+                                    "total": 20
+                                },
+                                "Setext headings": {
+                                    "pass": 27,
+                                    "total": 27
+                                },
+                                "Soft line breaks": {
+                                    "pass": 2,
+                                    "total": 2
+                                },
+                                "Tabs": {
+                                    "pass": 11,
+                                    "total": 11
+                                },
+                                "Textual content": {
+                                    "pass": 3,
+                                    "total": 3
+                                },
+                                "Thematic breaks": {
+                                    "pass": 19,
+                                    "total": 19
+                                }
+                            }
+                        },
+                        "gfm": {
+                            "version": "0.29",
+                            "pass": 655,
+                            "total": 672,
+                            "percentage": 97.47023809523809,
+                            "sections": {
+                                "ATX headings": {
+                                    "pass": 18,
+                                    "total": 18
+                                },
+                                "Autolinks": {
+                                    "pass": 27,
+                                    "total": 30
+                                },
+                                "Backslash escapes": {
+                                    "pass": 13,
+                                    "total": 13
+                                },
+                                "Blank lines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Block quotes": {
+                                    "pass": 25,
+                                    "total": 25
+                                },
+                                "Code spans": {
+                                    "pass": 22,
+                                    "total": 22
+                                },
+                                "Disallowed Raw HTML": {
+                                    "pass": 0,
+                                    "total": 1
+                                },
+                                "Emphasis and strong emphasis": {
+                                    "pass": 122,
+                                    "total": 131
+                                },
+                                "Entity and numeric character references": {
+                                    "pass": 17,
+                                    "total": 17
+                                },
+                                "Fenced code blocks": {
+                                    "pass": 29,
+                                    "total": 29
+                                },
+                                "HTML blocks": {
+                                    "pass": 43,
+                                    "total": 43
+                                },
+                                "Hard line breaks": {
+                                    "pass": 14,
+                                    "total": 15
+                                },
+                                "Images": {
+                                    "pass": 22,
+                                    "total": 22
+                                },
+                                "Indented code blocks": {
+                                    "pass": 12,
+                                    "total": 12
+                                },
+                                "Inlines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Link reference definitions": {
+                                    "pass": 28,
+                                    "total": 28
+                                },
+                                "Links": {
+                                    "pass": 87,
+                                    "total": 87
+                                },
+                                "List items": {
+                                    "pass": 48,
+                                    "total": 48
+                                },
+                                "Lists": {
+                                    "pass": 26,
+                                    "total": 26
+                                },
+                                "Paragraphs": {
+                                    "pass": 7,
+                                    "total": 8
+                                },
+                                "Precedence": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Raw HTML": {
+                                    "pass": 20,
+                                    "total": 20
+                                },
+                                "Setext headings": {
+                                    "pass": 27,
+                                    "total": 27
+                                },
+                                "Soft line breaks": {
+                                    "pass": 2,
+                                    "total": 2
+                                },
+                                "Strikethrough": {
+                                    "pass": 2,
+                                    "total": 2
+                                },
+                                "Tables": {
+                                    "pass": 8,
+                                    "total": 8
+                                },
+                                "Tabs": {
+                                    "pass": 11,
+                                    "total": 11
+                                },
+                                "Task list items": {
+                                    "pass": 0,
+                                    "total": 2
+                                },
+                                "Textual content": {
+                                    "pass": 3,
+                                    "total": 3
+                                },
+                                "Thematic breaks": {
+                                    "pass": 19,
+                                    "total": 19
+                                }
+                            }
+                        }
+                    },
+                    "benchmarks": {
+                        "parse/GitHubTop10": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 2299001,
+                                    "b_op": 1973637,
+                                    "allocs_op": 13138
+                                },
+                                {
+                                    "ns_op": 2553634,
+                                    "b_op": 1973008,
+                                    "allocs_op": 13138
+                                },
+                                {
+                                    "ns_op": 2686438,
+                                    "b_op": 1973189,
+                                    "allocs_op": 13138
+                                }
+                            ],
+                            "median_ns_op": 2553634,
+                            "median_b_op": 1973189,
+                            "median_allocs_op": 13138
+                        },
+                        "parse/README": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 211924,
+                                    "b_op": 213649,
+                                    "allocs_op": 1376
+                                },
+                                {
+                                    "ns_op": 216406,
+                                    "b_op": 213649,
+                                    "allocs_op": 1376
+                                },
+                                {
+                                    "ns_op": 234938,
+                                    "b_op": 213649,
+                                    "allocs_op": 1376
+                                }
+                            ],
+                            "median_ns_op": 216406,
+                            "median_b_op": 213649,
+                            "median_allocs_op": 1376
+                        },
+                        "parse/Spec": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 1716694,
+                                    "b_op": 1748684,
+                                    "allocs_op": 11431
+                                },
+                                {
+                                    "ns_op": 1712570,
+                                    "b_op": 1748680,
+                                    "allocs_op": 11431
+                                },
+                                {
+                                    "ns_op": 1596664,
+                                    "b_op": 1748680,
+                                    "allocs_op": 11431
+                                }
+                            ],
+                            "median_ns_op": 1712570,
+                            "median_b_op": 1748680,
+                            "median_allocs_op": 11431
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "repo": "https://github.com/charmbracelet/glamour",
+            "features": {
+                "parser": "goldmark",
+                "terminal_render": true,
+                "streaming": false,
+                "syntax_highlighting": "Chroma",
+                "clickable_links": false,
+                "word_wrap": "fixed width",
+                "tty_detection": false,
+                "notes": [
+                    "Uses goldmark internally",
+                    "Multiple built-in themes"
+                ]
+            },
+            "metadata": {
+                "name": "glamour",
+                "owner": "charmbracelet",
+                "description": "Stylesheet-based markdown rendering for your CLI apps 💇🏻‍♀️",
+                "license": "MIT License",
+                "stars": 3439,
+                "open_issues": 88,
+                "forks": 266,
+                "last_commit": "2026-04-27T09:56:14Z",
+                "go_files": 32,
+                "go_lines": 4275,
+                "test_files": 3,
+                "test_lines": 524,
+                "direct_deps": 28,
+                "transitive_deps": 38,
+                "dep_names": [
+                    "charm.land/lipgloss/v2",
+                    "github.com/alecthomas/assert/v2",
+                    "github.com/alecthomas/chroma/v2",
+                    "github.com/alecthomas/repr",
+                    "github.com/aymanbagabas/go-udiff",
+                    "github.com/aymerick/douceur",
+                    "github.com/bits-and-blooms/bitset",
+                    "github.com/charmbracelet/colorprofile",
+                    "github.com/charmbracelet/ultraviolet",
+                    "github.com/charmbracelet/x/ansi",
+                    "github.com/charmbracelet/x/exp/golden",
+                    "github.com/charmbracelet/x/exp/slice",
+                    "github.com/charmbracelet/x/term",
+                    "github.com/charmbracelet/x/termios",
+                    "github.com/charmbracelet/x/windows",
+                    "github.com/clipperhouse/displaywidth",
+                    "github.com/clipperhouse/stringish",
+                    "github.com/clipperhouse/uax29/v2",
+                    "github.com/dlclark/regexp2",
+                    "github.com/gorilla/css",
+                    "github.com/hexops/gotextdiff",
+                    "github.com/lucasb-eyer/go-colorful",
+                    "github.com/mattn/go-runewidth",
+                    "github.com/microcosm-cc/bluemonday",
+                    "github.com/muesli/cancelreader",
+                    "github.com/rivo/uniseg",
+                    "github.com/xo/terminfo",
+                    "github.com/yuin/goldmark",
+                    "github.com/yuin/goldmark-emoji",
+                    "golang.org/x/crypto",
+                    "golang.org/x/exp",
+                    "golang.org/x/mod",
+                    "golang.org/x/net",
+                    "golang.org/x/sync",
+                    "golang.org/x/sys",
+                    "golang.org/x/term",
+                    "golang.org/x/text",
+                    "golang.org/x/tools"
+                ],
+                "test_coverage": 49.74,
+                "discovered_at": "2026-04-29T03:27:02.566936725+02:00"
+            },
+            "variants": {
+                "glamour": {
+                    "description": "glamour",
+                    "benchmarks": {
+                        "pathological/LargeFlat": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 176968603,
+                                    "b_op": 118817581,
+                                    "allocs_op": 1488993
+                                },
+                                {
+                                    "ns_op": 165483157,
+                                    "b_op": 118817523,
+                                    "allocs_op": 1488993
+                                },
+                                {
+                                    "ns_op": 163490952,
+                                    "b_op": 118817560,
+                                    "allocs_op": 1488993
+                                }
+                            ],
+                            "median_ns_op": 165483157,
+                            "median_b_op": 118817560,
+                            "median_allocs_op": 1488993
+                        },
+                        "pathological/PathologicalDelim": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 309052178,
+                                    "b_op": 110175244,
+                                    "allocs_op": 70680
+                                },
+                                {
+                                    "ns_op": 307321568,
+                                    "b_op": 110174512,
+                                    "allocs_op": 70679
+                                },
+                                {
+                                    "ns_op": 306246204,
+                                    "b_op": 110174520,
+                                    "allocs_op": 70679
+                                }
+                            ],
+                            "median_ns_op": 307321568,
+                            "median_b_op": 110174520,
+                            "median_allocs_op": 70679
+                        },
+                        "pathological/PathologicalNest": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 10954429,
+                                    "b_op": 3128867,
+                                    "allocs_op": 114159
+                                },
+                                {
+                                    "ns_op": 10830259,
+                                    "b_op": 3128559,
+                                    "allocs_op": 114159
+                                },
+                                {
+                                    "ns_op": 10961414,
+                                    "b_op": 3128562,
+                                    "allocs_op": 114159
+                                }
+                            ],
+                            "median_ns_op": 10954429,
+                            "median_b_op": 3128562,
+                            "median_allocs_op": 114159
+                        },
+                        "render/CodeHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 9694517,
+                                    "b_op": 36022245,
+                                    "allocs_op": 38985
+                                },
+                                {
+                                    "ns_op": 9555401,
+                                    "b_op": 36022260,
+                                    "allocs_op": 38985
+                                },
+                                {
+                                    "ns_op": 9830359,
+                                    "b_op": 36022244,
+                                    "allocs_op": 38985
+                                }
+                            ],
+                            "median_ns_op": 9694517,
+                            "median_b_op": 36022245,
+                            "median_allocs_op": 38985
+                        },
+                        "render/GitHubTop10": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 36965001,
+                                    "b_op": 19599623,
+                                    "allocs_op": 367283
+                                },
+                                {
+                                    "ns_op": 38412422,
+                                    "b_op": 20152869,
+                                    "allocs_op": 367287
+                                },
+                                {
+                                    "ns_op": 38376284,
+                                    "b_op": 20183408,
+                                    "allocs_op": 367286
+                                }
+                            ],
+                            "median_ns_op": 38376284,
+                            "median_b_op": 20152869,
+                            "median_allocs_op": 367286
+                        },
+                        "render/InlineHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 88326084,
+                                    "b_op": 48719881,
+                                    "allocs_op": 811438
+                                },
+                                {
+                                    "ns_op": 90016330,
+                                    "b_op": 48719923,
+                                    "allocs_op": 811438
+                                },
+                                {
+                                    "ns_op": 88013309,
+                                    "b_op": 48719920,
+                                    "allocs_op": 811438
+                                }
+                            ],
+                            "median_ns_op": 88326084,
+                            "median_b_op": 48719920,
+                            "median_allocs_op": 811438
+                        },
+                        "render/README": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 6243422,
+                                    "b_op": 5413886,
+                                    "allocs_op": 49424
+                                },
+                                {
+                                    "ns_op": 6143823,
+                                    "b_op": 5390665,
+                                    "allocs_op": 49423
+                                },
+                                {
+                                    "ns_op": 6182013,
+                                    "b_op": 5165549,
+                                    "allocs_op": 49422
+                                }
+                            ],
+                            "median_ns_op": 6182013,
+                            "median_b_op": 5390665,
+                            "median_allocs_op": 49423
+                        },
+                        "render/Spec": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 41391278,
+                                    "b_op": 38654733,
+                                    "allocs_op": 304662
+                                },
+                                {
+                                    "ns_op": 40986586,
+                                    "b_op": 38324631,
+                                    "allocs_op": 304650
+                                },
+                                {
+                                    "ns_op": 40934352,
+                                    "b_op": 39634928,
+                                    "allocs_op": 304650
+                                }
+                            ],
+                            "median_ns_op": 40986586,
+                            "median_b_op": 38654733,
+                            "median_allocs_op": 304650
+                        },
+                        "render/TableHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 28928265,
+                                    "b_op": 17703392,
+                                    "allocs_op": 262593
+                                },
+                                {
+                                    "ns_op": 28259822,
+                                    "b_op": 16919463,
+                                    "allocs_op": 262592
+                                },
+                                {
+                                    "ns_op": 28121209,
+                                    "b_op": 15975276,
+                                    "allocs_op": 262591
+                                }
+                            ],
+                            "median_ns_op": 28259822,
+                            "median_b_op": 16919463,
+                            "median_allocs_op": 262592
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "repo": "https://github.com/russross/blackfriday",
+            "features": {
+                "parser": "blackfriday",
+                "terminal_render": false,
+                "streaming": false,
+                "clickable_links": false,
+                "tty_detection": false,
+                "notes": [
+                    "Unmaintained since 2019",
+                    "Not CommonMark compliant"
+                ]
+            },
+            "metadata": {
+                "name": "blackfriday",
+                "owner": "russross",
+                "description": "Blackfriday: a markdown processor for Go",
+                "license": "Other",
+                "stars": 5618,
+                "open_issues": 189,
+                "forks": 598,
+                "last_commit": "2024-01-29T03:41:57Z",
+                "go_files": 7,
+                "go_lines": 5318,
+                "test_files": 4,
+                "test_lines": 3350,
+                "direct_deps": 0,
+                "transitive_deps": 0,
+                "test_coverage": 79.5,
+                "discovered_at": "2026-04-29T03:27:07.175329607+02:00"
+            },
+            "variants": {
+                "blackfriday": {
+                    "description": "default configuration",
+                    "compliance": {
+                        "commonmark": {
+                            "version": "0.31.2",
+                            "pass": 244,
+                            "total": 652,
+                            "percentage": 37.423312883435585,
+                            "sections": {
+                                "ATX headings": {
+                                    "pass": 6,
+                                    "total": 18
+                                },
+                                "Autolinks": {
+                                    "pass": 12,
+                                    "total": 19
+                                },
+                                "Backslash escapes": {
+                                    "pass": 6,
+                                    "total": 13
+                                },
+                                "Blank lines": {
+                                    "pass": 0,
+                                    "total": 1
+                                },
+                                "Block quotes": {
+                                    "pass": 7,
+                                    "total": 25
+                                },
+                                "Code spans": {
+                                    "pass": 9,
+                                    "total": 22
+                                },
+                                "Emphasis and strong emphasis": {
+                                    "pass": 68,
+                                    "total": 132
+                                },
+                                "Entity and numeric character references": {
+                                    "pass": 6,
+                                    "total": 17
+                                },
+                                "Fenced code blocks": {
+                                    "pass": 15,
+                                    "total": 29
+                                },
+                                "HTML blocks": {
+                                    "pass": 7,
+                                    "total": 44
+                                },
+                                "Hard line breaks": {
+                                    "pass": 9,
+                                    "total": 15
+                                },
+                                "Images": {
+                                    "pass": 11,
+                                    "total": 22
+                                },
+                                "Indented code blocks": {
+                                    "pass": 6,
+                                    "total": 12
+                                },
+                                "Inlines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Link reference definitions": {
+                                    "pass": 8,
+                                    "total": 27
+                                },
+                                "Links": {
+                                    "pass": 38,
+                                    "total": 90
+                                },
+                                "List items": {
+                                    "pass": 4,
+                                    "total": 48
+                                },
+                                "Lists": {
+                                    "pass": 2,
+                                    "total": 26
+                                },
+                                "Paragraphs": {
+                                    "pass": 2,
+                                    "total": 8
+                                },
+                                "Precedence": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Raw HTML": {
+                                    "pass": 8,
+                                    "total": 20
+                                },
+                                "Setext headings": {
+                                    "pass": 3,
+                                    "total": 27
+                                },
+                                "Soft line breaks": {
+                                    "pass": 1,
+                                    "total": 2
+                                },
+                                "Tabs": {
+                                    "pass": 3,
+                                    "total": 11
+                                },
+                                "Textual content": {
+                                    "pass": 2,
+                                    "total": 3
+                                },
+                                "Thematic breaks": {
+                                    "pass": 9,
+                                    "total": 19
+                                }
+                            }
+                        },
+                        "gfm": {
+                            "version": "0.29",
+                            "pass": 247,
+                            "total": 672,
+                            "percentage": 36.75595238095239,
+                            "sections": {
+                                "ATX headings": {
+                                    "pass": 6,
+                                    "total": 18
+                                },
+                                "Autolinks": {
+                                    "pass": 12,
+                                    "total": 30
+                                },
+                                "Backslash escapes": {
+                                    "pass": 6,
+                                    "total": 13
+                                },
+                                "Blank lines": {
+                                    "pass": 0,
+                                    "total": 1
+                                },
+                                "Block quotes": {
+                                    "pass": 7,
+                                    "total": 25
+                                },
+                                "Code spans": {
+                                    "pass": 9,
+                                    "total": 22
+                                },
+                                "Disallowed Raw HTML": {
+                                    "pass": 0,
+                                    "total": 1
+                                },
+                                "Emphasis and strong emphasis": {
+                                    "pass": 68,
+                                    "total": 131
+                                },
+                                "Entity and numeric character references": {
+                                    "pass": 6,
+                                    "total": 17
+                                },
+                                "Fenced code blocks": {
+                                    "pass": 15,
+                                    "total": 29
+                                },
+                                "HTML blocks": {
+                                    "pass": 7,
+                                    "total": 43
+                                },
+                                "Hard line breaks": {
+                                    "pass": 9,
+                                    "total": 15
+                                },
+                                "Images": {
+                                    "pass": 11,
+                                    "total": 22
+                                },
+                                "Indented code blocks": {
+                                    "pass": 6,
+                                    "total": 12
+                                },
+                                "Inlines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Link reference definitions": {
+                                    "pass": 9,
+                                    "total": 28
+                                },
+                                "Links": {
+                                    "pass": 39,
+                                    "total": 87
+                                },
+                                "List items": {
+                                    "pass": 4,
+                                    "total": 48
+                                },
+                                "Lists": {
+                                    "pass": 2,
+                                    "total": 26
+                                },
+                                "Paragraphs": {
+                                    "pass": 2,
+                                    "total": 8
+                                },
+                                "Precedence": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Raw HTML": {
+                                    "pass": 8,
+                                    "total": 20
+                                },
+                                "Setext headings": {
+                                    "pass": 3,
+                                    "total": 27
+                                },
+                                "Soft line breaks": {
+                                    "pass": 1,
+                                    "total": 2
+                                },
+                                "Strikethrough": {
+                                    "pass": 1,
+                                    "total": 2
+                                },
+                                "Tables": {
+                                    "pass": 0,
+                                    "total": 8
+                                },
+                                "Tabs": {
+                                    "pass": 3,
+                                    "total": 11
+                                },
+                                "Task list items": {
+                                    "pass": 0,
+                                    "total": 2
+                                },
+                                "Textual content": {
+                                    "pass": 2,
+                                    "total": 3
+                                },
+                                "Thematic breaks": {
+                                    "pass": 9,
+                                    "total": 19
+                                }
+                            }
+                        }
+                    },
+                    "benchmarks": {
+                        "parse/GitHubTop10": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 1028819,
+                                    "b_op": 1943376,
+                                    "allocs_op": 8046
+                                },
+                                {
+                                    "ns_op": 1058470,
+                                    "b_op": 1944331,
+                                    "allocs_op": 8046
+                                },
+                                {
+                                    "ns_op": 1062601,
+                                    "b_op": 1944713,
+                                    "allocs_op": 8046
+                                }
+                            ],
+                            "median_ns_op": 1058470,
+                            "median_b_op": 1944331,
+                            "median_allocs_op": 8046
+                        },
+                        "parse/README": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 315580,
+                                    "b_op": 594758,
+                                    "allocs_op": 2982
+                                },
+                                {
+                                    "ns_op": 313660,
+                                    "b_op": 594669,
+                                    "allocs_op": 2982
+                                },
+                                {
+                                    "ns_op": 310770,
+                                    "b_op": 594464,
+                                    "allocs_op": 2982
+                                }
+                            ],
+                            "median_ns_op": 313660,
+                            "median_b_op": 594669,
+                            "median_allocs_op": 2982
+                        },
+                        "parse/Spec": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 2203467,
+                                    "b_op": 4291854,
+                                    "allocs_op": 22906
+                                },
+                                {
+                                    "ns_op": 2246826,
+                                    "b_op": 4290263,
+                                    "allocs_op": 22906
+                                },
+                                {
+                                    "ns_op": 2234466,
+                                    "b_op": 4291520,
+                                    "allocs_op": 22906
+                                }
+                            ],
+                            "median_ns_op": 2234466,
+                            "median_b_op": 4291520,
+                            "median_allocs_op": 22906
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "repo": "https://github.com/gomarkdown/markdown",
+            "features": {
+                "parser": "gomarkdown",
+                "terminal_render": false,
+                "streaming": false,
+                "clickable_links": false,
+                "tty_detection": false,
+                "notes": [
+                    "Active fork of blackfriday"
+                ]
+            },
+            "metadata": {
+                "name": "markdown",
+                "owner": "gomarkdown",
+                "description": "markdown parser and HTML renderer for Go",
+                "license": "Other",
+                "stars": 1701,
+                "open_issues": 22,
+                "forks": 187,
+                "last_commit": "2026-04-17T12:42:08Z",
+                "go_files": 32,
+                "go_lines": 9083,
+                "test_files": 25,
+                "test_lines": 3663,
+                "direct_deps": 0,
+                "transitive_deps": 0,
+                "test_coverage": -1,
+                "discovered_at": "2026-04-29T03:27:09.656524254+02:00"
+            },
+            "variants": {
+                "gomarkdown": {
+                    "description": "CommonExtensions",
+                    "compliance": {
+                        "commonmark": {
+                            "version": "0.31.2",
+                            "pass": 263,
+                            "total": 652,
+                            "percentage": 40.33742331288344,
+                            "sections": {
+                                "ATX headings": {
+                                    "pass": 6,
+                                    "total": 18
+                                },
+                                "Autolinks": {
+                                    "pass": 12,
+                                    "total": 19
+                                },
+                                "Backslash escapes": {
+                                    "pass": 6,
+                                    "total": 13
+                                },
+                                "Blank lines": {
+                                    "pass": 0,
+                                    "total": 1
+                                },
+                                "Block quotes": {
+                                    "pass": 7,
+                                    "total": 25
+                                },
+                                "Code spans": {
+                                    "pass": 10,
+                                    "total": 22
+                                },
+                                "Emphasis and strong emphasis": {
+                                    "pass": 80,
+                                    "total": 132
+                                },
+                                "Entity and numeric character references": {
+                                    "pass": 10,
+                                    "total": 17
+                                },
+                                "Fenced code blocks": {
+                                    "pass": 15,
+                                    "total": 29
+                                },
+                                "HTML blocks": {
+                                    "pass": 7,
+                                    "total": 44
+                                },
+                                "Hard line breaks": {
+                                    "pass": 4,
+                                    "total": 15
+                                },
+                                "Images": {
+                                    "pass": 11,
+                                    "total": 22
+                                },
+                                "Indented code blocks": {
+                                    "pass": 6,
+                                    "total": 12
+                                },
+                                "Inlines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Link reference definitions": {
+                                    "pass": 10,
+                                    "total": 27
+                                },
+                                "Links": {
+                                    "pass": 46,
+                                    "total": 90
+                                },
+                                "List items": {
+                                    "pass": 4,
+                                    "total": 48
+                                },
+                                "Lists": {
+                                    "pass": 2,
+                                    "total": 26
+                                },
+                                "Paragraphs": {
+                                    "pass": 1,
+                                    "total": 8
+                                },
+                                "Precedence": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Raw HTML": {
+                                    "pass": 8,
+                                    "total": 20
+                                },
+                                "Setext headings": {
+                                    "pass": 4,
+                                    "total": 27
+                                },
+                                "Soft line breaks": {
+                                    "pass": 1,
+                                    "total": 2
+                                },
+                                "Tabs": {
+                                    "pass": 3,
+                                    "total": 11
+                                },
+                                "Textual content": {
+                                    "pass": 3,
+                                    "total": 3
+                                },
+                                "Thematic breaks": {
+                                    "pass": 5,
+                                    "total": 19
+                                }
+                            }
+                        },
+                        "gfm": {
+                            "version": "0.29",
+                            "pass": 263,
+                            "total": 672,
+                            "percentage": 39.13690476190476,
+                            "sections": {
+                                "ATX headings": {
+                                    "pass": 6,
+                                    "total": 18
+                                },
+                                "Autolinks": {
+                                    "pass": 12,
+                                    "total": 30
+                                },
+                                "Backslash escapes": {
+                                    "pass": 6,
+                                    "total": 13
+                                },
+                                "Blank lines": {
+                                    "pass": 0,
+                                    "total": 1
+                                },
+                                "Block quotes": {
+                                    "pass": 7,
+                                    "total": 25
+                                },
+                                "Code spans": {
+                                    "pass": 10,
+                                    "total": 22
+                                },
+                                "Disallowed Raw HTML": {
+                                    "pass": 0,
+                                    "total": 1
+                                },
+                                "Emphasis and strong emphasis": {
+                                    "pass": 80,
+                                    "total": 131
+                                },
+                                "Entity and numeric character references": {
+                                    "pass": 10,
+                                    "total": 17
+                                },
+                                "Fenced code blocks": {
+                                    "pass": 15,
+                                    "total": 29
+                                },
+                                "HTML blocks": {
+                                    "pass": 7,
+                                    "total": 43
+                                },
+                                "Hard line breaks": {
+                                    "pass": 4,
+                                    "total": 15
+                                },
+                                "Images": {
+                                    "pass": 11,
+                                    "total": 22
+                                },
+                                "Indented code blocks": {
+                                    "pass": 6,
+                                    "total": 12
+                                },
+                                "Inlines": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Link reference definitions": {
+                                    "pass": 11,
+                                    "total": 28
+                                },
+                                "Links": {
+                                    "pass": 44,
+                                    "total": 87
+                                },
+                                "List items": {
+                                    "pass": 4,
+                                    "total": 48
+                                },
+                                "Lists": {
+                                    "pass": 2,
+                                    "total": 26
+                                },
+                                "Paragraphs": {
+                                    "pass": 1,
+                                    "total": 8
+                                },
+                                "Precedence": {
+                                    "pass": 1,
+                                    "total": 1
+                                },
+                                "Raw HTML": {
+                                    "pass": 8,
+                                    "total": 20
+                                },
+                                "Setext headings": {
+                                    "pass": 4,
+                                    "total": 27
+                                },
+                                "Soft line breaks": {
+                                    "pass": 1,
+                                    "total": 2
+                                },
+                                "Strikethrough": {
+                                    "pass": 1,
+                                    "total": 2
+                                },
+                                "Tables": {
+                                    "pass": 0,
+                                    "total": 8
+                                },
+                                "Tabs": {
+                                    "pass": 3,
+                                    "total": 11
+                                },
+                                "Task list items": {
+                                    "pass": 0,
+                                    "total": 2
+                                },
+                                "Textual content": {
+                                    "pass": 3,
+                                    "total": 3
+                                },
+                                "Thematic breaks": {
+                                    "pass": 5,
+                                    "total": 19
+                                }
+                            }
+                        }
+                    },
+                    "benchmarks": {
+                        "parse/GitHubTop10": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 3734494,
+                                    "b_op": 1515945,
+                                    "allocs_op": 8278
+                                },
+                                {
+                                    "ns_op": 3911091,
+                                    "b_op": 1518762,
+                                    "allocs_op": 8278
+                                },
+                                {
+                                    "ns_op": 3911852,
+                                    "b_op": 1520192,
+                                    "allocs_op": 8278
+                                }
+                            ],
+                            "median_ns_op": 3911091,
+                            "median_b_op": 1518762,
+                            "median_allocs_op": 8278
+                        },
+                        "parse/README": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 960365,
+                                    "b_op": 273746,
+                                    "allocs_op": 3644
+                                },
+                                {
+                                    "ns_op": 931366,
+                                    "b_op": 273234,
+                                    "allocs_op": 3644
+                                },
+                                {
+                                    "ns_op": 949824,
+                                    "b_op": 273430,
+                                    "allocs_op": 3644
+                                }
+                            ],
+                            "median_ns_op": 949824,
+                            "median_b_op": 273430,
+                            "median_allocs_op": 3644
+                        },
+                        "parse/Spec": {
+                            "category": "parse",
+                            "runs": [
+                                {
+                                    "ns_op": 385974956,
+                                    "b_op": 1906106,
+                                    "allocs_op": 25872
+                                },
+                                {
+                                    "ns_op": 381491476,
+                                    "b_op": 1905954,
+                                    "allocs_op": 25871
+                                },
+                                {
+                                    "ns_op": 383981948,
+                                    "b_op": 1905917,
+                                    "allocs_op": 25870
+                                }
+                            ],
+                            "median_ns_op": 383981948,
+                            "median_b_op": 1905954,
+                            "median_allocs_op": 25871
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "repo": "https://github.com/MichaelMure/go-term-markdown",
+            "features": {
+                "parser": "blackfriday v1",
+                "terminal_render": true,
+                "streaming": false,
+                "syntax_highlighting": "Chroma v1",
+                "clickable_links": false,
+                "word_wrap": "fixed width",
+                "tty_detection": false,
+                "notes": [
+                    "Inline terminal images via pixterm"
+                ]
+            },
+            "metadata": {
+                "name": "go-term-markdown",
+                "owner": "MichaelMure",
+                "description": "A markdown renderer package for the terminal",
+                "license": "MIT License",
+                "stars": 291,
+                "open_issues": 14,
+                "forks": 38,
+                "last_commit": "2023-06-22T02:17:27Z",
+                "go_files": 13,
+                "go_lines": 1755,
+                "test_files": 4,
+                "test_lines": 246,
+                "direct_deps": 20,
+                "transitive_deps": 26,
+                "dep_names": [
+                    "github.com/MichaelMure/go-term-text",
+                    "github.com/alecthomas/chroma",
+                    "github.com/davecgh/go-spew",
+                    "github.com/disintegration/imaging",
+                    "github.com/dlclark/regexp2",
+                    "github.com/eliukblau/pixterm",
+                    "github.com/fatih/color",
+                    "github.com/gomarkdown/markdown",
+                    "github.com/kyokomi/emoji/v2",
+                    "github.com/lucasb-eyer/go-colorful",
+                    "github.com/mattn/go-colorable",
+                    "github.com/mattn/go-isatty",
+                    "github.com/mattn/go-runewidth",
+                    "github.com/pmezard/go-difflib",
+                    "github.com/rivo/uniseg",
+                    "github.com/stretchr/objx",
+                    "github.com/stretchr/testify",
+                    "golang.org/x/crypto",
+                    "golang.org/x/image",
+                    "golang.org/x/net",
+                    "golang.org/x/sys",
+                    "golang.org/x/term",
+                    "golang.org/x/text",
+                    "golang.org/x/tools",
+                    "gopkg.in/check.v1",
+                    "gopkg.in/yaml.v3"
+                ],
+                "test_coverage": -1,
+                "discovered_at": "2026-04-29T03:27:12.405377057+02:00"
+            },
+            "variants": {
+                "go-term-md": {
+                    "description": "go-term-md",
+                    "benchmarks": {
+                        "pathological/LargeFlat": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 141706316,
+                                    "b_op": 17752101,
+                                    "allocs_op": 797866
+                                },
+                                {
+                                    "ns_op": 141556542,
+                                    "b_op": 17751576,
+                                    "allocs_op": 797865
+                                },
+                                {
+                                    "ns_op": 140758660,
+                                    "b_op": 17751740,
+                                    "allocs_op": 797866
+                                }
+                            ],
+                            "median_ns_op": 141556542,
+                            "median_b_op": 17751740,
+                            "median_allocs_op": 797866
+                        },
+                        "pathological/PathologicalDelim": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 18889434,
+                                    "b_op": 51503390,
+                                    "allocs_op": 71765
+                                },
+                                {
+                                    "ns_op": 18816220,
+                                    "b_op": 51503459,
+                                    "allocs_op": 71765
+                                },
+                                {
+                                    "ns_op": 18886468,
+                                    "b_op": 51503418,
+                                    "allocs_op": 71765
+                                }
+                            ],
+                            "median_ns_op": 18886468,
+                            "median_b_op": 51503418,
+                            "median_allocs_op": 71765
+                        },
+                        "pathological/PathologicalNest": {
+                            "category": "pathological",
+                            "runs": [
+                                {
+                                    "ns_op": 565482,
+                                    "b_op": 332075,
+                                    "allocs_op": 2100
+                                },
+                                {
+                                    "ns_op": 566234,
+                                    "b_op": 332068,
+                                    "allocs_op": 2100
+                                },
+                                {
+                                    "ns_op": 565750,
+                                    "b_op": 332057,
+                                    "allocs_op": 2100
+                                }
+                            ],
+                            "median_ns_op": 565750,
+                            "median_b_op": 332068,
+                            "median_allocs_op": 2100
+                        },
+                        "render/CodeHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 53253954,
+                                    "b_op": 12402485,
+                                    "allocs_op": 288749
+                                },
+                                {
+                                    "ns_op": 52274746,
+                                    "b_op": 12386303,
+                                    "allocs_op": 288747
+                                },
+                                {
+                                    "ns_op": 51586392,
+                                    "b_op": 12398417,
+                                    "allocs_op": 288748
+                                }
+                            ],
+                            "median_ns_op": 52274746,
+                            "median_b_op": 12398417,
+                            "median_allocs_op": 288748
+                        },
+                        "render/GitHubTop10": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 6799945697,
+                                    "b_op": 138234848,
+                                    "allocs_op": 1562708
+                                },
+                                {
+                                    "ns_op": 2879571348,
+                                    "b_op": 124971808,
+                                    "allocs_op": 1435160
+                                },
+                                {
+                                    "ns_op": 2539638332,
+                                    "b_op": 124653128,
+                                    "allocs_op": 1434368
+                                }
+                            ],
+                            "median_ns_op": 2879571348,
+                            "median_b_op": 124971808,
+                            "median_allocs_op": 1435160
+                        },
+                        "render/InlineHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 38619979,
+                                    "b_op": 19651427,
+                                    "allocs_op": 828714
+                                },
+                                {
+                                    "ns_op": 38278539,
+                                    "b_op": 19651442,
+                                    "allocs_op": 828715
+                                },
+                                {
+                                    "ns_op": 38741519,
+                                    "b_op": 19651470,
+                                    "allocs_op": 828714
+                                }
+                            ],
+                            "median_ns_op": 38619979,
+                            "median_b_op": 19651442,
+                            "median_allocs_op": 828714
+                        },
+                        "render/README": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 3948564,
+                                    "b_op": 1082461,
+                                    "allocs_op": 37761
+                                },
+                                {
+                                    "ns_op": 3817196,
+                                    "b_op": 1082069,
+                                    "allocs_op": 37761
+                                },
+                                {
+                                    "ns_op": 3878982,
+                                    "b_op": 1081081,
+                                    "allocs_op": 37761
+                                }
+                            ],
+                            "median_ns_op": 3878982,
+                            "median_b_op": 1082069,
+                            "median_allocs_op": 37761
+                        },
+                        "render/Spec": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 410460844,
+                                    "b_op": 5799402,
+                                    "allocs_op": 184495
+                                },
+                                {
+                                    "ns_op": 406045474,
+                                    "b_op": 5698541,
+                                    "allocs_op": 183439
+                                },
+                                {
+                                    "ns_op": 414608282,
+                                    "b_op": 5737389,
+                                    "allocs_op": 183448
+                                }
+                            ],
+                            "median_ns_op": 410460844,
+                            "median_b_op": 5737389,
+                            "median_allocs_op": 183448
+                        },
+                        "render/TableHeavy": {
+                            "category": "render",
+                            "runs": [
+                                {
+                                    "ns_op": 6776301,
+                                    "b_op": 3723887,
+                                    "allocs_op": 156945
+                                },
+                                {
+                                    "ns_op": 6749895,
+                                    "b_op": 3723888,
+                                    "allocs_op": 156945
+                                },
+                                {
+                                    "ns_op": 6801123,
+                                    "b_op": 3723894,
+                                    "allocs_op": 156945
+                                }
+                            ],
+                            "median_ns_op": 6776301,
+                            "median_b_op": 3723888,
+                            "median_allocs_op": 156945
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
