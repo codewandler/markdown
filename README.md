@@ -21,9 +21,9 @@ Parse incrementally. Render immediately. Keep memory bounded.
 - **3-7x faster** than glamour on real-world documents, up to
   **121x faster** on pathological inputs
   ([benchmarks](COMPARISON.md))
-- **96.2% CommonMark**, **100% GFM** -- higher GFM compliance than
-  goldmark (97.3%), blackfriday (36.8%), and gomarkdown (39.1%)
-  ([measured](benchmarks/compliance_test.go))
+- **100% CommonMark** (652/652), **96.0% GFM** -- higher compliance than
+  goldmark (99.2% / 97.5%), blackfriday (37.4%), and gomarkdown (40.3%)
+  ([measured](competition/benchmarks/compliance_test.go))
 - **2 dependencies** -- parser is pure stdlib; only Chroma for
   non-Go syntax highlighting
 - **18x faster Go highlighting** than Chroma via built-in stdlib

@@ -40,37 +40,7 @@ tasks:
     desc: Build all packages
     cmd: go build ./...
 
-  bench:
-    desc: Run all benchmarks
-    dir: benchmarks
-    cmd: go test -bench=. -benchmem -count=1 -benchtime=1s -timeout=120s {{.CLI_ARGS}}
-
-  bench:compare:
-    desc: Run pipeline comparison benchmarks (us vs glamour)
-    dir: benchmarks
-    cmd: go test -bench=BenchmarkPipeline -benchmem -count=3 -benchtime=2s -timeout=300s {{.CLI_ARGS}}
-
-  bench:chunks:
-    desc: Run chunk size sensitivity benchmarks
-    dir: benchmarks
-    cmd: go test -bench=BenchmarkChunkSize -benchmem -count=1 -benchtime=1s {{.CLI_ARGS}}
-
-  bench:render:
-    desc: Run terminal render comparison and format as Markdown
-    dir: benchmarks
-    cmd: go test -bench=BenchmarkRender -benchmem -count=1 -benchtime=1s -timeout=120s | go run ./cmd/benchcompare
-
-  bench:parse:
-    desc: Run parse comparison and format as Markdown
-    dir: benchmarks
-    cmd: go test -bench=BenchmarkParse -benchmem -count=1 -benchtime=1s -timeout=120s | go run ./cmd/benchcompare
-
-  bench:compliance:
-    desc: Run spec compliance tests against all parsers
-    dir: benchmarks
-    cmd: go test -run "TestCommonMarkCompliance|TestGFMCompliance" -v
-
-  # --- Competition pipeline (replaces bench:* tasks) ---
+  # --- Competition pipeline ---
 
   competition:metadata:
     desc: "Stage 1: Discover metadata for all candidates"
