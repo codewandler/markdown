@@ -246,7 +246,7 @@ func gfmExtensionAssertions() map[int]func(*testing.T, []eventView) {
 		// | b **\|** im |
 		200: combine(
 			expectTable([]TableAlign{TableAlignNone}, 2, "f|oo"),
-			expectTextStyle("\\|", InlineStyle{Code: true}),
+			expectTextStyle("|", InlineStyle{Code: true}),
 			expectTextStyle("|", InlineStyle{Strong: true}),
 		),
 
@@ -359,8 +359,8 @@ func gfmExtensionAssertions() map[int]func(*testing.T, []eventView) {
 		// Example 626: entity-like suffix stripped from autolink.
 		626: combine(
 			expectAutolink("www.google.com/search?q=commonmark&hl=en", "http://www.google.com/search?q=commonmark&hl=en"),
-			// Second paragraph: &hl; is stripped from the autolink.
-			expectAutolink("www.google.com/search?q=commonmark&hl", "http://www.google.com/search?q=commonmark&hl"),
+			// Second paragraph: &hl; entity-like suffix stripped entirely.
+			expectAutolink("www.google.com/search?q=commonmark", "http://www.google.com/search?q=commonmark"),
 		),
 
 		// Example 627: < terminates autolink.

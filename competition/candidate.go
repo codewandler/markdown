@@ -58,8 +58,15 @@ type Adapters struct {
 	RenderTerminal func(r io.Reader, w io.Writer) error
 
 	// RenderHTML reads Markdown from r and writes HTML to w.
-	// Used for compliance testing against spec expected output.
+	// Used for CommonMark compliance testing.
 	RenderHTML func(r io.Reader, w io.Writer) error
+
+	// RenderGFMHTML reads Markdown from r and writes HTML to w
+	// with the specified GFM extensions enabled. The extensions
+	// parameter matches the GFM spec example tags: "table",
+	// "autolink", "strikethrough", "tagfilter", or "" for none.
+	// Falls back to RenderHTML if nil.
+	RenderGFMHTML func(r io.Reader, w io.Writer, extensions []string) error
 }
 
 // Features describes qualitative capabilities of a library.

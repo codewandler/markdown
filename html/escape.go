@@ -1,6 +1,9 @@
 package html
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // escapeHTML escapes &, <, >, and " for use in HTML content and
 // attribute values. This covers the characters required by the
@@ -115,3 +118,80 @@ var urlSafe = func() [256]bool {
 	t['%'] = true
 	return t
 }()
+
+// disallowedTags lists the GFM tag filter tags (case-insensitive).
+var disallowedTags = []string{
+	"title", "textarea", "style", "xmp",
+	"iframe", "noembed", "noframes", "script", "plaintext",
+}
+
+// isType1HTMLBlock returns true if text starts with a type 1 HTML block
+// tag (<script, <pre, <style). These are exempt from the GFM tag filter
+// when they appear as block-level HTML.
+func isType1HTMLBlock(text string) bool {
+	if len(text) < 2 || text[0] != '<' {
+		return false
+	}
+	for _, tag := range []string{"script", "pre", "style"} {
+		if len(text) >= 1+len(tag) && strings.EqualFold(text[1:1+len(tag)], tag) {
+			if len(text) == 1+len(tag) {
+				return true
+			}
+			next := text[1+len(tag)]
+			if next == '>' || next == ' ' || next == '\t' || next == '\n' {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// filterTags implements the GFM tag filter extension: replaces the
+// leading '<' of disallowed tags with '&lt;'.
+func filterTags(s string) string {
+	if !strings.Contains(s, "<") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] == '<' {
+			if matchDisallowedTag(s[i:]) {
+				b.WriteString("&lt;")
+				i++
+				continue
+			}
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		b.WriteString(s[i : i+size])
+		i += size
+	}
+	return b.String()
+}
+
+// matchDisallowedTag checks if s starts with a disallowed open or close tag.
+// s must start with '<'.
+func matchDisallowedTag(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	rest := s[1:]
+	if len(rest) > 0 && rest[0] == '/' {
+		rest = rest[1:]
+	}
+	for _, tag := range disallowedTags {
+		if len(rest) < len(tag) {
+			continue
+		}
+		if strings.EqualFold(rest[:len(tag)], tag) {
+			if len(rest) == len(tag) {
+				return true
+			}
+			next := rest[len(tag)]
+			if next == '>' || next == ' ' || next == '\t' || next == '\n' || next == '/' {
+				return true
+			}
+		}
+	}
+	return false
+}

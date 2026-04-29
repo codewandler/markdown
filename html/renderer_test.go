@@ -454,10 +454,10 @@ func TestTaskListItem(t *testing.T) {
 		exitDoc(),
 	}
 	got, _ := RenderString(events)
-	if !strings.Contains(got, "<input type=\"checkbox\" disabled=\"\" />") {
+	if !strings.Contains(got, "<input disabled=\"\" type=\"checkbox\">") {
 		t.Errorf("missing unchecked checkbox in %q", got)
 	}
-	if !strings.Contains(got, "<input type=\"checkbox\" checked=\"\" disabled=\"\" />") {
+	if !strings.Contains(got, "<input checked=\"\" disabled=\"\" type=\"checkbox\">") {
 		t.Errorf("missing checked checkbox in %q", got)
 	}
 }

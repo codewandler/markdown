@@ -30,6 +30,13 @@ func WithUnsafe() Option {
 	return func(r *renderer) { r.unsafe = true }
 }
 
+// WithTagFilter enables the GFM tag filter extension, which replaces
+// the leading '<' of disallowed HTML tags (title, textarea, style, xmp,
+// iframe, noembed, noframes, script, plaintext) with '&lt;'.
+func WithTagFilter() Option {
+	return func(r *renderer) { r.tagFilter = true }
+}
+
 // Render writes HTML for the given events to w.
 func Render(w io.Writer, events []stream.Event, opts ...Option) error {
 	r := newRenderer(w, opts...)
@@ -49,6 +56,7 @@ type renderer struct {
 	w            io.Writer
 	html5        bool
 	unsafe       bool
+	tagFilter    bool
 	tightMap        map[int]bool // EnterBlock list event index -> tight
 	tightStack      []bool       // runtime stack for nested lists
 	containerDepth  int          // depth of non-list containers (blockquote)
@@ -56,11 +64,15 @@ type renderer struct {
 	inHeader     bool         // current table row is a header row
 	inCode       bool         // inside fenced_code or indented_code
 	inHTML       bool         // inside html block
+	htmlBlockRaw bool         // type 1 HTML block (script/style/pre) — skip tag filter
 	headingLevel int          // stashed from enter for exit
 	openStyle    stream.InlineStyle // currently open inline tags
 	tagStack     []inlineTag        // actual open tag stack for proper nesting
-	tableCol     int          // current column index in table row
-	tableAlign   []stream.TableAlign
+	tableCol      int          // current column index in table row
+	tableCols     int          // number of columns from header row
+	tableHasBody  bool         // true once a non-header row has been emitted
+	tableSkipCell bool         // true when current cell exceeds column count
+	tableAlign    []stream.TableAlign
 	err          error // sticky error
 }
 
@@ -100,6 +112,9 @@ func (r *renderer) render(events []stream.Event) error {
 			r.closeStyle()
 			r.exitBlock(i, ev, events)
 		case stream.EventText:
+			if r.tableSkipCell {
+				continue
+			}
 			// Strip trailing spaces from text immediately before
 			// a block close or soft break (CommonMark: trailing
 			// spaces at end of line are removed for rendering).
@@ -197,9 +212,9 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 	case stream.BlockListItem:
 		if ev.List != nil && ev.List.Task {
 			if ev.List.Checked {
-				r.write("<li><input type=\"checkbox\" checked=\"\" disabled=\"\" /> ")
+				r.write("<li><input checked=\"\" disabled=\"\" type=\"checkbox\"> ")
 			} else {
-				r.write("<li><input type=\"checkbox\" disabled=\"\" /> ")
+				r.write("<li><input disabled=\"\" type=\"checkbox\"> ")
 			}
 		} else if r.listItemNeedsNewline(idx, events) {
 			r.write("<li>\n")
@@ -229,6 +244,7 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 		}
 	case stream.BlockHTML:
 		r.inHTML = true
+		r.htmlBlockRaw = false
 	case stream.BlockTable:
 		r.write("<table>\n")
 		if ev.Table != nil {
@@ -242,9 +258,18 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 			r.inHeader = true
 			r.write("<thead>\n<tr>\n")
 		} else {
+			if !r.tableHasBody {
+				r.tableHasBody = true
+				r.write("<tbody>\n")
+			}
 			r.write("<tr>\n")
 		}
 	case stream.BlockTableCell:
+		// Suppress excess cells beyond header column count.
+		if !r.inHeader && r.tableCols > 0 && r.tableCol >= r.tableCols {
+			r.tableSkipCell = true
+			return
+		}
 		tag := "td"
 		if r.inHeader {
 			tag = "th"
@@ -319,16 +344,32 @@ func (r *renderer) exitBlock(idx int, ev stream.Event, events []stream.Event) {
 	case stream.BlockHTML:
 		r.inHTML = false
 	case stream.BlockTable:
-		r.write("</tbody>\n</table>\n")
+		if r.tableHasBody {
+			r.write("</tbody>\n")
+		}
+		r.write("</table>\n")
 		r.tableAlign = nil
+		r.tableHasBody = false
 	case stream.BlockTableRow:
+		// Pad short rows with empty cells to match header column count.
+		if !r.inHeader && r.tableCols > 0 {
+			for r.tableCol < r.tableCols {
+				r.write("<td></td>\n")
+				r.tableCol++
+			}
+		}
 		if r.inHeader {
-			r.write("</tr>\n</thead>\n<tbody>\n")
+			r.tableCols = r.tableCol
+			r.write("</tr>\n</thead>\n")
 			r.inHeader = false
 		} else {
 			r.write("</tr>\n")
 		}
 	case stream.BlockTableCell:
+		if r.tableSkipCell {
+			r.tableSkipCell = false
+			return
+		}
 		if r.inHeader {
 			r.write("</th>\n")
 		} else {
@@ -341,7 +382,16 @@ func (r *renderer) exitBlock(idx int, ev stream.Event, events []stream.Event) {
 func (r *renderer) text(ev stream.Event) {
 	if r.inHTML {
 		if r.unsafe {
-			r.write(ev.Text)
+			// Detect type 1 HTML blocks (script/style/pre) on first
+			// text event — these must not be tag-filtered.
+			if !r.htmlBlockRaw && isType1HTMLBlock(ev.Text) {
+				r.htmlBlockRaw = true
+			}
+			if r.tagFilter && !r.htmlBlockRaw {
+				r.write(filterTags(ev.Text))
+			} else {
+				r.write(ev.Text)
+			}
 		} else {
 			r.write(escapeHTML(ev.Text))
 		}
@@ -358,7 +408,11 @@ func (r *renderer) text(ev stream.Event) {
 	// Close any open inline styles first so tags nest correctly.
 	if s.RawHTML {
 		r.closeStyle()
-		r.write(ev.Text)
+		if r.tagFilter {
+			r.write(filterTags(ev.Text))
+		} else {
+			r.write(ev.Text)
+		}
 		return
 	}
 

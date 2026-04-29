@@ -69,10 +69,10 @@ func RunCompliance(candidates []Candidate, opts ComplianceOptions) (*RunResult, 
 
 			fmt.Fprintf(opts.Log, "  compliance %s/%s ...\n", displayNameFromCandidate(c), v.Name)
 
-			cm := runSpecSuite(v, cmExamples)
+			cm := runSpecSuite(v.Adapters.RenderHTML, cmExamples)
 			cm.Version = "0.31.2"
 
-			gfm := runGFMSuite(v, gfmExamples)
+			gfm := runGFMSuite(v.Adapters, gfmExamples)
 			gfm.Version = "0.29"
 
 			cr := &ComplianceResult{
@@ -98,8 +98,8 @@ func RunCompliance(candidates []Candidate, opts ComplianceOptions) (*RunResult, 
 	return result, nil
 }
 
-// runSpecSuite runs the CommonMark spec suite against a variant.
-func runSpecSuite(v Variant, examples []commonmarktests.Example) SpecResult {
+// runSpecSuite runs a spec suite against a render function.
+func runSpecSuite(renderHTML func(io.Reader, io.Writer) error, examples []commonmarktests.Example) SpecResult {
 	sections := map[string]Section{}
 	pass, total := 0, len(examples)
 
@@ -107,7 +107,7 @@ func runSpecSuite(v Variant, examples []commonmarktests.Example) SpecResult {
 		var buf bytes.Buffer
 		r := strings.NewReader(ex.Markdown)
 		err := SafeCall(func() error {
-			return v.Adapters.RenderHTML(r, &buf)
+			return renderHTML(r, &buf)
 		})
 
 		matched := false
@@ -136,19 +136,62 @@ func runSpecSuite(v Variant, examples []commonmarktests.Example) SpecResult {
 	}
 }
 
-// runGFMSuite runs the GFM spec suite against a variant.
-func runGFMSuite(v Variant, examples []gfmtests.Example) SpecResult {
-	// Adapt to commonmark format for reuse.
-	adapted := make([]commonmarktests.Example, len(examples))
-	for i, ex := range examples {
-		adapted[i] = commonmarktests.Example{
-			Markdown: ex.Markdown,
-			HTML:     ex.HTML,
-			Example:  ex.Example,
-			Section:  ex.Section,
+// runGFMSuite runs the GFM spec suite, enabling extensions per-example
+// as specified by the GFM spec (each example declares which extensions
+// it requires).
+func runGFMSuite(adapters Adapters, examples []gfmtests.Example) SpecResult {
+	sections := map[string]Section{}
+	pass, total := 0, len(examples)
+
+	for _, ex := range examples {
+		var exts []string
+		if ex.Extension != "" {
+			exts = []string{ex.Extension}
 		}
+
+		// Pick the right renderer based on whether extensions are needed.
+		var renderFn func(io.Reader, io.Writer) error
+		if len(exts) > 0 && adapters.RenderGFMHTML != nil {
+			renderFn = func(r io.Reader, w io.Writer) error {
+				return adapters.RenderGFMHTML(r, w, exts)
+			}
+		} else {
+			renderFn = adapters.RenderHTML
+		}
+		if renderFn == nil {
+			continue
+		}
+
+		var buf bytes.Buffer
+		r := strings.NewReader(ex.Markdown)
+		err := SafeCall(func() error {
+			return renderFn(r, &buf)
+		})
+
+		matched := false
+		if err == nil {
+			matched = normalizeHTML(buf.String()) == normalizeHTML(ex.HTML)
+		}
+
+		sec := sections[ex.Section]
+		sec.Total++
+		if matched {
+			sec.Pass++
+			pass++
+		}
+		sections[ex.Section] = sec
 	}
-	return runSpecSuite(v, adapted)
+
+	pct := 0.0
+	if total > 0 {
+		pct = float64(pass) / float64(total) * 100
+	}
+	return SpecResult{
+		Pass:       pass,
+		Total:      total,
+		Percentage: pct,
+		Sections:   sections,
+	}
 }
 
 // normalizeHTML trims whitespace and normalizes newlines.

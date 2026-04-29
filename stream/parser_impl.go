@@ -1211,6 +1211,12 @@ func splitTableRow(line string) ([]string, bool) {
 		}
 	}
 	cells = append(cells, strings.TrimSpace(s[start:]))
+	// Unescape \| → | in cell content (GFM table pipe escaping).
+	for i, cell := range cells {
+		if strings.Contains(cell, "\\|") {
+			cells[i] = strings.ReplaceAll(cell, "\\|", "|")
+		}
+	}
 	return cells, hasPipe
 }
 
@@ -4205,18 +4211,18 @@ func parseAutolinkLiteral(text string, span Span, prevSource string) (Event, str
 	if candidate == "" {
 		return Event{}, text, false
 	}
+	untrimmed := candidate
 	candidate = trimAutolinkLiteralSuffix(candidate)
 	if candidate == "" {
 		return Event{}, text, false
 	}
 	lower := strings.ToLower(candidate)
 	switch {
-	case strings.HasPrefix(lower, "http://"):
-		if len(candidate) > len("http://") && isURIAutolink(candidate) {
-			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: candidate}, Span: span}, text[len(candidate):], true
-		}
-	case strings.HasPrefix(lower, "https://"):
-		if len(candidate) > len("https://") && isURIAutolink(candidate) {
+	case strings.HasPrefix(lower, "http://"),
+		strings.HasPrefix(lower, "https://"),
+		strings.HasPrefix(lower, "ftp://"):
+		scheme := lower[:strings.Index(lower, "://")+3]
+		if len(candidate) > len(scheme) && isURIAutolink(candidate) {
 			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: candidate}, Span: span}, text[len(candidate):], true
 		}
 	case strings.HasPrefix(lower, "www."):
@@ -4224,7 +4230,20 @@ func parseAutolinkLiteral(text string, span Span, prevSource string) (Event, str
 			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: "http://" + candidate}, Span: span}, text[len(candidate):], true
 		}
 	}
-	if isEmailAutolink(candidate) {
+	// For email autolinks: if the untrimmed candidate looks like an
+	// email (has @) and the domain ends with - or _, the GFM spec says
+	// it's not an autolink — don't try trimmed version either.
+	if at := strings.LastIndexByte(untrimmed, '@'); at > 0 {
+		domain := untrimmed[at+1:]
+		if len(domain) > 0 {
+			last := domain[len(domain)-1]
+			if last == '-' || last == '_' {
+				// Domain ends with disallowed char — not an email autolink.
+			} else if isEmailAutolink(candidate) {
+				return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: "mailto:" + candidate}, Span: span}, text[len(candidate):], true
+			}
+		}
+	} else if isEmailAutolink(candidate) {
 		return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: "mailto:" + candidate}, Span: span}, text[len(candidate):], true
 	}
 	return Event{}, text, false
@@ -4279,7 +4298,26 @@ func scanAutolinkLiteralCandidate(text string) (string, string) {
 func trimAutolinkLiteralSuffix(candidate string) string {
 	for len(candidate) > 0 {
 		switch candidate[len(candidate)-1] {
-		case '.', ',', ':', ';', '!', '?':
+		case '.', ',', ':', '!', '?', '*', '_', '~':
+			candidate = candidate[:len(candidate)-1]
+			continue
+		case ';':
+			// Check for entity-like pattern: &alphanumeric+;
+			amp := strings.LastIndexByte(candidate, '&')
+			if amp >= 0 {
+				entity := candidate[amp+1 : len(candidate)-1]
+				allAlnum := len(entity) > 0
+				for _, c := range entity {
+					if !isAlphaNumeric(c) {
+						allAlnum = false
+						break
+					}
+				}
+				if allAlnum {
+					candidate = candidate[:amp]
+					continue
+				}
+			}
 			candidate = candidate[:len(candidate)-1]
 			continue
 		case ')':
@@ -4300,7 +4338,7 @@ func trimAutolinkLiteralSuffix(candidate string) string {
 
 func nextAutolinkLiteralStart(text string, prevSource string) int {
 	best := -1
-	for _, prefix := range []string{"http://", "https://", "www."} {
+	for _, prefix := range []string{"http://", "https://", "ftp://", "www."} {
 		lower := strings.ToLower(text)
 		search := 0
 		for {
@@ -4411,15 +4449,20 @@ func isDomainAutolink(domain string) bool {
 		return false
 	}
 	for _, label := range labels {
-		if label == "" || label[0] == '-' || label[len(label)-1] == '-' {
+		if label == "" {
 			return false
 		}
 		for i := 0; i < len(label); i++ {
 			c := label[i]
-			if !isASCIIAlphaNumeric(c) && c != '-' {
+			if !isASCIIAlphaNumeric(c) && c != '-' && c != '_' {
 				return false
 			}
 		}
+	}
+	// GFM: last character of domain must not be - or _.
+	last := domain[len(domain)-1]
+	if last == '-' || last == '_' {
+		return false
 	}
 	return true
 }

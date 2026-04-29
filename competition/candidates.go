@@ -101,6 +101,7 @@ func oursDefaultAdapters() Adapters {
 		ParseFunc:      oursParse,
 		RenderTerminal: oursRenderTerminal,
 		RenderHTML:     oursRenderHTML,
+		RenderGFMHTML:  oursRenderGFMHTML,
 	}
 }
 
@@ -141,6 +142,23 @@ func oursAdaptersWithBuf(bufSize int) Adapters {
 			}
 			return html.Render(w, events, html.WithUnsafe())
 		},
+		RenderGFMHTML: func(r io.Reader, w io.Writer, extensions []string) error {
+			parseOpts := []markdown.ParseOption{markdown.WithBufSize(bufSize)}
+			renderOpts := []html.Option{html.WithUnsafe()}
+			for _, ext := range extensions {
+				switch ext {
+				case "autolink":
+					parseOpts = append(parseOpts, markdown.WithGFM())
+				case "tagfilter":
+					renderOpts = append(renderOpts, html.WithTagFilter())
+				}
+			}
+			events, err := markdown.Parse(r, parseOpts...)
+			if err != nil {
+				return err
+			}
+			return html.Render(w, events, renderOpts...)
+		},
 	}
 }
 
@@ -166,6 +184,25 @@ func oursRenderHTML(r io.Reader, w io.Writer) error {
 		return err
 	}
 	return html.Render(w, events, html.WithUnsafe())
+}
+
+func oursRenderGFMHTML(r io.Reader, w io.Writer, extensions []string) error {
+	var parseOpts []markdown.ParseOption
+	var renderOpts []html.Option
+	renderOpts = append(renderOpts, html.WithUnsafe())
+	for _, ext := range extensions {
+		switch ext {
+		case "autolink":
+			parseOpts = append(parseOpts, markdown.WithGFM())
+		case "tagfilter":
+			renderOpts = append(renderOpts, html.WithTagFilter())
+		}
+	}
+	events, err := markdown.Parse(r, parseOpts...)
+	if err != nil {
+		return err
+	}
+	return html.Render(w, events, renderOpts...)
 }
 
 // --- Adapter factories: goldmark --------------------------------------------

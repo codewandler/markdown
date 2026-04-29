@@ -27,8 +27,9 @@ const DefaultBufSize = 8192
 type ParseOption func(*parseConfig)
 
 type parseConfig struct {
-	bufSize int
-	parser  stream.Parser
+	bufSize    int
+	parser     stream.Parser
+	parserOpts []stream.ParserOption
 }
 
 // WithBufSize sets the read buffer size for Parse. Larger buffers
@@ -51,6 +52,14 @@ func WithParser(p stream.Parser) ParseOption {
 	}
 }
 
+// WithGFM enables GFM extensions (autolinks, strikethrough, tables,
+// task lists). This configures the parser for full GFM compliance.
+func WithGFM() ParseOption {
+	return func(c *parseConfig) {
+		c.parserOpts = append(c.parserOpts, stream.WithGFMAutolinks())
+	}
+}
+
 // Parse reads Markdown from r and returns the complete event stream.
 //
 // It reads in chunks of DefaultBufSize (or the size set via WithBufSize),
@@ -69,7 +78,7 @@ func Parse(r io.Reader, opts ...ParseOption) ([]stream.Event, error) {
 
 	p := cfg.parser
 	if p == nil {
-		p = stream.NewParser()
+		p = stream.NewParser(cfg.parserOpts...)
 	} else {
 		p.Reset()
 	}
