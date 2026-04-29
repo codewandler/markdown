@@ -1572,15 +1572,17 @@ func (p *parser) isClosingFence(line string) bool {
 		return false
 	}
 	trimmed := line[indentBytes:]
-	if len(trimmed) < p.fence.length {
+	// Count consecutive fence marker characters.
+	n := 0
+	for n < len(trimmed) && trimmed[n] == p.fence.marker {
+		n++
+	}
+	// Closing fence must have at least as many markers as the opening.
+	if n < p.fence.length {
 		return false
 	}
-	for i := 0; i < p.fence.length; i++ {
-		if trimmed[i] != p.fence.marker {
-			return false
-		}
-	}
-	return strings.TrimSpace(trimmed[p.fence.length:]) == ""
+	// Rest of line must be blank (only whitespace after the fence).
+	return strings.TrimSpace(trimmed[n:]) == ""
 }
 
 func openingFence(line string) (byte, int, int, string, bool) {
