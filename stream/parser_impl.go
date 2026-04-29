@@ -2472,6 +2472,11 @@ func mergeInlineStyles(base, add InlineStyle) InlineStyle {
 	out.Code = out.Code || add.Code
 	out.RawHTML = out.RawHTML || add.RawHTML
 	out.Image = out.Image || add.Image
+	// Depths are additive: outer emphasis + inner emphasis = nested.
+	out.EmphasisDepth += add.EmphasisDepth
+	out.StrongDepth += add.StrongDepth
+	if out.EmphasisDepth > 0 { out.Emphasis = true }
+	if out.StrongDepth > 0 { out.Strong = true }
 	if add.HasLink {
 		out.Link = add.Link
 		out.LinkTitle = add.LinkTitle
