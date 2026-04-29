@@ -1990,7 +1990,7 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 		}
 		if text[0] == '[' && linkPossible {
 			if ev, rest, labelRaw, ok := parseInlineLink(text, span); ok {
-				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle}
+				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
 				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs)...)
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
@@ -2001,7 +2001,7 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 		if text[0] == '[' && len(refs) > 0 {
 			if ev, rest, labelRaw, ok := parseReferenceLink(text, span, refs); ok {
 				_ = ev
-				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle}
+				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
 				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs)...)
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
@@ -2344,9 +2344,10 @@ func mergeInlineStyles(base, add InlineStyle) InlineStyle {
 	out.Strong = out.Strong || add.Strong
 	out.Strike = out.Strike || add.Strike
 	out.Code = out.Code || add.Code
-	if add.Link != "" {
+	if add.HasLink {
 		out.Link = add.Link
 		out.LinkTitle = add.LinkTitle
+		out.HasLink = true
 	}
 	return out
 }
@@ -2426,7 +2427,7 @@ func parseInlineLinkInner(text string, span Span, rejectNestedLinks bool) (Event
 	if !ok {
 		return Event{}, text, "", false
 	}
-	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title}, Span: span}, text[closeText+2+end:], labelRaw, true
+	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title, HasLink: true}, Span: span}, text[closeText+2+end:], labelRaw, true
 }
 
 // containsInlineLink reports whether text contains a valid inline link
@@ -2488,7 +2489,7 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 				refLabelRaw := text[end+1 : end+closeRef]
 				ref, ok := refs[normalizeReferenceLabel(refLabelRaw)]
 				if ok {
-					return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], labelRaw, true
+					return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title, HasLink: true}, Span: span}, text[end+closeRef+1:], labelRaw, true
 				}
 				// Full reference label not found — don't fall through to shortcut.
 				return Event{}, text, "", false
@@ -2497,7 +2498,7 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 			// Use raw first label for lookup.
 			ref, ok := refs[normalizeReferenceLabel(labelRaw)]
 			if ok {
-				return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end+closeRef+1:], labelRaw, true
+				return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title, HasLink: true}, Span: span}, text[end+closeRef+1:], labelRaw, true
 			}
 			return Event{}, text, "", false
 		}
@@ -2510,7 +2511,7 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 	if !ok {
 		return Event{}, text, "", false
 	}
-	return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title}, Span: span}, text[end:], labelRaw, true
+	return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title, HasLink: true}, Span: span}, text[end:], labelRaw, true
 }
 
 func parseLinkReferenceDefinition(line string) (string, linkReference, bool) {
@@ -3335,10 +3336,10 @@ func parseAutolink(text string, span Span) (Event, string, bool) {
 	}
 	target := text[1:end]
 	if isURIAutolink(target) {
-		return Event{Kind: EventText, Text: target, Style: InlineStyle{Link: target}, Span: span}, text[end+1:], true
+		return Event{Kind: EventText, Text: target, Style: InlineStyle{HasLink: true, Link: target}, Span: span}, text[end+1:], true
 	}
 	if isEmailAutolink(target) {
-		return Event{Kind: EventText, Text: target, Style: InlineStyle{Link: "mailto:" + target}, Span: span}, text[end+1:], true
+		return Event{Kind: EventText, Text: target, Style: InlineStyle{HasLink: true, Link: "mailto:" + target}, Span: span}, text[end+1:], true
 	}
 	return Event{}, text, false
 }
@@ -3359,19 +3360,19 @@ func parseAutolinkLiteral(text string, span Span, prevSource string) (Event, str
 	switch {
 	case strings.HasPrefix(lower, "http://"):
 		if len(candidate) > len("http://") && isURIAutolink(candidate) {
-			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{Link: candidate}, Span: span}, text[len(candidate):], true
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: candidate}, Span: span}, text[len(candidate):], true
 		}
 	case strings.HasPrefix(lower, "https://"):
 		if len(candidate) > len("https://") && isURIAutolink(candidate) {
-			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{Link: candidate}, Span: span}, text[len(candidate):], true
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: candidate}, Span: span}, text[len(candidate):], true
 		}
 	case strings.HasPrefix(lower, "www."):
 		if isWWWAutolink(candidate) {
-			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{Link: "http://" + candidate}, Span: span}, text[len(candidate):], true
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: "http://" + candidate}, Span: span}, text[len(candidate):], true
 		}
 	}
 	if isEmailAutolink(candidate) {
-		return Event{Kind: EventText, Text: candidate, Style: InlineStyle{Link: "mailto:" + candidate}, Span: span}, text[len(candidate):], true
+		return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: "mailto:" + candidate}, Span: span}, text[len(candidate):], true
 	}
 	return Event{}, text, false
 }
@@ -3615,7 +3616,7 @@ func coalesceText(events []Event) []Event {
 }
 
 func sameStyle(a, b InlineStyle) bool {
-	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.Image == b.Image && a.RawHTML == b.RawHTML
+	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.HasLink == b.HasLink && a.Image == b.Image && a.RawHTML == b.RawHTML
 }
 
 func isEscapablePunctuation(c byte) bool {

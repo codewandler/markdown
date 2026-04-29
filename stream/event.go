@@ -55,6 +55,7 @@ type InlineStyle struct {
 	Code      bool
 	Link      string
 	LinkTitle string
+	HasLink   bool    // true when Link was explicitly set (distinguishes "" from no link)
 	Image     bool    // true for ![alt](url) and ![alt][ref]
 	RawHTML   bool    // true for inline raw HTML tags
 }

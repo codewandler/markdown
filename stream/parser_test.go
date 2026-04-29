@@ -203,7 +203,7 @@ func TestInlineSubset(t *testing.T) {
 	got := viewEvents(events)
 	assertContains(t, got, eventView{Kind: EventText, Text: "strong", Style: InlineStyle{Strong: true}})
 	assertContains(t, got, eventView{Kind: EventText, Text: "code", Style: InlineStyle{Code: true}})
-	assertContains(t, got, eventView{Kind: EventText, Text: "link", Style: InlineStyle{Link: "https://example.com"}})
+	assertContains(t, got, eventView{Kind: EventText, Text: "link", Style: InlineStyle{HasLink: true, Link: "https://example.com"}})
 }
 
 func TestTaskListSubset(t *testing.T) {
@@ -219,18 +219,18 @@ func TestTaskListSubset(t *testing.T) {
 func TestGFMInlineExtensions(t *testing.T) {
 	events := viewEvents(parseAll(t, "~~gone~~ https://example.com, www.example.org/path and foo@bar.example.com.\n"))
 	assertContains(t, events, eventView{Kind: EventText, Text: "gone", Style: InlineStyle{Strike: true}})
-	assertContains(t, events, eventView{Kind: EventText, Text: "https://example.com", Style: InlineStyle{Link: "https://example.com"}})
-	assertContains(t, events, eventView{Kind: EventText, Text: "www.example.org/path", Style: InlineStyle{Link: "http://www.example.org/path"}})
-	assertContains(t, events, eventView{Kind: EventText, Text: "foo@bar.example.com", Style: InlineStyle{Link: "mailto:foo@bar.example.com"}})
+	assertContains(t, events, eventView{Kind: EventText, Text: "https://example.com", Style: InlineStyle{HasLink: true, Link: "https://example.com"}})
+	assertContains(t, events, eventView{Kind: EventText, Text: "www.example.org/path", Style: InlineStyle{HasLink: true, Link: "http://www.example.org/path"}})
+	assertContains(t, events, eventView{Kind: EventText, Text: "foo@bar.example.com", Style: InlineStyle{HasLink: true, Link: "mailto:foo@bar.example.com"}})
 }
 
 func TestImageSubset(t *testing.T) {
 	inline := parseAll(t, "![foo](https://example.com/logo.png)\n")
 	got := viewEvents(inline)
-	assertContains(t, got, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "https://example.com/logo.png", Image: true}})
+	assertContains(t, got, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "https://example.com/logo.png", HasLink: true, Image: true}})
 	ref := parseAll(t, "[bar]: /bar.png\n\n![bar]\n")
 	got = viewEvents(ref)
-	assertContains(t, got, eventView{Kind: EventText, Text: "bar", Style: InlineStyle{Link: "/bar.png", Image: true}})
+	assertContains(t, got, eventView{Kind: EventText, Text: "bar", Style: InlineStyle{Link: "/bar.png", HasLink: true, Image: true}})
 }
 
 func TestEscapedImageStartsAsText(t *testing.T) {
@@ -291,7 +291,7 @@ func TestEmphasisSubset(t *testing.T) {
 func TestLinkReferenceDefinitions(t *testing.T) {
 	t.Run("multiline definition resolves later reference", func(t *testing.T) {
 		events := viewEvents(parseAll(t, "[foo]:\n/url\n  \"title\"\n\n[foo]\n"))
-		assertContains(t, events, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "/url", LinkTitle: "title"}})
+		assertContains(t, events, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{HasLink: true, Link: "/url", LinkTitle: "title"}})
 	})
 
 	t.Run("invalid pending definition falls back to paragraph text", func(t *testing.T) {
@@ -308,7 +308,7 @@ func TestLinkReferenceDefinitions(t *testing.T) {
 
 	t.Run("next non-title line resolves after pending destination", func(t *testing.T) {
 		events := viewEvents(parseAll(t, "[foo]: /url\n[foo]\n"))
-		assertContains(t, events, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "/url"}})
+		assertContains(t, events, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{HasLink: true, Link: "/url"}})
 	})
 }
 

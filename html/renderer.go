@@ -376,7 +376,7 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 
 	// Close innermost first: link, del, em, strong.
 	// Only close tags that are actually being removed.
-	if o.Link != "" && (o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
+	if o.HasLink && (!s.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
 		r.write("</a>")
 	}
 	if o.Strike && !s.Strike {
@@ -400,7 +400,7 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	if s.Strike && !o.Strike {
 		r.write("<del>")
 	}
-	if s.Link != "" && (o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
+	if s.HasLink && (!o.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
 		r.write("<a href=\"" + escapeAttrURL(s.Link) + "\"")
 		if s.LinkTitle != "" {
 			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
