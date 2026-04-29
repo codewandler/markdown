@@ -216,8 +216,37 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 
 	// HTML block continuation.
 	if p.inHTMLBlock {
-		p.processHTMLBlockLine(line, events)
-		return
+		// Inside a blockquote, strip the > prefix before processing.
+		if p.inBlockquote {
+			if content, ok := blockquoteContent(line.text); ok {
+				inner := line
+				inner.text = content
+				p.processHTMLBlockLine(inner, events)
+				return
+			}
+			// Non-> line closes the blockquote (and the HTML block inside it).
+			p.closeHTMLBlock(events)
+			p.closeBlockquote(line, events)
+			// Fall through to process the line normally.
+		} else if p.inListItem {
+			// Inside a list item, check if the line starts a new list item
+			// (for type 6/7 HTML blocks which end at blank lines or new containers).
+			if (p.htmlBlockType == 6 || p.htmlBlockType == 7) {
+				if _, ok := listItem(line.text); ok {
+					p.closeHTMLBlock(events)
+					// Fall through to process the line normally.
+				} else {
+					p.processHTMLBlockLine(line, events)
+					return
+				}
+			} else {
+				p.processHTMLBlockLine(line, events)
+				return
+			}
+		} else {
+			p.processHTMLBlockLine(line, events)
+			return
+		}
 	}
 
 	// When inside a list item with an open fenced/indented code block,

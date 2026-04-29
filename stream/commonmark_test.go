@@ -1020,7 +1020,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		expectBlocks(BlockBlockquote, 2, BlockIndentedCode, 1, BlockParagraph, 1)(t, events)
 	},
 	// HTML block inside list item (type 6 consumes until blank line).
-	175: expectBlocks(BlockList, 1, BlockListItem, 1, BlockHTML, 1),
+	175: expectBlocks(BlockList, 1, BlockListItem, 2, BlockHTML, 1),
 	// Blockquote with non-> lines closing the blockquote.
 	236: expectBlocks(BlockBlockquote, 1, BlockIndentedCode, 2),
 	237: func(t *testing.T, events []eventView) {
