@@ -242,12 +242,14 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		// Inside a blockquote, non-> lines close the blockquote
 		// (and the fence inside it).
 		if p.inBlockquote {
-			if _, ok := blockquoteContent(line.text); !ok {
+			if content, ok := blockquoteContent(line.text); !ok {
 				p.closeFencedCode(events)
 				p.closeBlockquote(line, events)
 				// Fall through to process the line normally.
 			} else {
-				p.processFenceLine(line, events)
+				inner := line
+				inner.text = content
+				p.processFenceLine(inner, events)
 				return
 			}
 		} else {
