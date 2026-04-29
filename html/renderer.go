@@ -99,7 +99,7 @@ func (r *renderer) render(events []stream.Event) error {
 			// Soft/line breaks stay inside open inline style tags.
 			r.write("\n")
 		case stream.EventLineBreak:
-			if r.inCode {
+			if r.inCode || r.inHTML {
 				r.write("\n")
 			} else {
 				r.lineBreak()
