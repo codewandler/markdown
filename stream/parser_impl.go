@@ -1956,12 +1956,14 @@ const (
 	inlineTokenSoftBreak
 	inlineTokenLineBreak
 	inlineTokenDelimiter
+	inlineTokenLinkOpen  // marks the start of a link's content
+	inlineTokenLinkClose // marks the end of a link's content
 )
 
 type inlineToken struct {
 	kind    inlineTokenKind
 	text    string
-	style   InlineStyle
+	style   InlineStyle // for linkOpen/linkClose: the link style
 	delim   byte
 	run     int
 	origRun int // original run length, for rule-of-three checks
@@ -2033,7 +2035,12 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAu
 		if text[0] == '[' && linkPossible {
 			if ev, rest, labelRaw, ok := parseInlineLink(text, span); ok {
 				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
-				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs, gfmAutolinks)...)
+				// Resolve emphasis within the label, then wrap in link boundaries.
+				// This lets outer emphasis wrap the link while keeping inner
+				// delimiters scoped to the label.
+				tokens = append(tokens, inlineToken{kind: inlineTokenLinkOpen, style: linkStyle})
+				tokens = append(tokens, tokenizeLinkContent(labelRaw, InlineStyle{}, span, refs, gfmAutolinks)...)
+				tokens = append(tokens, inlineToken{kind: inlineTokenLinkClose, style: linkStyle})
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
@@ -2044,7 +2051,9 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAu
 			if ev, rest, labelRaw, ok := parseReferenceLink(text, span, refs); ok {
 				_ = ev
 				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
-				tokens = append(tokens, tokenizeLinkContent(labelRaw, linkStyle, span, refs, gfmAutolinks)...)
+				tokens = append(tokens, inlineToken{kind: inlineTokenLinkOpen, style: linkStyle})
+				tokens = append(tokens, tokenizeLinkContent(labelRaw, InlineStyle{}, span, refs, gfmAutolinks)...)
+				tokens = append(tokens, inlineToken{kind: inlineTokenLinkClose, style: linkStyle})
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
 				continue
@@ -2400,6 +2409,8 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 			out = append(out, inlineToken{kind: inlineTokenSoftBreak})
 		case inlineTokenLineBreak:
 			out = append(out, inlineToken{kind: inlineTokenLineBreak})
+		case inlineTokenLinkOpen, inlineTokenLinkClose:
+			out = append(out, tok)
 		}
 	}
 	return out
@@ -2423,6 +2434,16 @@ func applyDelimiterStyle(style InlineStyle, count int, marker byte) InlineStyle 
 
 // tokenizeLinkContent tokenizes and resolves emphasis in link label
 // text, then applies the link style to every resulting token.
+// tokenizeLinkLabel tokenizes a link label's raw text into inline tokens
+// WITHOUT applying the link style. The caller wraps these in linkOpen/linkClose.
+func tokenizeLinkLabel(labelRaw string, span Span, refs map[string]linkReference, gfmAutolinks bool) []inlineToken {
+	label := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
+	if label == "" {
+		return []inlineToken{{kind: inlineTokenText, text: ""}}
+	}
+	return tokenizeInline(label, span, refs, gfmAutolinks)
+}
+
 func tokenizeLinkContent(labelRaw string, linkStyle InlineStyle, span Span, refs map[string]linkReference, gfmAutolinks bool) []inlineToken {
 	label := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
 	if label == "" {
@@ -2464,10 +2485,33 @@ func coalesceInlineTokens(tokens []inlineToken, span Span) []Event {
 		return nil
 	}
 	var events []Event
+	var linkStack []InlineStyle
+	currentLink := func() InlineStyle {
+		if len(linkStack) > 0 {
+			return linkStack[len(linkStack)-1]
+		}
+		return InlineStyle{}
+	}
 	for _, tok := range tokens {
 		switch tok.kind {
+		case inlineTokenLinkOpen:
+			linkStack = append(linkStack, tok.style)
+		case inlineTokenLinkClose:
+			if len(linkStack) > 0 {
+				linkStack = linkStack[:len(linkStack)-1]
+			}
 		case inlineTokenText:
-			events = append(events, Event{Kind: EventText, Text: tok.text, Style: tok.style, Span: span})
+			s := tok.style
+			if ls := currentLink(); ls.HasLink {
+				if s.Image && s.HasLink {
+					// Image inside link: keep image's own Link, set ImageLink.
+					s.ImageLink = ls.Link
+					s.ImageLinkTitle = ls.LinkTitle
+				} else {
+					s = mergeInlineStyles(s, ls)
+				}
+			}
+			events = append(events, Event{Kind: EventText, Text: tok.text, Style: s, Span: span})
 		case inlineTokenSoftBreak:
 			events = append(events, Event{Kind: EventSoftBreak, Span: span})
 		case inlineTokenLineBreak:

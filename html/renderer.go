@@ -57,9 +57,25 @@ type renderer struct {
 	inHTML       bool         // inside html block
 	headingLevel int          // stashed from enter for exit
 	openStyle    stream.InlineStyle // currently open inline tags
+	tagStack     []inlineTag        // actual open tag stack for proper nesting
 	tableCol     int          // current column index in table row
 	tableAlign   []stream.TableAlign
 	err          error // sticky error
+}
+
+type inlineTagKind int
+
+const (
+	tagEm inlineTagKind = iota
+	tagStrong
+	tagDel
+	tagLink
+)
+
+type inlineTag struct {
+	kind      inlineTagKind
+	link      string
+	linkTitle string
 }
 
 func newRenderer(w io.Writer, opts ...Option) *renderer {
@@ -388,54 +404,159 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	if r.openStyle == s {
 		return
 	}
-	o := r.openStyle
 
-	// Nesting order (outermost to innermost):
-	//   link > strong > em > del
-	// Close innermost first: del, em, strong, link.
-	// Use depth for emphasis/strong to handle nesting.
-	// Fall back to boolean when depth is not set (hand-crafted events).
-	oEm := o.EmphasisDepth
-	if oEm == 0 && o.Emphasis { oEm = 1 }
 	sEm := s.EmphasisDepth
 	if sEm == 0 && s.Emphasis { sEm = 1 }
-	oSt := o.StrongDepth
-	if oSt == 0 && o.Strong { oSt = 1 }
 	sSt := s.StrongDepth
 	if sSt == 0 && s.Strong { sSt = 1 }
+	sameLink := s.HasLink && r.openStyle.HasLink && s.Link == r.openStyle.Link && s.LinkTitle == r.openStyle.LinkTitle
 
-	if o.Strike && !s.Strike {
-		r.write("</del>")
-	}
-	for i := oEm; i > sEm; i-- {
-		r.write("</em>")
-	}
-	for i := oSt; i > sSt; i-- {
-		r.write("</strong>")
-	}
-	if o.HasLink && (!s.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
-		r.write("</a>")
-	}
-
-	// Open outermost first: link, strong, em, del.
-	if s.HasLink && (!o.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
-		r.write("<a href=\"" + escapeAttrURL(s.Link) + "\"")
-		if s.LinkTitle != "" {
-			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
+	// Determine which tags need to be removed.
+	needRemove := func(t inlineTag) bool {
+		switch t.kind {
+		case tagDel:
+			return !s.Strike
+		case tagEm:
+			return false // handled by count
+		case tagStrong:
+			return false // handled by count
+		case tagLink:
+			return !s.HasLink || !sameLink
 		}
-		r.write(">")
+		return false
 	}
-	for i := oSt; i < sSt; i++ {
-		r.write("<strong>")
+
+	// Count current em/strong in stack.
+	curEm, curSt := 0, 0
+	for _, t := range r.tagStack {
+		if t.kind == tagEm { curEm++ }
+		if t.kind == tagStrong { curSt++ }
 	}
-	for i := oEm; i < sEm; i++ {
-		r.write("<em>")
+
+	// Close tags from innermost. We need to close:
+	// - any tag that's being removed
+	// - excess em/strong tags
+	// - any tag that's above a tag being removed (to maintain proper nesting)
+	// Find the deepest tag that needs removal.
+	removeFrom := len(r.tagStack)
+	extraEm := curEm - sEm
+	extraSt := curSt - sSt
+	seenEm, seenSt := 0, 0
+	for i := len(r.tagStack) - 1; i >= 0; i-- {
+		t := r.tagStack[i]
+		if needRemove(t) {
+			removeFrom = i
+		}
+		if t.kind == tagEm {
+			seenEm++
+			if seenEm <= extraEm { removeFrom = i }
+		}
+		if t.kind == tagStrong {
+			seenSt++
+			if seenSt <= extraSt { removeFrom = i }
+		}
 	}
-	if s.Strike && !o.Strike {
-		r.write("<del>")
+
+	// Close from innermost to removeFrom.
+	var reopen []inlineTag
+	for i := len(r.tagStack) - 1; i >= removeFrom; i-- {
+		r.writeCloseTag(r.tagStack[i])
+	}
+	// Collect tags to reopen (those above removeFrom that are still wanted).
+	remEm, remSt := 0, 0
+	for i := removeFrom; i < len(r.tagStack); i++ {
+		t := r.tagStack[i]
+		keep := false
+		switch t.kind {
+		case tagEm:
+			remEm++
+			keep = remEm > extraEm
+		case tagStrong:
+			remSt++
+			keep = remSt > extraSt
+		case tagLink:
+			keep = s.HasLink && sameLink
+		case tagDel:
+			keep = s.Strike
+		}
+		if keep {
+			reopen = append(reopen, t)
+		}
+	}
+	r.tagStack = r.tagStack[:removeFrom]
+	for _, t := range reopen {
+		r.writeOpenTag(t)
+		r.tagStack = append(r.tagStack, t)
+	}
+
+	// Open new tags.
+	if s.HasLink && !sameLink {
+		tag := inlineTag{kind: tagLink, link: s.Link, linkTitle: s.LinkTitle}
+		r.writeOpenTag(tag)
+		r.tagStack = append(r.tagStack, tag)
+	}
+	newSt := 0
+	for _, t := range r.tagStack {
+		if t.kind == tagStrong { newSt++ }
+	}
+	for i := newSt; i < sSt; i++ {
+		tag := inlineTag{kind: tagStrong}
+		r.writeOpenTag(tag)
+		r.tagStack = append(r.tagStack, tag)
+	}
+	newEm := 0
+	for _, t := range r.tagStack {
+		if t.kind == tagEm { newEm++ }
+	}
+	for i := newEm; i < sEm; i++ {
+		tag := inlineTag{kind: tagEm}
+		r.writeOpenTag(tag)
+		r.tagStack = append(r.tagStack, tag)
+	}
+	if s.Strike && !r.hasTag(tagDel) {
+		tag := inlineTag{kind: tagDel}
+		r.writeOpenTag(tag)
+		r.tagStack = append(r.tagStack, tag)
 	}
 
 	r.openStyle = s
+}
+
+func (r *renderer) hasTag(kind inlineTagKind) bool {
+	for _, t := range r.tagStack {
+		if t.kind == kind { return true }
+	}
+	return false
+}
+
+func (r *renderer) writeOpenTag(t inlineTag) {
+	switch t.kind {
+	case tagEm:
+		r.write("<em>")
+	case tagStrong:
+		r.write("<strong>")
+	case tagDel:
+		r.write("<del>")
+	case tagLink:
+		r.write("<a href=\"" + escapeAttrURL(t.link) + "\"")
+		if t.linkTitle != "" {
+			r.write(" title=\"" + escapeHTML(t.linkTitle) + "\"")
+		}
+		r.write(">")
+	}
+}
+
+func (r *renderer) writeCloseTag(t inlineTag) {
+	switch t.kind {
+	case tagEm:
+		r.write("</em>")
+	case tagStrong:
+		r.write("</strong>")
+	case tagDel:
+		r.write("</del>")
+	case tagLink:
+		r.write("</a>")
+	}
 }
 
 // nextTextChangesLink checks if the next text event after position i
