@@ -1,11 +1,16 @@
 package html
 
 import (
-	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/codewandler/markdown/stream"
+)
+
+var (
+	headingOpen  = [7]string{"", "<h1>", "<h2>", "<h3>", "<h4>", "<h5>", "<h6>"}
+	headingClose = [7]string{"", "</h1>\n", "</h2>\n", "</h3>\n", "</h4>\n", "</h5>\n", "</h6>\n"}
 )
 
 // Option configures the HTML renderer.
@@ -105,7 +110,7 @@ func (r *renderer) render(events []stream.Event) error {
 // for each list. Returns a map from the EnterBlock list event index
 // to the Tight bool from the corresponding ExitBlock.
 func prescanTight(events []stream.Event) map[int]bool {
-	m := make(map[int]bool)
+	var m map[int]bool
 	var stack []int
 	for i, ev := range events {
 		switch {
@@ -118,6 +123,9 @@ func prescanTight(events []stream.Event) map[int]bool {
 				tight := true
 				if ev.List != nil {
 					tight = ev.List.Tight
+				}
+				if m == nil {
+					m = make(map[int]bool)
 				}
 				m[enterIdx] = tight
 			}
@@ -137,7 +145,9 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 		r.write("<p>")
 	case stream.BlockHeading:
 		r.headingLevel = ev.Level
-		r.write(fmt.Sprintf("<h%d>", ev.Level))
+		if ev.Level >= 1 && ev.Level <= 6 {
+			r.write(headingOpen[ev.Level])
+		}
 	case stream.BlockBlockquote:
 		r.containerDepth++
 		r.write("<blockquote>\n")
@@ -146,7 +156,7 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 		r.tightStack = append(r.tightStack, tight)
 		if ev.List != nil && ev.List.Ordered {
 			if ev.List.Start != 1 {
-				r.write(fmt.Sprintf("<ol start=\"%d\">\n", ev.List.Start))
+				r.write("<ol start=\"" + strconv.Itoa(ev.List.Start) + "\">\n")
 			} else {
 				r.write("<ol>\n")
 			}
@@ -169,8 +179,8 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 		if ev.Info != "" {
 			// Info string: use first word as language.
 			lang := ev.Info
-			if idx := strings.IndexAny(lang, " \t"); idx >= 0 {
-				lang = lang[:idx]
+			if sep := strings.IndexAny(lang, " \t"); sep >= 0 {
+				lang = lang[:sep]
 			}
 			r.write("<pre><code class=\"language-" + escapeHTML(lang) + "\">")
 		} else {
@@ -245,7 +255,9 @@ func (r *renderer) exitBlock(idx int, ev stream.Event, events []stream.Event) {
 		if lvl == 0 {
 			lvl = r.headingLevel
 		}
-		r.write(fmt.Sprintf("</h%d>\n", lvl))
+		if lvl >= 1 && lvl <= 6 {
+			r.write(headingClose[lvl])
+		}
 		r.headingLevel = 0
 	case stream.BlockBlockquote:
 		r.containerDepth--
