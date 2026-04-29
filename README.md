@@ -7,8 +7,8 @@
 Parse incrementally. Render immediately. Keep memory bounded.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![CommonMark](https://img.shields.io/badge/CommonMark-96.2%25-brightgreen)](https://spec.commonmark.org/)
-[![GFM](https://img.shields.io/badge/GFM-100%25-brightgreen)](https://github.github.com/gfm/)
+[![CommonMark](https://img.shields.io/badge/CommonMark-100%25-brightgreen)](https://spec.commonmark.org/)
+[![GFM](https://img.shields.io/badge/GFM-96.0%25-brightgreen)](https://github.github.com/gfm/)
 
 <img src="examples/demo/demo.gif" alt="demo" width="720">
 
@@ -39,16 +39,16 @@ Benchmarked against 5 Go Markdown libraries. Full results in
 
 | Input | ours | glamour | go-term-md |
 | --- | ---: | ---: | ---: |
-| Spec (~120KB) | **8.7ms** | 54ms (6.2x slower) | 398ms (46x slower) |
-| README (~10KB) | **1.3ms** | 7.9ms (6.1x slower) | 3.9ms (3x slower) |
-| GitHub Top 10 (~130KB) | **32ms** | 37ms (1.1x slower) | 7,060ms (221x slower) |
+| Spec (~120KB) | **9.2ms** | 40.9ms (4.4x slower) | 405ms (44x slower) |
+| README (~10KB) | **1.2ms** | 6.2ms (5.3x slower) | 3.9ms (3.3x slower) |
+| GitHub Top 10 (~130KB) | **32.9ms** | 37.2ms (1.1x slower) | 2,770ms (84x slower) |
 
 ### Spec compliance (measured, not claimed)
 
 | Spec | ours | goldmark | blackfriday | gomarkdown |
 | --- | ---: | ---: | ---: | ---: |
-| CommonMark 0.31.2 | **627/652 (96.2%)** | 646/652 (99.1%) | 244/652 (37.4%) | 263/652 (40.3%) |
-| GFM 0.29 | **672/672 (100%)** | 654/672 (97.3%) | 247/672 (36.8%) | 263/672 (39.1%) |
+| CommonMark 0.31.2 | **652/652 (100.0%)** | 647/652 (99.2%) | 244/652 (37.4%) | 263/652 (40.3%) |
+| GFM 0.29 | **645/672 (96.0%)** | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
 
 ### Feature matrix
 
@@ -135,15 +135,16 @@ streaming.
 | --- | --- |
 | Corpus classification | every CommonMark + GFM example tracked |
 | Split equivalence | every example parsed at every chunk boundary |
-| Structural assertions | 627 CommonMark + 24 GFM extension examples |
+| Structural assertions | 652 CommonMark + 24 GFM extension examples |
 | Event invariants | balanced enter/exit, correct nesting |
 | Fuzz testing | 3 `testing.F` targets, 1300+ seeds |
 | Memory retention | completed blocks released promptly |
 
 ```bash
 go test ./stream ./terminal .
-task bench:compliance    # run spec compliance against all parsers
-task bench:render        # run render benchmarks with comparison tables
+task competition:compliance  # run spec compliance against all parsers
+task competition:bench      # run benchmarks against all competitors
+task competition:full       # full pipeline: metadata + compliance + bench + report
 ```
 
 ## Design Rules
@@ -165,6 +166,6 @@ See [`roadmap-v1.0.md`](.agents/plans/roadmap-v1.0.md) for the full plan.
 | GFM table parsing fixes | :white_check_mark: v0.36.1 |
 | Demo application + README | :white_check_mark: v0.37.0 |
 | Benchmarks + competition | :white_check_mark: v0.38.0 |
-| CommonMark gaps (target >= 98%) | planned |
+| HTML renderer + 100% CommonMark | :white_check_mark: v0.39.0 |
 | `cmd/mdview` terminal viewer | planned |
 | v1.0 stable API | planned |

@@ -1,6 +1,6 @@
 # Comparison with Other Go Markdown Libraries
 
-Benchmarks run on Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz, go1.26.1, Linux. Git SHA: `3d48425`.
+Benchmarks run on Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz, go1.26.1, Linux. Git SHA: `39d56db`.
 
 See [docs/competitors.md](docs/competitors.md) for detailed library profiles.
 
@@ -44,34 +44,34 @@ renderer matures.
 
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| GitHubTop10 | 32.7ms | **32.0ms** | 36.9ms | 3.33s | **1.1x faster** |
-| CodeHeavy | **2.8ms** | 2.9ms | 9.3ms | 51.7ms | **3.3x faster** |
-| TableHeavy | 6.9ms | **4.9ms** | 28.1ms | 6.6ms | **4.1x faster** |
-| InlineHeavy | 37.2ms | **31.6ms** | 88.1ms | 38.9ms | **2.4x faster** |
-| README | **1.1ms** | 1.2ms | 6.2ms | 3.9ms | **5.4x faster** |
-| Spec | 9.1ms | **7.2ms** | 40.4ms | 407.2ms | **4.4x faster** |
+| InlineHeavy | 39.2ms | **30.8ms** | 88.2ms | 38.3ms | **2.2x faster** |
+| README | 1.2ms | **1.1ms** | 6.2ms | 3.9ms | **5.3x faster** |
+| TableHeavy | 6.8ms | **5.0ms** | 28.6ms | 6.7ms | **4.2x faster** |
+| Spec | 9.2ms | **7.2ms** | 40.9ms | 405.0ms | **4.4x faster** |
+| CodeHeavy | 3.2ms | **3.1ms** | 9.1ms | 52.1ms | **2.8x faster** |
+| GitHubTop10 | 32.9ms | **32.1ms** | 37.2ms | 2.77s | **1.1x faster** |
 
 ### Allocations (lower is better)
 
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| GitHubTop10 | **40.2K** | 40.5K | 367.3K | 1.4M | **9.1x fewer** |
-| CodeHeavy | **33.1K** | 33.1K | 39.0K | 288.7K | **1.2x fewer** |
-| TableHeavy | **47.4K** | 47.4K | 262.6K | 156.9K | **5.5x fewer** |
 | InlineHeavy | **171.0K** | 171.6K | 811.4K | 828.7K | **4.7x fewer** |
 | README | **9.3K** | 9.3K | 49.4K | 37.8K | **5.3x fewer** |
-| Spec | **56.1K** | 56.2K | 304.6K | 183.4K | **5.4x fewer** |
+| TableHeavy | **47.4K** | 47.4K | 262.6K | 156.9K | **5.5x fewer** |
+| Spec | **56.1K** | 56.2K | 304.7K | 183.4K | **5.4x fewer** |
+| CodeHeavy | **33.1K** | 33.1K | 39.0K | 288.7K | **1.2x fewer** |
+| GitHubTop10 | **40.2K** | 40.5K | 367.3K | 1.4M | **9.1x fewer** |
 
 ### Memory (lower is better)
 
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| GitHubTop10 | 12.6 MB | **10.0 MB** | 19.2 MB | 119.1 MB | **1.5x less** |
-| CodeHeavy | 4.4 MB | **3.5 MB** | 34.4 MB | 11.8 MB | **7.8x less** |
-| TableHeavy | 19.5 MB | 14.5 MB | 16.2 MB | **3.6 MB** | 1.2x more |
 | InlineHeavy | 84.1 MB | 71.2 MB | 46.5 MB | **18.7 MB** | 1.8x more |
-| README | 2.6 MB | 2.5 MB | 5.0 MB | **1.0 MB** | **1.9x less** |
-| Spec | 21.8 MB | 16.6 MB | 36.2 MB | **5.5 MB** | **1.7x less** |
+| README | 2.6 MB | 2.5 MB | 5.1 MB | **1.0 MB** | **2.0x less** |
+| TableHeavy | 19.5 MB | 14.5 MB | 16.2 MB | **3.6 MB** | 1.2x more |
+| Spec | 21.8 MB | 16.6 MB | 36.6 MB | **5.5 MB** | **1.7x less** |
+| CodeHeavy | 4.4 MB | **3.5 MB** | 34.4 MB | 11.8 MB | **7.8x less** |
+| GitHubTop10 | 12.6 MB | **10.0 MB** | 19.1 MB | 119.1 MB | **1.5x less** |
 
 ## Parse-Only
 
@@ -79,25 +79,25 @@ renderer matures.
 
 | Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| README | 1.0ms | 799.6us | **276.8us** | 396.4us | 943.0us | 3.7x slower |
-| Spec | 8.1ms | 7.1ms | **2.1ms** | 2.4ms | 379.5ms | 3.9x slower |
-| GitHubTop10 | 5.9ms | 5.4ms | 2.5ms | **1.3ms** | 3.8ms | 2.3x slower |
+| GitHubTop10 | 5.8ms | 5.4ms | 2.5ms | **1.2ms** | 3.9ms | 2.4x slower |
+| README | 908.3us | 799.6us | **240.3us** | 379.4us | 931.5us | 3.8x slower |
+| Spec | 7.8ms | 7.1ms | **1.7ms** | 2.3ms | 392.7ms | 4.6x slower |
 
 ### Allocations (lower is better)
 
 | Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| GitHubTop10 | 19.7K | 19.6K | 13.1K | **8.0K** | 8.3K | 1.5x more |
 | README | 3.2K | 3.2K | **1.4K** | 3.0K | 3.6K | 2.4x more |
 | Spec | 22.3K | 22.2K | **11.4K** | 22.9K | 25.9K | 2.0x more |
-| GitHubTop10 | 19.7K | 19.6K | 13.1K | **8.0K** | 8.3K | 1.5x more |
 
 ### Memory (lower is better)
 
 | Input | ours | ours-reuse | goldmark | blackfriday | gomarkdown | vs goldmark |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| README | 2.8 MB | 2.2 MB | **208.6 KB** | 579.6 KB | 266.3 KB | 14.0x more |
-| Spec | 25.8 MB | 20.1 MB | **1.7 MB** | 4.1 MB | 1.8 MB | 15.5x more |
 | GitHubTop10 | 14.6 MB | 10.7 MB | 1.9 MB | 1.9 MB | **1.4 MB** | 7.8x more |
+| README | 2.8 MB | 2.2 MB | **208.6 KB** | 579.8 KB | 266.1 KB | 14.0x more |
+| Spec | 25.8 MB | 20.1 MB | **1.7 MB** | 4.1 MB | 1.8 MB | 15.5x more |
 
 **Why we use more memory**: Our parser allocates `Event` structs into a
 flat slice (the streaming output). Batch parsers build compact AST trees
@@ -112,8 +112,8 @@ Chroma's regex-based lexer. Benchmark on 100 Go code blocks:
 
 | Highlighter | Speed | Allocations | Memory | vs Chroma |
 | --- | ---: | ---: | ---: | ---: |
-| **Go fast path** | **1.5ms** | **16.8K** | **2.6 MB** | -- |
-| Chroma | 20.2ms | 112.6K | 7.8 MB | **13x slower, 6.7x more allocs** |
+| **Go fast path** | **1.3ms** | **16.7K** | **2.6 MB** | -- |
+| Chroma | 20.3ms | 112.6K | 7.8 MB | **16x slower, 6.7x more allocs** |
 
 ## Streaming (ours only)
 
@@ -122,13 +122,13 @@ Spec input (~120KB):
 
 | Chunk size | Speed | Allocs | vs whole-doc |
 | --- | ---: | ---: | ---: |
-| 1 byte | 9.6ms | 56.1K | 1.1x slower |
+| 1 byte | 10.0ms | 56.1K | 1.1x slower |
 | 16 bytes | 9.3ms | 56.1K | 1.0x slower |
-| 64 bytes | 9.2ms | 56.1K | 1.0x slower |
-| 256 bytes | 9.0ms | 56.1K | 1.0x slower |
-| 1 KB | 9.5ms | 56.1K | 1.1x slower |
-| 4 KB | 9.6ms | 56.1K | 1.1x slower |
-| Whole doc | 9.0ms | 56.1K | baseline |
+| 64 bytes | 9.4ms | 56.1K | 1.0x slower |
+| 256 bytes | 9.5ms | 56.1K | 1.1x slower |
+| 1 KB | 9.9ms | 56.1K | 1.1x slower |
+| 4 KB | 9.8ms | 56.1K | 1.1x slower |
+| Whole doc | 8.9ms | 56.1K | baseline |
 
 Streaming at 4KB chunks is **faster** than whole-document parsing
 because intermediate allocations are smaller. Even byte-at-a-time
