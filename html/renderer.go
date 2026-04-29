@@ -56,6 +56,7 @@ type renderer struct {
 	inCode       bool         // inside fenced_code or indented_code
 	inHTML       bool         // inside html block
 	headingLevel int          // stashed from enter for exit
+	openStyle    stream.InlineStyle // currently open inline tags
 	tableCol     int          // current column index in table row
 	tableAlign   []stream.TableAlign
 	err          error // sticky error
@@ -79,6 +80,7 @@ func (r *renderer) render(events []stream.Event) error {
 		case stream.EventEnterBlock:
 			r.enterBlock(i, ev, events)
 		case stream.EventExitBlock:
+			r.closeStyle()
 			r.exitBlock(i, ev, events)
 		case stream.EventText:
 			// Strip trailing spaces from text immediately before
@@ -94,6 +96,7 @@ func (r *renderer) render(events []stream.Event) error {
 			}
 			r.text(ev)
 		case stream.EventSoftBreak:
+			// Soft/line breaks stay inside open inline style tags.
 			r.write("\n")
 		case stream.EventLineBreak:
 			if r.inCode {
@@ -322,18 +325,16 @@ func (r *renderer) text(ev stream.Event) {
 	// Code spans: if Code is set, ignore other styles (CommonMark
 	// precedence — code spans bind tighter than emphasis/links).
 	if s.Code {
+		r.closeStyle()
 		r.write("<code>")
 		r.write(escapeHTML(ev.Text))
 		r.write("</code>")
 		return
 	}
 
-	// Build opening/closing tags for nested styles.
-	// Order: link/image outermost, then strong, em, del.
-	var open, close string
-
+	// Image: void element, self-contained.
 	if s.Image && s.Link != "" {
-		// Image: void element, no closing tag needed.
+		r.closeStyle()
 		r.write("<img src=\"" + escapeAttrURL(s.Link) + "\" alt=\"" + escapeHTML(ev.Text) + "\"")
 		if s.LinkTitle != "" {
 			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
@@ -346,34 +347,56 @@ func (r *renderer) text(ev stream.Event) {
 		return
 	}
 
-	if s.Link != "" {
-		open += "<a href=\"" + escapeAttrURL(s.Link) + "\""
-		if s.LinkTitle != "" {
-			open += " title=\"" + escapeHTML(s.LinkTitle) + "\""
-		}
-		open += ">"
-		close = "</a>" + close
-	}
-	if s.Strong {
-		open += "<strong>"
-		close = "</strong>" + close
-	}
-	if s.Emphasis {
-		open += "<em>"
-		close = "</em>" + close
-	}
-	if s.Strike {
-		open += "<del>"
-		close = "</del>" + close
-	}
-
-	if open != "" {
-		r.write(open)
-	}
+	// Transition inline style tags: close tags no longer active,
+	// open tags newly active. This allows emphasis/strong/etc to
+	// span across soft breaks and line breaks.
+	r.transitionStyle(s)
 	r.write(escapeHTML(ev.Text))
-	if close != "" {
-		r.write(close)
+}
+
+// transitionStyle closes tags from openStyle that are not in s,
+// then opens tags in s that are not in openStyle.
+func (r *renderer) transitionStyle(s stream.InlineStyle) {
+	o := r.openStyle
+	if o == s {
+		return
 	}
+	// Close in reverse order: del, em, strong, link.
+	if o.Strike && !s.Strike {
+		r.write("</del>")
+	}
+	if o.Emphasis && !s.Emphasis {
+		r.write("</em>")
+	}
+	if o.Strong && !s.Strong {
+		r.write("</strong>")
+	}
+	if o.Link != "" && o.Link != s.Link {
+		r.write("</a>")
+	}
+	// Open in forward order: link, strong, em, del.
+	if s.Link != "" && o.Link != s.Link {
+		r.write("<a href=\"" + escapeAttrURL(s.Link) + "\"")
+		if s.LinkTitle != "" {
+			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
+		}
+		r.write(">")
+	}
+	if s.Strong && !o.Strong {
+		r.write("<strong>")
+	}
+	if s.Emphasis && !o.Emphasis {
+		r.write("<em>")
+	}
+	if s.Strike && !o.Strike {
+		r.write("<del>")
+	}
+	r.openStyle = s
+}
+
+// closeStyle closes all currently open inline style tags.
+func (r *renderer) closeStyle() {
+	r.transitionStyle(stream.InlineStyle{})
 }
 
 func (r *renderer) lineBreak() {
