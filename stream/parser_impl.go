@@ -2632,7 +2632,14 @@ func parseRawHTMLTag(text string) (string, bool) {
 		return "", false
 	}
 	// Comment: <!-- ... -->
+	// Text must not start with > or ->. (CommonMark §6.6)
 	if strings.HasPrefix(text, "<!--") {
+		if len(text) > 4 && text[4] == '>' {
+			return "", false // <!-- followed immediately by >
+		}
+		if len(text) > 5 && text[4] == '-' && text[5] == '>' {
+			return "", false // <!-- followed by ->
+		}
 		end := strings.Index(text[4:], "-->")
 		if end >= 0 {
 			return text[:4+end+3], true
