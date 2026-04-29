@@ -2252,9 +2252,9 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 	}
 
 	// Sort events at each position so opens come before closes.
-	// When multiple opens share a token (e.g. ***foo***), the first
-	// matched pair is the outermost, so opens sort by seq ascending.
-	// Closes are the reverse: inner-first (seq descending).
+	// The first-matched pair is the innermost (closest opener-closer),
+	// so opens sort by seq descending (outer first = last matched)
+	// and closes sort by seq ascending (inner first = first matched).
 	for idx := range events {
 		ev := events[idx]
 		sort.SliceStable(ev, func(i, j int) bool {
@@ -2262,9 +2262,9 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 				return ev[i].open // opens before closes
 			}
 			if ev[i].open {
-				return ev[i].seq < ev[j].seq // opens: outer first
+				return ev[i].seq > ev[j].seq // opens: outer first (last matched)
 			}
-			return ev[i].seq > ev[j].seq // closes: inner first
+			return ev[i].seq < ev[j].seq // closes: inner first (first matched)
 		})
 		events[idx] = ev
 	}
@@ -2312,7 +2312,7 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 				s := toInlineStyle(current)
 				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: s})
 			}
-			for _, ev := range evs {
+			for ei, ev := range evs {
 				if ev.open {
 					dsStack = append(dsStack, current)
 					if ev.delim == '~' {
@@ -2330,6 +2330,12 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 						current = dsStack[len(dsStack)-1]
 						dsStack = dsStack[:len(dsStack)-1]
 					}
+				}
+				// Emit zero-width boundary between consecutive events
+				// at the same token so the renderer sees intermediate
+				// depth states (e.g. em-only between em+strong).
+				if ei < len(evs)-1 {
+					out = append(out, inlineToken{kind: inlineTokenText, text: "", style: toInlineStyle(current)})
 				}
 			}
 			// Emit closer's remaining text after the close event.
