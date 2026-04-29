@@ -49,7 +49,7 @@ type renderer struct {
 	inHeader     bool         // current table row is a header row
 	inCode       bool         // inside fenced_code or indented_code
 	inHTML       bool         // inside html block
-	headingLevel int          // current heading level (for exit)
+	headingLevel int          // stashed from enter for exit
 	tableCol     int          // current column index in table row
 	tableAlign   []stream.TableAlign
 	err          error // sticky error
@@ -73,8 +73,17 @@ func (r *renderer) render(events []stream.Event) error {
 		case stream.EventEnterBlock:
 			r.enterBlock(i, ev, events)
 		case stream.EventExitBlock:
-			r.exitBlock(ev)
+			r.exitBlock(i, ev, events)
 		case stream.EventText:
+			// Strip trailing spaces from text immediately before
+			// a block close (CommonMark: trailing spaces at end
+			// of paragraph/heading are not rendered).
+			if !r.inCode && !r.inHTML && i+1 < len(events) &&
+				events[i+1].Kind == stream.EventExitBlock &&
+				(events[i+1].Block == stream.BlockParagraph ||
+					events[i+1].Block == stream.BlockHeading) {
+				ev.Text = strings.TrimRight(ev.Text, " \t")
+			}
 			r.text(ev)
 		case stream.EventSoftBreak:
 			r.write("\n")
@@ -212,17 +221,27 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 	}
 }
 
-func (r *renderer) exitBlock(ev stream.Event) {
+func (r *renderer) exitBlock(idx int, ev stream.Event, events []stream.Event) {
 	switch ev.Block {
 	case stream.BlockDocument:
 		// nothing
 	case stream.BlockParagraph:
 		if r.isTight() {
+			// In tight lists, paragraphs don't get <p> tags.
+			// Emit a newline only if the next event opens a block
+			// (e.g. a sublist), not if it's </li>.
+			if idx+1 < len(events) && events[idx+1].Kind == stream.EventEnterBlock {
+				r.write("\n")
+			}
 			return
 		}
 		r.write("</p>\n")
 	case stream.BlockHeading:
-		r.write(fmt.Sprintf("</h%d>\n", r.headingLevel))
+		lvl := ev.Level
+		if lvl == 0 {
+			lvl = r.headingLevel
+		}
+		r.write(fmt.Sprintf("</h%d>\n", lvl))
 		r.headingLevel = 0
 	case stream.BlockBlockquote:
 		r.write("</blockquote>\n")
@@ -298,7 +317,7 @@ func (r *renderer) text(ev stream.Event) {
 
 	if s.Image && s.Link != "" {
 		// Image: void element, no closing tag needed.
-		r.write("<img src=\"" + escapeURL(s.Link) + "\" alt=\"" + escapeHTML(ev.Text) + "\"")
+		r.write("<img src=\"" + escapeAttrURL(s.Link) + "\" alt=\"" + escapeHTML(ev.Text) + "\"")
 		if s.LinkTitle != "" {
 			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
 		}
@@ -311,7 +330,7 @@ func (r *renderer) text(ev stream.Event) {
 	}
 
 	if s.Link != "" {
-		open += "<a href=\"" + escapeURL(s.Link) + "\""
+		open += "<a href=\"" + escapeAttrURL(s.Link) + "\""
 		if s.LinkTitle != "" {
 			open += " title=\"" + escapeHTML(s.LinkTitle) + "\""
 		}
@@ -380,4 +399,11 @@ func (r *renderer) write(s string) {
 		return
 	}
 	_, r.err = io.WriteString(r.w, s)
+}
+
+// escapeAttrURL percent-encodes a URL then HTML-escapes it for use
+// in an HTML attribute (href, src). This ensures & in query strings
+// becomes &amp; in the attribute value.
+func escapeAttrURL(s string) string {
+	return escapeHTML(escapeURL(s))
 }
