@@ -46,6 +46,7 @@ type renderer struct {
 	unsafe       bool
 	tightMap     map[int]bool // EnterBlock list event index -> tight
 	tightStack   []bool       // runtime stack for nested lists
+	containerDepth int        // depth of non-list containers (blockquote)
 	inHeader     bool         // current table row is a header row
 	inCode       bool         // inside fenced_code or indented_code
 	inHTML       bool         // inside html block
@@ -136,6 +137,7 @@ func (r *renderer) enterBlock(idx int, ev stream.Event, events []stream.Event) {
 		r.headingLevel = ev.Level
 		r.write(fmt.Sprintf("<h%d>", ev.Level))
 	case stream.BlockBlockquote:
+		r.containerDepth++
 		r.write("<blockquote>\n")
 	case stream.BlockList:
 		tight := r.tightMap[idx]
@@ -244,6 +246,7 @@ func (r *renderer) exitBlock(idx int, ev stream.Event, events []stream.Event) {
 		r.write(fmt.Sprintf("</h%d>\n", lvl))
 		r.headingLevel = 0
 	case stream.BlockBlockquote:
+		r.containerDepth--
 		r.write("</blockquote>\n")
 	case stream.BlockList:
 		if len(r.tightStack) > 0 {
@@ -368,7 +371,7 @@ func (r *renderer) lineBreak() {
 }
 
 func (r *renderer) isTight() bool {
-	return len(r.tightStack) > 0 && r.tightStack[len(r.tightStack)-1]
+	return r.containerDepth == 0 && len(r.tightStack) > 0 && r.tightStack[len(r.tightStack)-1]
 }
 
 // listItemNeedsNewline returns true if the list item at index idx
@@ -377,15 +380,19 @@ func (r *renderer) isTight() bool {
 // - the item's first child is a block-level element (sublist,
 //   blockquote, code block, heading, etc.) rather than inline text.
 func (r *renderer) listItemNeedsNewline(idx int, events []stream.Event) bool {
-	if !r.isTight() {
-		return true
-	}
 	// Look at the next event after this EnterBlock list_item.
 	next := idx + 1
 	if next >= len(events) {
 		return false
 	}
 	ev := events[next]
+	// Empty item (next event is exit): no newline.
+	if ev.Kind == stream.EventExitBlock && ev.Block == stream.BlockListItem {
+		return false
+	}
+	if !r.isTight() {
+		return true
+	}
 	if ev.Kind != stream.EventEnterBlock {
 		return false
 	}

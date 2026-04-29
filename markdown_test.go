@@ -345,7 +345,7 @@ func TestHTMLCommonMarkCompliance(t *testing.T) {
 	}
 
 	// Hard compliance gate -- set after first run, update as renderer improves.
-	const minPass = 467
+	const minPass = 469
 	if pass < minPass {
 		t.Errorf("compliance regressed: got %d, want >= %d", pass, minPass)
 	}
