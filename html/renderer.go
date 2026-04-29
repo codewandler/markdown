@@ -96,7 +96,11 @@ func (r *renderer) render(events []stream.Event) error {
 			}
 			r.text(ev)
 		case stream.EventSoftBreak:
-			// Soft/line breaks stay inside open inline style tags.
+			// If the current open style has a link, close it at the
+			// soft break so separate links on different lines don't merge.
+			if r.openStyle.HasLink {
+				r.closeStyle()
+			}
 			r.write("\n")
 		case stream.EventLineBreak:
 			if r.inCode || r.inHTML {
@@ -342,6 +346,14 @@ func (r *renderer) text(ev stream.Event) {
 	// Image: void element, self-contained.
 	if s.Image && s.Link != "" {
 		r.closeStyle()
+		// Image inside a link: wrap in <a>.
+		if s.ImageLink != "" {
+			r.write("<a href=\"" + escapeAttrURL(s.ImageLink) + "\"")
+			if s.ImageLinkTitle != "" {
+				r.write(" title=\"" + escapeHTML(s.ImageLinkTitle) + "\"")
+			}
+			r.write(">")
+		}
 		r.write("<img src=\"" + escapeAttrURL(s.Link) + "\" alt=\"" + escapeHTML(ev.Text) + "\"")
 		if s.LinkTitle != "" {
 			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
@@ -350,6 +362,9 @@ func (r *renderer) text(ev stream.Event) {
 			r.write(">")
 		} else {
 			r.write(" />")
+		}
+		if s.ImageLink != "" {
+			r.write("</a>")
 		}
 		return
 	}
@@ -421,6 +436,24 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	}
 
 	r.openStyle = s
+}
+
+// nextTextChangesLink checks if the next text event after position i
+// has a different link style than the current open style.
+func (r *renderer) nextTextChangesLink(events []stream.Event, i int) bool {
+	for j := i + 1; j < len(events); j++ {
+		switch events[j].Kind {
+		case stream.EventText:
+			next := events[j].Style
+			cur := r.openStyle
+			return cur.HasLink != next.HasLink || cur.Link != next.Link || cur.LinkTitle != next.LinkTitle
+		case stream.EventExitBlock:
+			return true
+		default:
+			continue
+		}
+	}
+	return false
 }
 
 // closeStyle closes all currently open inline style tags.

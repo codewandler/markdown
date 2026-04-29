@@ -55,11 +55,13 @@ type InlineStyle struct {
 	Code          bool
 	Link          string
 	LinkTitle     string
-	HasLink       bool // true when Link was explicitly set (distinguishes "" from no link)
-	Image         bool // true for ![alt](url) and ![alt][ref]
-	RawHTML       bool // true for inline raw HTML tags
-	EmphasisDepth int  // nesting depth for emphasis (0 = not emphasized)
-	StrongDepth   int  // nesting depth for strong (0 = not strong)
+	HasLink       bool   // true when Link was explicitly set (distinguishes "" from no link)
+	Image         bool   // true for ![alt](url) and ![alt][ref]
+	ImageLink     string // wrapping link href when image is inside a link: [![img](src)](/href)
+	ImageLinkTitle string // wrapping link title
+	RawHTML       bool   // true for inline raw HTML tags
+	EmphasisDepth int    // nesting depth for emphasis (0 = not emphasized)
+	StrongDepth   int    // nesting depth for strong (0 = not strong)
 }
 
 // ListData describes a Markdown list represented by a list block event.

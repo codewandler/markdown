@@ -2426,7 +2426,14 @@ func tokenizeLinkContent(labelRaw string, linkStyle InlineStyle, span Span, refs
 	inner := tokenizeInline(label, span, refs, gfmAutolinks)
 	inner = resolveEmphasis(inner)
 	for i := range inner {
-		inner[i].style = mergeInlineStyles(inner[i].style, linkStyle)
+		if inner[i].style.Image && inner[i].style.HasLink && linkStyle.HasLink {
+			// Image inside a link: keep the image's own Link (src),
+			// store the outer link in ImageLink for the renderer.
+			inner[i].style.ImageLink = linkStyle.Link
+			inner[i].style.ImageLinkTitle = linkStyle.LinkTitle
+		} else {
+			inner[i].style = mergeInlineStyles(inner[i].style, linkStyle)
+		}
 	}
 	return inner
 }
@@ -2562,6 +2569,7 @@ func parseInlineLinkInner(text string, span Span, rejectNestedLinks bool) (Event
 
 // containsInlineLink reports whether text contains a valid inline link
 // [...](...). Used to enforce the no-nested-links rule.
+// Images (![...](...)) are not counted as nested links.
 func containsInlineLink(text string) bool {
 	for i := 0; i < len(text); i++ {
 		if text[i] == '\\' && i+1 < len(text) {
@@ -2576,6 +2584,19 @@ func containsInlineLink(text string) bool {
 				continue
 			}
 			i += n - 1
+			continue
+		}
+		// Skip images: ![...](...) is allowed inside links.
+		if text[i] == '!' && i+1 < len(text) && text[i+1] == '[' {
+			sub := text[i+1:]
+			close := matchingLinkLabelEnd(sub)
+			if close >= 0 && close+1 < len(sub) && sub[close+1] == '(' {
+				if _, _, end, ok := parseInlineLinkTail(sub[close+2:]); ok {
+					i += 1 + close + 2 + end - 1
+					continue
+				}
+			}
+			i++ // skip the '!', '[' will be processed next iteration
 			continue
 		}
 		if text[i] != '[' {
@@ -3755,7 +3776,7 @@ func coalesceText(events []Event) []Event {
 }
 
 func sameStyle(a, b InlineStyle) bool {
-	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.HasLink == b.HasLink && a.Image == b.Image && a.RawHTML == b.RawHTML
+	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.HasLink == b.HasLink && a.Image == b.Image && a.ImageLink == b.ImageLink && a.ImageLinkTitle == b.ImageLinkTitle && a.RawHTML == b.RawHTML
 }
 
 // sameCoalesceStyle is like sameStyle but also compares emphasis/strong
