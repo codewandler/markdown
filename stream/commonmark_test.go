@@ -583,7 +583,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	414: expectTextStyle("foo ", InlineStyle{Emphasis: true}),
 	415: expectTextStyle("foo", InlineStyle{Emphasis: true}),
 	416: expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true}),
-	417: expectTextStyle("bar***", InlineStyle{Strong: true}),
+	417: expectTextStyle("bar", InlineStyle{Strong: true}),
 	418: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
@@ -646,11 +646,23 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		t.Helper()
 		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
 	},
-	443: expectTextStyle("foo*", InlineStyle{Emphasis: true}),
+	443: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectParagraphText("*")(t, events)
+	},
 	444: expectTextStyle("foo", InlineStyle{Strong: true}),
 	445: expectTextStyle("foo", InlineStyle{Emphasis: true}),
-	446: expectTextStyle("foo*", InlineStyle{Strong: true}),
-	447: expectTextStyle("foo***", InlineStyle{Emphasis: true}),
+	446: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Strong: true})(t, events)
+		expectParagraphText("*")(t, events)
+	},
+	447: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectParagraphText("***")(t, events)
+	},
 	448: expectParagraphText("foo ___"),
 	449: expectTextStyle("_", InlineStyle{Emphasis: true}),
 	450: expectTextStyle("*", InlineStyle{Emphasis: true}),
@@ -658,11 +670,23 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	452: expectTextStyle("_", InlineStyle{Strong: true}),
 	453: expectTextStyle("*", InlineStyle{Strong: true}),
 	454: expectTextStyle("foo", InlineStyle{Emphasis: true}),
-	455: expectTextStyle("foo_", InlineStyle{Emphasis: true}),
+	455: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectParagraphText("_")(t, events)
+	},
 	456: expectTextStyle("foo", InlineStyle{Strong: true}),
 	457: expectTextStyle("foo", InlineStyle{Emphasis: true}),
-	458: expectTextStyle("foo_", InlineStyle{Strong: true}),
-	459: expectTextStyle("foo___", InlineStyle{Emphasis: true}),
+	458: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Strong: true})(t, events)
+		expectParagraphText("_")(t, events)
+	},
+	459: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectParagraphText("___")(t, events)
+	},
 	// Rules 15-16: overlap and precedence.
 	469: expectTextStyle("foo _bar", InlineStyle{Emphasis: true}),
 	470: func(t *testing.T, events []eventView) {

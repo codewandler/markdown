@@ -2294,8 +2294,21 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 
 	for i, tok := range tokens {
 		if evs, ok := events[i]; ok {
-			// Emit remaining delimiter text before processing events.
-			if tok.kind == inlineTokenDelimiter && tok.run > 0 {
+			// For openers, remaining delimiter text is a prefix
+			// (emitted before the open, as literal text).
+			// For closers, remaining text is a suffix (emitted
+			// after the close, as literal text).
+			hasOpen := false
+			hasClose := false
+			for _, ev := range evs {
+				if ev.open {
+					hasOpen = true
+				} else {
+					hasClose = true
+				}
+			}
+			// Emit opener's remaining text before the open event.
+			if hasOpen && !hasClose && tok.kind == inlineTokenDelimiter && tok.run > 0 {
 				s := toInlineStyle(current)
 				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: s})
 			}
@@ -2318,6 +2331,11 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 						dsStack = dsStack[:len(dsStack)-1]
 					}
 				}
+			}
+			// Emit closer's remaining text after the close event.
+			if hasClose && tok.kind == inlineTokenDelimiter && tok.run > 0 {
+				s := toInlineStyle(current)
+				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: s})
 			}
 			continue
 		}
