@@ -76,12 +76,14 @@ type savedList struct {
 	listItemHasContent bool
 }
 
-// pendingBlock stores a closed paragraph whose inline content has not yet
-// been parsed. This allows forward link reference definitions to be
-// collected before inline parsing resolves references.
+// pendingBlock stores a closed paragraph or heading whose inline content
+// has not yet been parsed. This allows forward link reference definitions
+// to be collected before inline parsing resolves references.
 type pendingBlock struct {
-	text string
-	span Span
+	text  string
+	span  Span
+	block BlockKind // BlockParagraph or BlockHeading
+	level int       // heading level (1-6), 0 for paragraphs
 }
 
 type linkReference struct {
@@ -627,11 +629,22 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 	if level, text, ok := heading(line.text); ok {
 		p.ensureDocument(events)
 		p.closeParagraph(events)
-		p.drainPendingBlocks(events)
 		span := Span{Start: line.start, End: line.end}
-		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: span})
-		*events = append(*events, p.parseInline(text, span)...)
-		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: span})
+		// Defer heading inline parsing so forward link reference
+		// definitions can be collected first.
+		if strings.ContainsAny(text, "[]") {
+			p.pendingBlocks = append(p.pendingBlocks, pendingBlock{
+				text:  text,
+				span:  span,
+				block: BlockHeading,
+				level: level,
+			})
+		} else {
+			p.drainPendingBlocks(events)
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: span})
+			*events = append(*events, p.parseInline(text, span)...)
+			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: span})
+		}
 		return
 	}
 
@@ -700,8 +713,9 @@ func (p *parser) closeParagraph(events *[]Event) {
 		text.WriteString(line.text)
 	}
 	p.pendingBlocks = append(p.pendingBlocks, pendingBlock{
-		text: text.String(),
-		span: Span{Start: start, End: end},
+		text:  text.String(),
+		span:  Span{Start: start, End: end},
+		block: BlockParagraph,
 	})
 	clear(p.paragraph.lines)
 	if cap(p.paragraph.lines) > 1024 {
@@ -716,9 +730,9 @@ func (p *parser) closeParagraph(events *[]Event) {
 // that forward link reference definitions are available for resolution.
 func (p *parser) drainPendingBlocks(events *[]Event) {
 	for _, pb := range p.pendingBlocks {
-		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: pb.span})
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: pb.block, Level: pb.level, Span: pb.span})
 		*events = append(*events, p.parseInline(pb.text, pb.span)...)
-		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: pb.span})
+		*events = append(*events, Event{Kind: EventExitBlock, Block: pb.block, Level: pb.level, Span: pb.span})
 	}
 	p.pendingBlocks = p.pendingBlocks[:0]
 }
@@ -736,9 +750,9 @@ func (p *parser) drainPendingBlocksEager(events *[]Event) {
 			kept = append(kept, pb)
 			continue
 		}
-		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: pb.span})
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: pb.block, Level: pb.level, Span: pb.span})
 		*events = append(*events, p.parseInline(pb.text, pb.span)...)
-		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: pb.span})
+		*events = append(*events, Event{Kind: EventExitBlock, Block: pb.block, Level: pb.level, Span: pb.span})
 	}
 	p.pendingBlocks = kept
 }
