@@ -513,9 +513,13 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 
 	if item, ok := listItem(line.text); ok {
 		p.ensureDocument(events)
-		if !p.inList && len(p.paragraph.lines) > 0 && item.data.Ordered && item.data.Start != 1 {
-			p.addParagraphLine(line)
-			return
+		// An empty list item cannot interrupt a paragraph (CommonMark §5.3).
+		// Also, an ordered list with start != 1 cannot interrupt a paragraph.
+		if !p.inList && len(p.paragraph.lines) > 0 {
+			if (item.data.Ordered && item.data.Start != 1) || strings.TrimSpace(item.content) == "" {
+				p.addParagraphLine(line)
+				return
+			}
 		}
 		p.closeParagraph(events)
 		if !p.inList || p.listData.Ordered != item.data.Ordered || p.listData.Marker != item.data.Marker {
