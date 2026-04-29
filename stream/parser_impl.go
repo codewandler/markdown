@@ -2567,6 +2567,34 @@ func parseInlineLinkInner(text string, span Span, rejectNestedLinks bool) (Event
 	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title, HasLink: true}, Span: span}, text[closeText+2+end:], labelRaw, true
 }
 
+// containsInlineLinkOrRef reports whether text contains a valid inline link
+// [...](...) or reference link [...][...] / [...]. Used to enforce the
+// no-nested-links rule. Images are not counted as nested links.
+func containsInlineLinkOrRef(text string, refs map[string]linkReference) bool {
+	if containsInlineLink(text) {
+		return true
+	}
+	if len(refs) > 0 {
+		for i := 0; i < len(text); i++ {
+			if text[i] == '\\' && i+1 < len(text) {
+				i++
+				continue
+			}
+			if text[i] == '!' && i+1 < len(text) && text[i+1] == '[' {
+				i++ // skip image markers
+				continue
+			}
+			if text[i] != '[' {
+				continue
+			}
+			if _, _, _, ok := parseReferenceLink(text[i:], Span{}, refs); ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // containsInlineLink reports whether text contains a valid inline link
 // [...](...). Used to enforce the no-nested-links rule.
 // Images (![...](...)) are not counted as nested links.
@@ -2622,7 +2650,7 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 	}
 	labelRaw := text[1:closeLabel]
 	// Links cannot nest (CommonMark spec §6.5).
-	if containsInlineLink(labelRaw) {
+	if containsInlineLinkOrRef(labelRaw, refs) {
 		return Event{}, text, "", false
 	}
 	labelText := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
@@ -3076,10 +3104,17 @@ func matchingBracketEnd(text string, strict bool) int {
 			i += n + close + n - 1
 			continue
 		}
-		// Raw HTML tags take precedence over link structure.
-		// Skip over any HTML tag so that brackets inside
-		// attributes are not counted.
+		// Autolinks and raw HTML tags take precedence over link structure.
+		// Skip over them so that brackets inside are not counted.
 		if c == '<' {
+			// Try autolink first.
+			if end := strings.IndexByte(text[i+1:], '>'); end >= 0 {
+				target := text[i+1 : i+1+end]
+				if isURIAutolink(target) || isEmailAutolink(target) {
+					i += 1 + end // skip to '>'
+					continue
+				}
+			}
 			if tag, ok := parseRawHTMLTag(text[i:]); ok {
 				i += len(tag) - 1
 				continue
