@@ -373,13 +373,9 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	}
 	o := r.openStyle
 
-	// Close innermost first: link, del, em, strong.
-	if o.HasLink && (!s.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
-		r.write("</a>")
-	}
-	if o.Strike && !s.Strike {
-		r.write("</del>")
-	}
+	// Nesting order (outermost to innermost):
+	//   link > strong > em > del
+	// Close innermost first: del, em, strong, link.
 	// Use depth for emphasis/strong to handle nesting.
 	// Fall back to boolean when depth is not set (hand-crafted events).
 	oEm := o.EmphasisDepth
@@ -391,14 +387,27 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	sSt := s.StrongDepth
 	if sSt == 0 && s.Strong { sSt = 1 }
 
+	if o.Strike && !s.Strike {
+		r.write("</del>")
+	}
 	for i := oEm; i > sEm; i-- {
 		r.write("</em>")
 	}
 	for i := oSt; i > sSt; i-- {
 		r.write("</strong>")
 	}
+	if o.HasLink && (!s.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
+		r.write("</a>")
+	}
 
-	// Open outermost first: strong, em, del, link.
+	// Open outermost first: link, strong, em, del.
+	if s.HasLink && (!o.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
+		r.write("<a href=\"" + escapeAttrURL(s.Link) + "\"")
+		if s.LinkTitle != "" {
+			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
+		}
+		r.write(">")
+	}
 	for i := oSt; i < sSt; i++ {
 		r.write("<strong>")
 	}
@@ -407,13 +416,6 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	}
 	if s.Strike && !o.Strike {
 		r.write("<del>")
-	}
-	if s.HasLink && (!o.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
-		r.write("<a href=\"" + escapeAttrURL(s.Link) + "\"")
-		if s.LinkTitle != "" {
-			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
-		}
-		r.write(">")
 	}
 
 	r.openStyle = s
