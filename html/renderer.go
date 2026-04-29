@@ -328,10 +328,9 @@ func (r *renderer) text(ev stream.Event) {
 		return
 	}
 
-	// Code spans: if Code is set, ignore other styles (CommonMark
-	// precedence — code spans bind tighter than emphasis/links).
+	// Code spans: emit <code> inline within the current open style.
+	// Don't close emphasis/strong — code spans can appear inside them.
 	if s.Code {
-		r.closeStyle()
 		r.write("<code>")
 		r.write(escapeHTML(ev.Text))
 		r.write("</code>")
