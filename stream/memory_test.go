@@ -54,7 +54,7 @@ func TestParserResetDropsRetainedState(t *testing.T) {
 
 	p.Reset()
 
-	if p.started || p.flushed || p.fence.open || p.inBlockquote || p.inList || p.inListItem {
+	if p.started || p.flushed || p.fence.open || p.blockquoteDepth > 0 || p.inList || p.inListItem {
 		t.Fatalf("reset left parser state behind: %#v", p)
 	}
 	if p.offset != 0 || p.line != 1 || p.column != 1 {

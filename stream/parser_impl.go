@@ -48,7 +48,7 @@ type parser struct {
 	// starts or at Flush.
 	pendingBlocks []pendingBlock
 
-	inBlockquote       bool
+	blockquoteDepth    int  // nesting depth of open blockquotes
 	bqInsideListItem   bool // true if blockquote was opened inside a list item
 	inList             bool
 	listData           ListData
@@ -221,7 +221,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	// HTML block continuation.
 	if p.inHTMLBlock {
 		// Inside a blockquote, strip the > prefix before processing.
-		if p.inBlockquote {
+		if p.blockquoteDepth > 0 {
 			if content, ok := blockquoteContent(line.text); ok {
 				inner := line
 				inner.text = content
@@ -274,7 +274,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	if p.fence.open {
 		// Inside a blockquote, non-> lines close the blockquote
 		// (and the fence inside it).
-		if p.inBlockquote {
+		if p.blockquoteDepth > 0 {
 			if content, ok := blockquoteContent(line.text); !ok {
 				p.closeFencedCode(events)
 				p.closeBlockquote(line, events)
@@ -293,7 +293,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 
 	if p.inIndented {
 		// Inside a blockquote, non-> lines close the blockquote.
-		if p.inBlockquote {
+		if p.blockquoteDepth > 0 {
 			if _, ok := blockquoteContent(line.text); !ok {
 				p.closeIndentedCode(events)
 				p.closeBlockquote(line, events)
@@ -382,7 +382,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	// close the blockquote before checking list item continuation.
 	// Lists opened inside the blockquote are closed with it, so
 	// they must not be treated as continuation targets.
-	if p.inBlockquote && !p.fence.open && !p.inIndented {
+	if p.blockquoteDepth > 0 && !p.fence.open && !p.inIndented {
 		if _, ok := blockquoteContent(line.text); !ok {
 			// Lazy continuation: a paragraph open inside the blockquote
 			// can continue without the > prefix.
@@ -458,42 +458,63 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 
 	if content, ok := blockquoteContent(line.text); ok {
 		p.ensureDocument(events)
-		if !p.inBlockquote {
+		// Count total nesting depth of > prefixes on this line.
+		newDepth := 1
+		inner := content
+		for {
+			nested, ok := blockquoteContent(inner)
+			if !ok {
+				break
+			}
+			newDepth++
+			inner = nested
+		}
+		content = inner
+		if p.blockquoteDepth == 0 {
 			p.closeParagraph(events)
+			p.drainPendingBlocks(events)
 			p.closeList(events)
-			p.inBlockquote = true; p.bqInsideListItem = p.inListItem
-			p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
+			p.bqInsideListItem = p.inListItem
+		}
+		// Open new blockquote levels as needed.
+		for p.blockquoteDepth < newDepth {
+			if p.blockquoteDepth > 0 {
+				p.closeParagraph(events)
+				p.closeList(events)
+			}
+			p.blockquoteDepth++
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
 		}
 		if strings.TrimSpace(content) == "" {
 			p.closeParagraph(events)
 			p.closeIndentedCode(events)
 			return
 		}
-		inner := line
-		inner.text = content
+		bqInner := line
+		bqInner.text = content
 		// Route blockquote content through full block detection
 		// so that list items, fenced code, headings, etc. work
 		// inside blockquotes.
 		if p.fence.open {
-			if p.isClosingFence(inner.text) {
+			if p.isClosingFence(bqInner.text) {
 				p.fence.open = false
-				*events = append(*events, Event{Kind: EventExitBlock, Block: BlockFencedCode, Span: Span{Start: inner.start, End: inner.end}})
+				*events = append(*events, Event{Kind: EventExitBlock, Block: BlockFencedCode, Span: Span{Start: bqInner.start, End: bqInner.end}})
 				return
 			}
 			*events = append(*events,
-				Event{Kind: EventText, Text: stripFenceIndent(inner.text, p.fence.indent), Span: Span{Start: inner.start, End: inner.end}},
-				Event{Kind: EventLineBreak, Span: Span{Start: inner.end, End: inner.end}},
+				Event{Kind: EventText, Text: stripFenceIndent(bqInner.text, p.fence.indent), Span: Span{Start: bqInner.start, End: bqInner.end}},
+				Event{Kind: EventLineBreak, Span: Span{Start: bqInner.end, End: bqInner.end}},
 			)
 			return
 		}
 		if p.inIndented {
-			if indentedCode(inner.text) {
-				p.emitIndentedCodeLine(inner, events)
+			if indentedCode(bqInner.text) {
+				p.emitIndentedCodeLine(bqInner, events)
 				return
 			}
 			p.closeIndentedCode(events)
 		}
-		if item, ok := listItem(inner.text); ok {
+		if item, ok := listItem(bqInner.text); ok {
 			p.closeParagraph(events)
 			if !p.inList || p.listData.Ordered != item.data.Ordered || p.listData.Marker != item.data.Marker {
 				p.closeList(events)
@@ -501,26 +522,26 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 				p.listData = listBlockData(item.data)
 				p.listLoose = false
 				data := p.listData
-				*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: inner.start, End: inner.end}})
+				*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockList, List: &data, Span: Span{Start: bqInner.start, End: bqInner.end}})
 			}
 			p.closeListItem(events)
 			p.inListItem = true
 			p.listItemIndent = item.contentIndent
 			p.listItemBlankLine = false
 			data := item.data
-			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: inner.start, End: inner.end}})
+			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: bqInner.start, End: bqInner.end}})
 			if strings.TrimSpace(item.content) != "" {
-				ci := inner
+					ci := bqInner
 				ci.text = item.content
 				p.processListItemFirstLine(ci, events)
 			}
 			return
 		}
-		p.processNonContainerLine(inner, events)
+		p.processNonContainerLine(bqInner, events)
 		return
 	}
 
-	if p.inBlockquote {
+	if p.blockquoteDepth > 0 {
 		if len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
 			if _, _, _, _, isFence := openingFence(line.text); !isFence {
 				if _, ok := listItem(line.text); !ok {
@@ -1181,7 +1202,7 @@ func (p *parser) closeContainers(events *[]Event) {
 	p.closeTable(events)
 	p.closeIndentedCode(events)
 	// Close blockquote before list — the list may be inside the blockquote.
-	if p.inBlockquote {
+	if p.blockquoteDepth > 0 {
 		p.closeBlockquote(lineInfo{}, events)
 	}
 	if p.inList {
@@ -1223,7 +1244,7 @@ func (p *parser) closeHTMLBlock(events *[]Event) {
 }
 
 func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
-	if !p.inBlockquote {
+	if p.blockquoteDepth == 0 {
 		return
 	}
 	p.closeParagraph(events)
@@ -1233,7 +1254,8 @@ func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
 	// Set inBlockquote = false BEFORE closing lists to prevent
 	// mutual recursion: closeListItem -> closeBlockquote -> closeListItem.
 	bqOpenedInsideList := p.bqInsideListItem
-	p.inBlockquote = false
+	depth := p.blockquoteDepth
+	p.blockquoteDepth = 0
 	// Close all lists that were opened inside this blockquote.
 	// Don't close any lists if the blockquote was opened inside a list item
 	// — those lists belong to the outer context.
@@ -1254,7 +1276,9 @@ func (p *parser) closeBlockquote(line lineInfo, events *[]Event) {
 			p.popList()
 		}
 	}
-	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
+	for i := 0; i < depth; i++ {
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.start}})
+	}
 }
 
 func (p *parser) closeListItem(events *[]Event) {
@@ -1269,7 +1293,7 @@ func (p *parser) closeListItem(events *[]Event) {
 	// When the list item is inside the blockquote (bqInsideListItem is
 	// false), the blockquote is the outer container and must not be
 	// closed here.
-	if p.inBlockquote && p.bqInsideListItem {
+	if p.blockquoteDepth > 0 && p.bqInsideListItem {
 		p.closeBlockquote(lineInfo{}, events)
 	}
 	// closeBlockquote may have already closed this list item
@@ -1334,7 +1358,7 @@ func (p *parser) closeList(events *[]Event) {
 		// Only close the blockquote if it was opened inside this
 		// list item. When the list is inside the blockquote, the
 		// blockquote is the outer container.
-		if p.inBlockquote && p.bqInsideListItem {
+		if p.blockquoteDepth > 0 && p.bqInsideListItem {
 			p.closeBlockquote(lineInfo{}, events)
 		}
 		p.inListItem = false
@@ -1506,8 +1530,8 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 	if content, ok := blockquoteContent(line.text); ok {
 		p.closeParagraph(events)
 		p.drainPendingBlocks(events)
-		if !p.inBlockquote {
-			p.inBlockquote = true; p.bqInsideListItem = p.inListItem
+		if p.blockquoteDepth == 0 {
+			p.blockquoteDepth++; p.bqInsideListItem = p.inListItem
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockBlockquote, Span: Span{Start: line.start, End: line.end}})
 		}
 		if strings.TrimSpace(content) == "" {
@@ -1519,7 +1543,7 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 		p.processNonContainerLine(inner, events)
 		return
 	}
-	if p.inBlockquote {
+	if p.blockquoteDepth > 0 {
 		if len(p.paragraph.lines) > 0 && !thematicBreak(line.text) {
 			if _, _, _, _, isFence := openingFence(line.text); !isFence {
 				if _, ok := listItem(line.text); !ok {
