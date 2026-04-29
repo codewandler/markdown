@@ -390,6 +390,42 @@ type Theme struct {
 
 ---
 
+## 10. Performance: Parser Allocation Reduction
+
+**Priority: medium — measurable improvement for high-throughput use cases**
+
+The streaming parser (`stream.Parser`) allocates a new instance per parse.
+For server workloads processing many documents, this creates GC pressure.
+
+### Investigation areas
+
+- [ ] `sync.Pool` for `stream.Parser` — pool pre-allocated parser instances,
+      call `Reset()` before returning to pool. Requires verifying `Reset()`
+      fully clears all state (no cross-document leaks).
+- [ ] Go arena experiment (`arena.NewArena()`) — allocate parser + event
+      slices in an arena, free in bulk after rendering. Requires Go 1.20+
+      and `GOEXPERIMENT=arenas` (currently experimental).
+- [ ] Event slice pre-allocation — `Parse`/`ParseBytes` could accept a
+      `[]stream.Event` buffer to append into, avoiding repeated slice growth.
+- [ ] Benchmark: measure allocation reduction with `sync.Pool` vs baseline
+      on the competition pipeline inputs.
+
+### Constraints
+
+- `stream.Parser` is **not** thread-safe. Pool usage requires one parser
+  per goroutine or mutex-protected checkout.
+- `Reset()` must be audited for completeness — any missed field causes
+  cross-document state leaks.
+- Arena API is experimental and may change or be removed.
+
+### Definition of done
+
+- [ ] At least one approach benchmarked with measurable alloc reduction
+- [ ] No correctness regressions (652/652 CommonMark, full test suite)
+- [ ] Decision documented: adopt, defer, or reject each approach
+
+---
+
 ## Release Plan
 
 | Version | Content |
@@ -399,7 +435,7 @@ type Theme struct {
 | v0.36.1 | GFM table parsing fixes |
 | v0.37.0 | Demo application + README GIF |
 | v0.38.0 | Benchmarks + competition + drop goldmark |
-| v0.39.0 | CommonMark gaps (target ≥98%) + documentation |
+| v0.39.0 | HTML renderer + 100% CommonMark compliance (652/652) |
 | v0.40.0 | `cmd/mdview` terminal viewer |
 | v0.41.0 | Built-in highlighters (JSON, YAML, TOML) |
 | v0.42.0 | Theming (Monokai, Dracula, Nord, Solarized, One Dark) |

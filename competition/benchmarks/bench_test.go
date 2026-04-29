@@ -20,6 +20,7 @@ func BenchmarkParse(b *testing.B) {
 		return v.Adapters.ParseFunc != nil
 	}, func(b *testing.B, v competition.Variant, src []byte) {
 		r := bytes.NewReader(src)
+		r.Reset(src)
 		competition.SafeCall(func() error {
 			_, err := v.Adapters.ParseFunc(r)
 			return err
@@ -41,8 +42,33 @@ func BenchmarkRender(b *testing.B) {
 	}, func(b *testing.B, v competition.Variant, src []byte) {
 		r := bytes.NewReader(src)
 		var w bytes.Buffer
+		r.Reset(src)
+		w.Reset()
 		competition.SafeCall(func() error {
 			return v.Adapters.RenderTerminal(r, &w)
+		})
+	})
+}
+
+// === HTML render benchmarks ==================================================
+//
+// Exercises RenderHTML for every variant that supports it.
+// Compares: ours vs goldmark vs blackfriday vs gomarkdown.
+
+func BenchmarkRenderHTML(b *testing.B) {
+	htmlInputs := []string{
+		"Spec", "README", "GitHubTop10",
+		"CodeHeavy", "TableHeavy", "InlineHeavy",
+	}
+	benchAdapters(b, htmlInputs, func(v competition.Variant) bool {
+		return v.Adapters.RenderHTML != nil
+	}, func(b *testing.B, v competition.Variant, src []byte) {
+		r := bytes.NewReader(src)
+		var w bytes.Buffer
+		r.Reset(src)
+		w.Reset()
+		competition.SafeCall(func() error {
+			return v.Adapters.RenderHTML(r, &w)
 		})
 	})
 }
@@ -61,6 +87,8 @@ func BenchmarkPathological(b *testing.B) {
 	}, func(b *testing.B, v competition.Variant, src []byte) {
 		r := bytes.NewReader(src)
 		var w bytes.Buffer
+		r.Reset(src)
+		w.Reset()
 		competition.SafeCall(func() error {
 			return v.Adapters.RenderTerminal(r, &w)
 		})

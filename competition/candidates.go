@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/codewandler/markdown"
 	"github.com/codewandler/markdown/html"
-	"github.com/codewandler/markdown/stream"
 	"github.com/codewandler/markdown/terminal"
 	gomarkdown "github.com/gomarkdown/markdown"
 	gomarkdownhtml "github.com/gomarkdown/markdown/html"
@@ -33,9 +32,8 @@ var All = []Candidate{
 			TTYDetection:       true,
 		},
 		Variants: []Variant{
-			{Name: "ours", Description: "default configuration", Adapters: oursDefaultAdapters()},
-			{Name: "ours-reuse", Description: "parser reused across iterations", Adapters: oursReuseAdapters()},
-			{Name: "ours-4k", Description: "4KB streaming chunks", Adapters: oursChunkedAdapters(4096)},
+			{Name: "ours", Description: "default configuration (8KB buffer)", Adapters: oursDefaultAdapters()},
+			{Name: "ours-4k", Description: "4KB streaming chunks", Adapters: oursAdaptersWithBuf(4096)},
 		},
 	},
 	{
@@ -106,34 +104,20 @@ func oursDefaultAdapters() Adapters {
 	}
 }
 
-func oursReuseAdapters() Adapters {
-	p := stream.NewParser()
+// oursAdaptersWithBuf returns adapters that use a specific buffer size
+// for the streaming parser, giving all 3 capabilities (parse, terminal, HTML).
+func oursAdaptersWithBuf(bufSize int) Adapters {
 	return Adapters{
 		ParseFunc: func(r io.Reader) (int, error) {
-			p.Reset()
-			src, err := io.ReadAll(r)
+			events, err := markdown.Parse(r, markdown.WithBufSize(bufSize))
 			if err != nil {
 				return 0, err
 			}
-			events, err := p.Write(src)
-			if err != nil {
-				return 0, err
-			}
-			count := len(events)
-			final, err := p.Flush()
-			if err != nil {
-				return count, err
-			}
-			return count + len(final), nil
+			return len(events), nil
 		},
-	}
-}
-
-func oursChunkedAdapters(chunkSize int) Adapters {
-	return Adapters{
 		RenderTerminal: func(r io.Reader, w io.Writer) error {
 			sr := terminal.NewStreamRenderer(w, terminal.WithAnsi(terminal.AnsiOn))
-			buf := make([]byte, chunkSize)
+			buf := make([]byte, bufSize)
 			for {
 				n, err := r.Read(buf)
 				if n > 0 {
@@ -149,6 +133,13 @@ func oursChunkedAdapters(chunkSize int) Adapters {
 				}
 			}
 			return sr.Flush()
+		},
+		RenderHTML: func(r io.Reader, w io.Writer) error {
+			events, err := markdown.Parse(r, markdown.WithBufSize(bufSize))
+			if err != nil {
+				return err
+			}
+			return html.Render(w, events, html.WithUnsafe())
 		},
 	}
 }
