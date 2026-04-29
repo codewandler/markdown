@@ -101,15 +101,18 @@ func (r *renderer) render(events []stream.Event) error {
 			r.exitBlock(i, ev, events)
 		case stream.EventText:
 			// Strip trailing spaces from text immediately before
-			// a block close (CommonMark: trailing spaces at end
-			// of paragraph/heading are not rendered).
+			// a block close or soft break (CommonMark: trailing
+			// spaces at end of line are removed for rendering).
 			// Skip code spans — their content preserves whitespace.
 			if !r.inCode && !r.inHTML && !ev.Style.Code &&
-				i+1 < len(events) &&
-				events[i+1].Kind == stream.EventExitBlock &&
-				(events[i+1].Block == stream.BlockParagraph ||
-					events[i+1].Block == stream.BlockHeading) {
-				ev.Text = strings.TrimRight(ev.Text, " \t")
+				i+1 < len(events) {
+				next := events[i+1]
+				if next.Kind == stream.EventSoftBreak ||
+					(next.Kind == stream.EventExitBlock &&
+						(next.Block == stream.BlockParagraph ||
+							next.Block == stream.BlockHeading)) {
+					ev.Text = strings.TrimRight(ev.Text, " \t")
+				}
 			}
 			r.text(ev)
 		case stream.EventSoftBreak:

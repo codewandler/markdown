@@ -1,6 +1,6 @@
 # Comparison with Other Go Markdown Libraries
 
-Benchmarks run on Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz, go1.26.1-X:nodwarf5, Linux. Git SHA: `e195244`.
+Benchmarks run on Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz, go1.26.1-X:nodwarf5, Linux. Git SHA: `3d48425`.
 
 See [docs/competitors.md](docs/competitors.md) for detailed library profiles.
 
@@ -11,8 +11,8 @@ See [docs/competitors.md](docs/competitors.md) for detailed library profiles.
 | Parser | custom streaming | goldmark | goldmark | blackfriday | gomarkdown | blackfriday v1 |
 | Terminal render | **✅** | ❌ | **✅** | ❌ | ❌ | **✅** |
 | **Streaming** | **✅** | ❌ | ❌ | ❌ | ❌ | ❌ |
-| CommonMark 0.31.2 | 65.3% | 99.2% | - | 37.4% | 40.3% | - |
-| GFM 0.29 | 66.4% | 97.5% | - | 36.8% | 39.1% | - |
+| CommonMark 0.31.2 | 99.4% | 99.2% | - | 37.4% | 40.3% | - |
+| GFM 0.29 | 95.4% | 97.5% | - | 36.8% | 39.1% | - |
 | Syntax highlighting | Go fast path + Chroma | — | Chroma | — | — | Chroma v1 |
 | Clickable hyperlinks | OSC 8 | — | ❌ | — | — | ❌ |
 | Word wrapping | auto-detect | — | fixed width | — | — | fixed width |
@@ -29,8 +29,8 @@ and comparing HTML output.
 
 | Spec | ours | goldmark | blackfriday | gomarkdown |
 | --- | ---: | ---: | ---: | ---: |
-| CommonMark 0.31.2 | 426/652 (65.3%) | 647/652 (99.2%) | 244/652 (37.4%) | 263/652 (40.3%) |
-| GFM 0.29 | 446/672 (66.4%) | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
+| CommonMark 0.31.2 | 648/652 (99.4%) | 647/652 (99.2%) | 244/652 (37.4%) | 263/652 (40.3%) |
+| GFM 0.29 | 641/672 (95.4%) | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
 
 Note: All parsers are measured by comparing HTML output against the
 spec expected HTML. Our HTML renderer is new and does not yet cover
@@ -44,34 +44,34 @@ renderer matures.
 
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| README | 1.1ms | **1.0ms** | 6.2ms | 3.9ms | **5.7x faster** |
+| TableHeavy | 5.8ms | **4.5ms** | 28.3ms | 6.8ms | **4.9x faster** |
 | CodeHeavy | **2.4ms** | 2.7ms | 9.7ms | 52.3ms | **4.0x faster** |
 | GitHubTop10 | 32.2ms | **31.7ms** | 38.4ms | 2.88s | **1.2x faster** |
-| README | 1.1ms | **1.0ms** | 6.2ms | 3.9ms | **5.7x faster** |
-| Spec | 8.0ms | **6.3ms** | 41.0ms | 410.5ms | **5.1x faster** |
-| TableHeavy | 5.8ms | **4.5ms** | 28.3ms | 6.8ms | **4.9x faster** |
 | InlineHeavy | 30.5ms | **27.2ms** | 88.3ms | 38.6ms | **2.9x faster** |
+| Spec | 8.0ms | **6.3ms** | 41.0ms | 410.5ms | **5.1x faster** |
 
 ### Allocations (lower is better)
 
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| README | **9.6K** | 9.7K | 49.4K | 37.8K | **5.1x fewer** |
+| TableHeavy | **47.4K** | 47.5K | 262.6K | 156.9K | **5.5x fewer** |
 | CodeHeavy | **33.1K** | 33.1K | 39.0K | 288.7K | **1.2x fewer** |
 | GitHubTop10 | **40.0K** | 40.2K | 367.3K | 1.4M | **9.2x fewer** |
-| README | **9.6K** | 9.7K | 49.4K | 37.8K | **5.1x fewer** |
-| Spec | **56.9K** | 57.0K | 304.6K | 183.4K | **5.4x fewer** |
-| TableHeavy | **47.4K** | 47.5K | 262.6K | 156.9K | **5.5x fewer** |
 | InlineHeavy | **169.1K** | 169.5K | 811.4K | 828.7K | **4.8x fewer** |
+| Spec | **56.9K** | 57.0K | 304.6K | 183.4K | **5.4x fewer** |
 
 ### Memory (lower is better)
 
 | Input | ours | ours-4k | glamour | go-term-md | vs glamour |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| README | 2.0 MB | 1.5 MB | 5.1 MB | **1.0 MB** | **2.6x less** |
+| TableHeavy | 15.1 MB | 11.2 MB | 16.1 MB | **3.6 MB** | **1.1x less** |
 | CodeHeavy | 4.0 MB | **3.2 MB** | 34.4 MB | 11.8 MB | **8.7x less** |
 | GitHubTop10 | 9.5 MB | **7.0 MB** | 19.2 MB | 119.2 MB | **2.0x less** |
-| README | 2.0 MB | 1.5 MB | 5.1 MB | **1.0 MB** | **2.6x less** |
-| Spec | 16.3 MB | 11.7 MB | 36.9 MB | **5.5 MB** | **2.3x less** |
-| TableHeavy | 15.1 MB | 11.2 MB | 16.1 MB | **3.6 MB** | **1.1x less** |
 | InlineHeavy | 53.7 MB | 45.8 MB | 46.5 MB | **18.7 MB** | 1.2x more |
+| Spec | 16.3 MB | 11.7 MB | 36.9 MB | **5.5 MB** | **2.3x less** |
 
 ## Parse-Only
 

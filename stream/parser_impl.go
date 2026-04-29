@@ -60,7 +60,7 @@ type parser struct {
 	listItemHasContent bool // true if the list item has had any content
 	listStack          []savedList // stack for nested lists
 	inIndented         bool
-	indentedBlankLines int
+	indentedBlankLines []string // buffered whitespace-only lines (after indent strip)
 	inHTMLBlock        bool
 	htmlBlockType      int    // 1-7 per CommonMark spec
 	htmlBlockEnd       string // end condition string for types 1-5
@@ -317,7 +317,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 				return
 			}
 			if strings.TrimSpace(line.text) == "" {
-				p.indentedBlankLines++
+				p.indentedBlankLines = append(p.indentedBlankLines, stripIndentColumns(line.text, 4))
 				return
 			}
 			p.closeIndentedCode(events)
@@ -1550,13 +1550,13 @@ func (p *parser) emitThematicBreak(line lineInfo, events *[]Event) {
 }
 
 func (p *parser) emitIndentedCodeLine(line lineInfo, events *[]Event) {
-	for p.indentedBlankLines > 0 {
+	for _, blankText := range p.indentedBlankLines {
 		*events = append(*events,
-			Event{Kind: EventText, Text: ""},
+			Event{Kind: EventText, Text: blankText},
 			Event{Kind: EventLineBreak},
 		)
-		p.indentedBlankLines--
 	}
+	p.indentedBlankLines = p.indentedBlankLines[:0]
 	text := stripIndentColumns(line.text, 4)
 	*events = append(*events,
 		Event{Kind: EventText, Text: text, Span: Span{Start: line.start, End: line.end}},
@@ -1569,7 +1569,7 @@ func (p *parser) closeIndentedCode(events *[]Event) {
 		return
 	}
 	p.inIndented = false
-	p.indentedBlankLines = 0
+	p.indentedBlankLines = p.indentedBlankLines[:0]
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockIndentedCode})
 }
 
@@ -1897,7 +1897,7 @@ func (p *parser) processListItemContent(line lineInfo, events *[]Event) {
 			return
 		}
 		if strings.TrimSpace(line.text) == "" {
-			p.indentedBlankLines++
+			p.indentedBlankLines = append(p.indentedBlankLines, stripIndentColumns(line.text, 4))
 			return
 		}
 		p.closeIndentedCode(events)

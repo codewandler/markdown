@@ -306,11 +306,9 @@ func TestHTMLString_WithUnsafe(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func normalizeHTML(s string) string {
-	lines := strings.Split(s, "\n")
-	for i, l := range lines {
-		lines[i] = strings.TrimRight(l, " \t")
-	}
-	return strings.Join(lines, "\n")
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return s
 }
 
 func TestHTMLCommonMarkCompliance(t *testing.T) {
