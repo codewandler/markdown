@@ -480,8 +480,8 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	651: expectParagraphText("Foo χρῆν"),
 	652: expectParagraphText("Multiple     spaces"),
 	572: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
-	574: expectTextStyle("foo ![bar](/url)", InlineStyle{Link: "/url2", HasLink: true, Image: true}),
-	575: expectTextStyle("foo [bar](/url)", InlineStyle{Link: "/url2", HasLink: true, Image: true}),
+	574: expectTextStyle("foo bar", InlineStyle{Link: "/url2", HasLink: true, Image: true}),
+	575: expectTextStyle("foo bar", InlineStyle{Link: "/url2", HasLink: true, Image: true}),
 	578: expectTextStyle("foo", InlineStyle{Link: "train.jpg", HasLink: true, Image: true}),
 	579: expectTextStyle("foo bar", InlineStyle{HasLink: true, Link: "/path/to/train.jpg", LinkTitle: "title", Image: true}),
 	580: expectTextStyle("foo", InlineStyle{Link: "url", HasLink: true, Image: true}),
@@ -939,13 +939,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		expectTextStyle("baz", InlineStyle{Emphasis: true, HasLink: true, Link: "/uri"})(t, events)
 	},
 	// Images — reference, collapsed, shortcut, and edge cases.
-	573: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", HasLink: true, Image: true}),
-	576: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", HasLink: true, Image: true}),
-	577: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", HasLink: true, Image: true}),
+	573: expectTextStyle("foo bar", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", HasLink: true, Image: true}),
+	576: expectTextStyle("foo bar", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", HasLink: true, Image: true}),
+	577: expectTextStyle("foo bar", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", HasLink: true, Image: true}),
 	582: expectTextStyle("foo", InlineStyle{Link: "/url", HasLink: true, Image: true}),
 	583: expectTextStyle("foo", InlineStyle{Link: "/url", HasLink: true, Image: true}),
 	584: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
-	585: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
+	585: expectTextStyle("foo bar", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
 	586: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
 	587: func(t *testing.T, events []eventView) {
 		t.Helper()
@@ -953,7 +953,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		expectParagraphText("[]")(t, events)
 	},
 	588: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
-	589: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
+	589: expectTextStyle("foo bar", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
 	590: expectParagraphText("![[foo]]", "[[foo]]: /url \"title\""),
 	591: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title", HasLink: true, Image: true}),
 	592: expectParagraphText("![foo]"),

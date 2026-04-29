@@ -2438,6 +2438,7 @@ func parseInlineImage(text string, span Span) (Event, string, bool) {
 		return Event{}, text, false
 	}
 	parsed.Style.Image = true
+	parsed.Text = plainTextFromInline(parsed.Text, nil)
 	return parsed, rest, true
 }
 
@@ -2450,6 +2451,7 @@ func parseReferenceImage(text string, span Span, refs map[string]linkReference) 
 		return Event{}, text, false
 	}
 	ev.Style.Image = true
+	ev.Text = plainTextFromInline(ev.Text, refs)
 	return ev, text[len(text)-len(rest):], true
 }
 
@@ -2465,6 +2467,39 @@ func parseInlineImageAsLink(text string, span Span) (Event, string, bool) {
 	}
 	rest = text[len(text)-len(rest):]
 	return ev, rest, true
+}
+
+// plainTextFromInline resolves inline markup in text and returns only
+// the text content. Used for image alt text per CommonMark §6.4:
+// "The text content is the text with inline markup resolved and stripped."
+func plainTextFromInline(text string, refs map[string]linkReference) string {
+	tokens := tokenizeInline(text, Span{}, refs, false)
+	tokens = resolveEmphasis(tokens)
+	var b strings.Builder
+	for _, tok := range tokens {
+		switch tok.kind {
+		case inlineTokenText:
+			// For images/links inside alt text, extract their text recursively.
+			if tok.style.Image {
+				// Already stripped by parseInlineImage.
+				b.WriteString(tok.text)
+			} else if tok.style.HasLink {
+				b.WriteString(tok.text)
+			} else {
+				b.WriteString(tok.text)
+			}
+		case inlineTokenSoftBreak:
+			b.WriteByte('\n')
+		case inlineTokenLineBreak:
+			b.WriteByte('\n')
+		case inlineTokenDelimiter:
+			// Unmatched delimiters become literal text.
+			if tok.run > 0 {
+				b.WriteString(tok.text)
+			}
+		}
+	}
+	return b.String()
 }
 
 func parseInlineLink(text string, span Span) (Event, string, string, bool) {
