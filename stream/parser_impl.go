@@ -56,6 +56,7 @@ type parser struct {
 	inListItem         bool
 	listItemIndent     int  // content column: marker indent + marker width + padding
 	listItemBlankLine  bool // saw a blank line inside the current list item
+	listItemHasContent bool // true if the list item has had any content
 	listStack          []savedList // stack for nested lists
 	inIndented         bool
 	indentedBlankLines int
@@ -72,6 +73,7 @@ type savedList struct {
 	inListItem        bool
 	listItemIndent    int
 	listItemBlankLine bool
+	listItemHasContent bool
 }
 
 // pendingBlock stores a closed paragraph whose inline content has not yet
@@ -343,7 +345,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 	if p.inListItem && p.listItemBlankLine {
 		p.listItemBlankLine = false
 		indent, _ := leadingIndent(line.text)
-		if indent >= p.listItemIndent {
+		if indent >= p.listItemIndent && p.listItemHasContent {
 			// Continuation after blank line — the list becomes loose.
 			p.listLoose = true
 			inner := line
@@ -565,9 +567,10 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		p.inListItem = true
 		p.listItemIndent = item.contentIndent
 		p.listItemBlankLine = false
+		p.listItemHasContent = strings.TrimSpace(item.content) != ""
 		data := item.data
 		p.emitBlockStart(events, Event{Kind: EventEnterBlock, Block: BlockListItem, List: &data, Span: Span{Start: line.start, End: line.end}})
-		if strings.TrimSpace(item.content) != "" {
+		if p.listItemHasContent {
 			inner := line
 			inner.text = item.content
 			p.processListItemFirstLine(inner, events)
@@ -1335,12 +1338,13 @@ func (p *parser) closeList(events *[]Event) {
 
 func (p *parser) pushList() {
 	p.listStack = append(p.listStack, savedList{
-		inList:            p.inList,
-		listData:          p.listData,
-		listLoose:         p.listLoose,
-		inListItem:        p.inListItem,
-		listItemIndent:    p.listItemIndent,
-		listItemBlankLine: p.listItemBlankLine,
+		inList:             p.inList,
+		listData:           p.listData,
+		listLoose:          p.listLoose,
+		inListItem:         p.inListItem,
+		listItemIndent:     p.listItemIndent,
+		listItemBlankLine:  p.listItemBlankLine,
+		listItemHasContent: p.listItemHasContent,
 	})
 }
 
@@ -1356,6 +1360,7 @@ func (p *parser) popList() {
 	p.inListItem = saved.inListItem
 	p.listItemIndent = saved.listItemIndent
 	p.listItemBlankLine = saved.listItemBlankLine
+	p.listItemHasContent = saved.listItemHasContent
 }
 
 // processListItemFirstLine handles the first content line of a list item.
