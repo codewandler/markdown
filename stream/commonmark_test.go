@@ -483,7 +483,7 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	574: expectTextStyle("foo ![bar](/url)", InlineStyle{Link: "/url2", HasLink: true, Image: true}),
 	575: expectTextStyle("foo [bar](/url)", InlineStyle{Link: "/url2", HasLink: true, Image: true}),
 	578: expectTextStyle("foo", InlineStyle{Link: "train.jpg", HasLink: true, Image: true}),
-	579: expectTextStyle("foo bar", InlineStyle{HasLink: true, Link: "/path/to/train.jpg", LinkTitle: "title"}),
+	579: expectTextStyle("foo bar", InlineStyle{HasLink: true, Link: "/path/to/train.jpg", LinkTitle: "title", Image: true}),
 	580: expectTextStyle("foo", InlineStyle{Link: "url", HasLink: true, Image: true}),
 	581: expectTextStyle("", InlineStyle{Link: "/url", HasLink: true, Image: true}),
 	// Emphasis and strong emphasis — rules 1-17 (newly supported via CommonMark algorithm).

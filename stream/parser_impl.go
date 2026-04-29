@@ -3643,14 +3643,14 @@ func isDomainAutolink(domain string) bool {
 }
 
 func nextInlineDelimiter(text string) int {
-	if i := strings.IndexAny(text, "\n\\*~_`[<&"); i >= 0 {
+	if i := strings.IndexAny(text, "\n\\*~_`![<&"); i >= 0 {
 		return i
 	}
 	return len(text)
 }
 
 func isInlineDelimiterByte(c byte) bool {
-	return c == '\n' || c == '\\' || c == '*' || c == '~' || c == '_' || c == '`' || c == '[' || c == '<' || c == '&'
+	return c == '\n' || c == '\\' || c == '*' || c == '~' || c == '_' || c == '`' || c == '!' || c == '[' || c == '<' || c == '&'
 }
 
 func coalesceText(events []Event) []Event {
