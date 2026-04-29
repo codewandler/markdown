@@ -227,10 +227,10 @@ func TestGFMInlineExtensions(t *testing.T) {
 func TestImageSubset(t *testing.T) {
 	inline := parseAll(t, "![foo](https://example.com/logo.png)\n")
 	got := viewEvents(inline)
-	assertContains(t, got, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "https://example.com/logo.png"}})
+	assertContains(t, got, eventView{Kind: EventText, Text: "foo", Style: InlineStyle{Link: "https://example.com/logo.png", Image: true}})
 	ref := parseAll(t, "[bar]: /bar.png\n\n![bar]\n")
 	got = viewEvents(ref)
-	assertContains(t, got, eventView{Kind: EventText, Text: "bar", Style: InlineStyle{Link: "/bar.png"}})
+	assertContains(t, got, eventView{Kind: EventText, Text: "bar", Style: InlineStyle{Link: "/bar.png", Image: true}})
 }
 
 func TestEscapedImageStartsAsText(t *testing.T) {

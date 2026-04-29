@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"io"
 
+	"github.com/codewandler/markdown/html"
 	"github.com/codewandler/markdown/stream"
 	"github.com/codewandler/markdown/terminal"
 )
@@ -146,4 +147,31 @@ func RenderToWriter(w io.Writer, markdown string, opts ...terminal.RendererOptio
 		return err
 	}
 	return renderer.Render(events)
+}
+
+// HTMLString renders Markdown source to an HTML string.
+//
+//	out, err := markdown.HTMLString("# Hello\n\nWorld")
+//	out, err := markdown.HTMLString(src, html.WithUnsafe())
+func HTMLString(src string, opts ...html.Option) (string, error) {
+	events, err := ParseBytes([]byte(src))
+	if err != nil {
+		return "", err
+	}
+	return html.RenderString(events, opts...)
+}
+
+// HTMLBytes renders Markdown source to HTML bytes.
+//
+//	out, err := markdown.HTMLBytes([]byte(src))
+func HTMLBytes(src []byte, opts ...html.Option) ([]byte, error) {
+	events, err := ParseBytes(src)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := html.Render(&buf, events, opts...); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

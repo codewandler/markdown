@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/codewandler/markdown"
+	"github.com/codewandler/markdown/html"
+	"github.com/codewandler/markdown/internal/commonmarktests"
 	"github.com/codewandler/markdown/stream"
 	"github.com/codewandler/markdown/terminal"
 )
@@ -211,5 +213,140 @@ func TestParse_Empty(t *testing.T) {
 	}
 	if len(events) != 0 {
 		t.Fatalf("expected no events, got %d", len(events))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// HTML renderer integration tests
+// ---------------------------------------------------------------------------
+
+func TestHTMLString_Heading(t *testing.T) {
+	got, err := markdown.HTMLString("# Hello\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "<h1>Hello</h1>\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestHTMLString_Paragraph(t *testing.T) {
+	got, err := markdown.HTMLString("Hello\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "<p>Hello</p>\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestHTMLString_FencedCode(t *testing.T) {
+	got, err := markdown.HTMLString("```go\nfmt.Println()\n```\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "<pre><code class=\"language-go\">") {
+		t.Errorf("missing language class in %q", got)
+	}
+	if !strings.Contains(got, "fmt.Println()") {
+		t.Errorf("missing code content in %q", got)
+	}
+}
+
+func TestHTMLString_Empty(t *testing.T) {
+	got, err := markdown.HTMLString("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Errorf("got %q, want empty", got)
+	}
+}
+
+func TestHTMLBytes(t *testing.T) {
+	got, err := markdown.HTMLBytes([]byte("# Hi\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "<h1>Hi</h1>\n"
+	if string(got) != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestHTMLString_BlockquoteList(t *testing.T) {
+	src := "> - item\n"
+	got, err := markdown.HTMLString(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "<blockquote>") {
+		t.Errorf("missing blockquote in %q", got)
+	}
+	if !strings.Contains(got, "<li>") {
+		t.Errorf("missing list item in %q", got)
+	}
+}
+
+func TestHTMLString_WithUnsafe(t *testing.T) {
+	src := "<div>\nhello\n</div>\n"
+	got, err := markdown.HTMLString(src, html.WithUnsafe())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "<div>") {
+		t.Errorf("unsafe mode should pass through HTML, got %q", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// HTML CommonMark compliance test
+// ---------------------------------------------------------------------------
+
+func normalizeHTML(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func TestHTMLCommonMarkCompliance(t *testing.T) {
+	examples, err := commonmarktests.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pass := 0
+	var failures []int
+	for _, ex := range examples {
+		events, perr := markdown.ParseBytes([]byte(ex.Markdown))
+		if perr != nil {
+			continue
+		}
+		got, rerr := html.RenderString(events, html.WithUnsafe())
+		if rerr != nil {
+			continue
+		}
+		if normalizeHTML(got) == normalizeHTML(ex.HTML) {
+			pass++
+		} else {
+			failures = append(failures, ex.Example)
+		}
+	}
+
+	total := len(examples)
+	pct := float64(pass) / float64(total) * 100
+	t.Logf("HTML compliance: %d/%d (%.1f%%)", pass, total, pct)
+	if len(failures) > 0 && testing.Verbose() {
+		t.Logf("Failed examples: %v", failures)
+	}
+
+	// Hard compliance gate -- set after first run, update as renderer improves.
+	const minPass = 352
+	if pass < minPass {
+		t.Errorf("compliance regressed: got %d, want >= %d", pass, minPass)
 	}
 }

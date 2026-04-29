@@ -779,7 +779,7 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 		Span:  p.table.span,
 	})
 	headerLine := lineInfo{text: header.text, start: header.span.Start, end: header.span.End}
-	p.emitTableRow(headerLine.text, headerLine, events)
+	p.emitTableRow(headerLine.text, headerLine, events, true)
 	return true
 }
 
@@ -796,7 +796,7 @@ func (p *parser) processActiveTableLine(line lineInfo, events *[]Event) bool {
 		return false
 	}
 	p.table.span.End = line.end
-	p.emitTableRow(line.text, line, events)
+	p.emitTableRow(line.text, line, events, false)
 	return true
 }
 
@@ -856,9 +856,13 @@ func startsNewBlock(text string) bool {
 	}
 }
 
-func (p *parser) emitTableRow(text string, line lineInfo, events *[]Event) {
+func (p *parser) emitTableRow(text string, line lineInfo, events *[]Event, header bool) {
 	rowSpan := Span{Start: line.start, End: line.end}
-	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableRow, Span: rowSpan})
+	var rowData *TableRowData
+	if header {
+		rowData = &TableRowData{Header: true}
+	}
+	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableRow, Span: rowSpan, TableRow: rowData})
 	cells, _ := splitTableRow(text)
 	for _, cell := range cells {
 		cellSpan := Span{Start: line.start, End: line.end}
@@ -2370,6 +2374,7 @@ func parseInlineImage(text string, span Span) (Event, string, bool) {
 	if !ok {
 		return Event{}, text, false
 	}
+	parsed.Style.Image = true
 	return parsed, rest, true
 }
 
@@ -2381,6 +2386,7 @@ func parseReferenceImage(text string, span Span, refs map[string]linkReference) 
 	if !ok {
 		return Event{}, text, false
 	}
+	ev.Style.Image = true
 	return ev, text[len(text)-len(rest):], true
 }
 
@@ -3609,7 +3615,7 @@ func coalesceText(events []Event) []Event {
 }
 
 func sameStyle(a, b InlineStyle) bool {
-	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle
+	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.Image == b.Image
 }
 
 func isEscapablePunctuation(c byte) bool {

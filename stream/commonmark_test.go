@@ -479,13 +479,13 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	650: expectParagraphText("hello $.;'there"),
 	651: expectParagraphText("Foo χρῆν"),
 	652: expectParagraphText("Multiple     spaces"),
-	572: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
-	574: expectTextStyle("foo ![bar](/url)", InlineStyle{Link: "/url2"}),
-	575: expectTextStyle("foo [bar](/url)", InlineStyle{Link: "/url2"}),
-	578: expectTextStyle("foo", InlineStyle{Link: "train.jpg"}),
+	572: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title", Image: true}),
+	574: expectTextStyle("foo ![bar](/url)", InlineStyle{Link: "/url2", Image: true}),
+	575: expectTextStyle("foo [bar](/url)", InlineStyle{Link: "/url2", Image: true}),
+	578: expectTextStyle("foo", InlineStyle{Link: "train.jpg", Image: true}),
 	579: expectTextStyle("foo bar", InlineStyle{Link: "/path/to/train.jpg", LinkTitle: "title"}),
-	580: expectTextStyle("foo", InlineStyle{Link: "url"}),
-	581: expectTextStyle("", InlineStyle{Link: "/url"}),
+	580: expectTextStyle("foo", InlineStyle{Link: "url", Image: true}),
+	581: expectTextStyle("", InlineStyle{Link: "/url", Image: true}),
 	// Emphasis and strong emphasis — rules 1-17 (newly supported via CommonMark algorithm).
 	// Rule 1: * can open emphasis iff left-flanking.
 	351: expectParagraphText("a * foo bar*"),
@@ -872,23 +872,23 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		expectTextStyle("baz", InlineStyle{Emphasis: true, Link: "/uri"})(t, events)
 	},
 	// Images — reference, collapsed, shortcut, and edge cases.
-	573: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks"}),
-	576: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks"}),
-	577: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks"}),
-	582: expectTextStyle("foo", InlineStyle{Link: "/url"}),
-	583: expectTextStyle("foo", InlineStyle{Link: "/url"}),
-	584: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
-	585: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title"}),
-	586: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	573: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", Image: true}),
+	576: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", Image: true}),
+	577: expectTextStyle("foo *bar*", InlineStyle{Link: "train.jpg", LinkTitle: "train & tracks", Image: true}),
+	582: expectTextStyle("foo", InlineStyle{Link: "/url", Image: true}),
+	583: expectTextStyle("foo", InlineStyle{Link: "/url", Image: true}),
+	584: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title", Image: true}),
+	585: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title", Image: true}),
+	586: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title", Image: true}),
 	587: func(t *testing.T, events []eventView) {
 		t.Helper()
-		expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"})(t, events)
+		expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title", Image: true})(t, events)
 		expectParagraphText("[]")(t, events)
 	},
-	588: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
-	589: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	588: expectTextStyle("foo", InlineStyle{Link: "/url", LinkTitle: "title", Image: true}),
+	589: expectTextStyle("*foo* bar", InlineStyle{Link: "/url", LinkTitle: "title", Image: true}),
 	590: expectParagraphText("![[foo]]", "[[foo]]: /url \"title\""),
-	591: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title"}),
+	591: expectTextStyle("Foo", InlineStyle{Link: "/url", LinkTitle: "title", Image: true}),
 	592: expectParagraphText("![foo]"),
 	// Unicode case fold in reference labels.
 	540: expectTextStyle("ẞ", InlineStyle{Link: "/url"}),

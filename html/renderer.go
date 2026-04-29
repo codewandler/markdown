@@ -1,0 +1,354 @@
+package html
+
+import (
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/codewandler/markdown/stream"
+)
+
+// Option configures the HTML renderer.
+type Option func(*renderer)
+
+// WithHTML5 produces void elements without the self-closing slash
+// (<br>, <hr>, <img>). The default is XHTML style (<br />, <hr />,
+// <img ... />), which matches the CommonMark spec test suite.
+func WithHTML5() Option {
+	return func(r *renderer) { r.html5 = true }
+}
+
+// WithUnsafe passes raw HTML blocks through without escaping.
+// Required for full CommonMark compliance since spec examples
+// contain raw HTML.
+func WithUnsafe() Option {
+	return func(r *renderer) { r.unsafe = true }
+}
+
+// Render writes HTML for the given events to w.
+func Render(w io.Writer, events []stream.Event, opts ...Option) error {
+	r := newRenderer(w, opts...)
+	return r.render(events)
+}
+
+// RenderString returns the HTML for the given events as a string.
+func RenderString(events []stream.Event, opts ...Option) (string, error) {
+	var b strings.Builder
+	if err := Render(&b, events, opts...); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+type renderer struct {
+	w          io.Writer
+	html5      bool
+	unsafe     bool
+	tightMap   map[int]bool // EnterBlock list event index -> tight
+	tightStack []bool       // runtime stack for nested lists
+	inHeader   bool         // current table row is a header row
+	inCode     bool         // inside fenced_code or indented_code
+	inHTML     bool         // inside html block
+	tableCol   int          // current column index in table row
+	tableAlign []stream.TableAlign
+	err        error // sticky error
+}
+
+func newRenderer(w io.Writer, opts ...Option) *renderer {
+	r := &renderer{w: w}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
+}
+
+func (r *renderer) render(events []stream.Event) error {
+	r.tightMap = prescanTight(events)
+	for i, ev := range events {
+		if r.err != nil {
+			return r.err
+		}
+		switch ev.Kind {
+		case stream.EventEnterBlock:
+			r.enterBlock(i, ev)
+		case stream.EventExitBlock:
+			r.exitBlock(ev)
+		case stream.EventText:
+			r.text(ev)
+		case stream.EventSoftBreak:
+			r.write("\n")
+		case stream.EventLineBreak:
+			r.lineBreak()
+		}
+	}
+	return r.err
+}
+
+// prescanTight does a single O(n) pass to find the real Tight value
+// for each list. Returns a map from the EnterBlock list event index
+// to the Tight bool from the corresponding ExitBlock.
+func prescanTight(events []stream.Event) map[int]bool {
+	m := make(map[int]bool)
+	var stack []int
+	for i, ev := range events {
+		switch {
+		case ev.Kind == stream.EventEnterBlock && ev.Block == stream.BlockList:
+			stack = append(stack, i)
+		case ev.Kind == stream.EventExitBlock && ev.Block == stream.BlockList:
+			if len(stack) > 0 {
+				enterIdx := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				tight := true
+				if ev.List != nil {
+					tight = ev.List.Tight
+				}
+				m[enterIdx] = tight
+			}
+		}
+	}
+	return m
+}
+
+func (r *renderer) enterBlock(idx int, ev stream.Event) {
+	switch ev.Block {
+	case stream.BlockDocument:
+		// nothing
+	case stream.BlockParagraph:
+		if r.isTight() {
+			return
+		}
+		r.write("<p>")
+	case stream.BlockHeading:
+		r.write(fmt.Sprintf("<h%d>", ev.Level))
+	case stream.BlockBlockquote:
+		r.write("<blockquote>\n")
+	case stream.BlockList:
+		tight := r.tightMap[idx]
+		r.tightStack = append(r.tightStack, tight)
+		if ev.List != nil && ev.List.Ordered {
+			if ev.List.Start != 1 {
+				r.write(fmt.Sprintf("<ol start=\"%d\">\n", ev.List.Start))
+			} else {
+				r.write("<ol>\n")
+			}
+		} else {
+			r.write("<ul>\n")
+		}
+	case stream.BlockListItem:
+		if ev.List != nil && ev.List.Task {
+			if ev.List.Checked {
+				r.write("<li><input type=\"checkbox\" checked=\"\" disabled=\"\" /> ")
+			} else {
+				r.write("<li><input type=\"checkbox\" disabled=\"\" /> ")
+			}
+		} else {
+			r.write("<li>")
+		}
+	case stream.BlockFencedCode:
+		if ev.Info != "" {
+			// Info string: use first word as language.
+			lang := ev.Info
+			if idx := strings.IndexAny(lang, " \t"); idx >= 0 {
+				lang = lang[:idx]
+			}
+			r.write("<pre><code class=\"language-" + escapeHTML(lang) + "\">")
+		} else {
+			r.write("<pre><code>")
+		}
+		r.inCode = true
+	case stream.BlockIndentedCode:
+		r.write("<pre><code>")
+		r.inCode = true
+	case stream.BlockThematicBreak:
+		if r.html5 {
+			r.write("<hr>\n")
+		} else {
+			r.write("<hr />\n")
+		}
+	case stream.BlockHTML:
+		r.inHTML = true
+	case stream.BlockTable:
+		r.write("<table>\n")
+		if ev.Table != nil {
+			r.tableAlign = ev.Table.Align
+		} else {
+			r.tableAlign = nil
+		}
+	case stream.BlockTableRow:
+		r.tableCol = 0
+		if ev.TableRow != nil && ev.TableRow.Header {
+			r.inHeader = true
+			r.write("<thead>\n<tr>\n")
+		} else {
+			r.write("<tr>\n")
+		}
+	case stream.BlockTableCell:
+		tag := "td"
+		if r.inHeader {
+			tag = "th"
+		}
+		align := stream.TableAlignNone
+		if r.tableCol < len(r.tableAlign) {
+			align = r.tableAlign[r.tableCol]
+		}
+		switch align {
+		case stream.TableAlignLeft:
+			r.write("<" + tag + " align=\"left\">")
+		case stream.TableAlignCenter:
+			r.write("<" + tag + " align=\"center\">")
+		case stream.TableAlignRight:
+			r.write("<" + tag + " align=\"right\">")
+		default:
+			r.write("<" + tag + ">")
+		}
+	}
+}
+
+func (r *renderer) exitBlock(ev stream.Event) {
+	switch ev.Block {
+	case stream.BlockDocument:
+		// nothing
+	case stream.BlockParagraph:
+		if r.isTight() {
+			// In tight lists, paragraphs don't get <p> tags but
+			// still need a newline between items.
+			r.write("\n")
+			return
+		}
+		r.write("</p>\n")
+	case stream.BlockHeading:
+		r.write(fmt.Sprintf("</h%d>\n", ev.Level))
+	case stream.BlockBlockquote:
+		r.write("</blockquote>\n")
+	case stream.BlockList:
+		if len(r.tightStack) > 0 {
+			r.tightStack = r.tightStack[:len(r.tightStack)-1]
+		}
+		if ev.List != nil && ev.List.Ordered {
+			r.write("</ol>\n")
+		} else {
+			r.write("</ul>\n")
+		}
+	case stream.BlockListItem:
+		r.write("</li>\n")
+	case stream.BlockFencedCode:
+		r.write("</code></pre>\n")
+		r.inCode = false
+	case stream.BlockIndentedCode:
+		r.write("</code></pre>\n")
+		r.inCode = false
+	case stream.BlockThematicBreak:
+		// nothing — thematic break is self-closing on enter
+	case stream.BlockHTML:
+		r.inHTML = false
+	case stream.BlockTable:
+		r.write("</tbody>\n</table>\n")
+		r.tableAlign = nil
+	case stream.BlockTableRow:
+		if r.inHeader {
+			r.write("</tr>\n</thead>\n<tbody>\n")
+			r.inHeader = false
+		} else {
+			r.write("</tr>\n")
+		}
+	case stream.BlockTableCell:
+		if r.inHeader {
+			r.write("</th>\n")
+		} else {
+			r.write("</td>\n")
+		}
+		r.tableCol++
+	}
+}
+
+func (r *renderer) text(ev stream.Event) {
+	if r.inHTML {
+		if r.unsafe {
+			r.write(ev.Text)
+		} else {
+			r.write(escapeHTML(ev.Text))
+		}
+		return
+	}
+	if r.inCode {
+		r.write(escapeHTML(ev.Text))
+		return
+	}
+
+	s := ev.Style
+
+	// Code spans: if Code is set, ignore other styles (CommonMark
+	// precedence — code spans bind tighter than emphasis/links).
+	if s.Code {
+		r.write("<code>")
+		r.write(escapeHTML(ev.Text))
+		r.write("</code>")
+		return
+	}
+
+	// Build opening/closing tags for nested styles.
+	// Order: link/image outermost, then strong, em, del.
+	var open, close string
+
+	if s.Image && s.Link != "" {
+		// Image: void element, no closing tag needed.
+		r.write("<img src=\"" + escapeURL(s.Link) + "\" alt=\"" + escapeHTML(ev.Text) + "\"")
+		if s.LinkTitle != "" {
+			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
+		}
+		if r.html5 {
+			r.write(">")
+		} else {
+			r.write(" />")
+		}
+		return
+	}
+
+	if s.Link != "" {
+		open += "<a href=\"" + escapeURL(s.Link) + "\""
+		if s.LinkTitle != "" {
+			open += " title=\"" + escapeHTML(s.LinkTitle) + "\""
+		}
+		open += ">"
+		close = "</a>" + close
+	}
+	if s.Strong {
+		open += "<strong>"
+		close = "</strong>" + close
+	}
+	if s.Emphasis {
+		open += "<em>"
+		close = "</em>" + close
+	}
+	if s.Strike {
+		open += "<del>"
+		close = "</del>" + close
+	}
+
+	if open != "" {
+		r.write(open)
+	}
+	r.write(escapeHTML(ev.Text))
+	if close != "" {
+		r.write(close)
+	}
+}
+
+func (r *renderer) lineBreak() {
+	if r.html5 {
+		r.write("<br>\n")
+	} else {
+		r.write("<br />\n")
+	}
+}
+
+func (r *renderer) isTight() bool {
+	return len(r.tightStack) > 0 && r.tightStack[len(r.tightStack)-1]
+}
+
+func (r *renderer) write(s string) {
+	if r.err != nil {
+		return
+	}
+	_, r.err = io.WriteString(r.w, s)
+}

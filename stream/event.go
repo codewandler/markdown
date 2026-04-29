@@ -55,6 +55,7 @@ type InlineStyle struct {
 	Code      bool
 	Link      string
 	LinkTitle string
+	Image     bool // true for ![alt](url) and ![alt][ref]
 }
 
 // ListData describes a Markdown list represented by a list block event.
@@ -70,6 +71,11 @@ type ListData struct {
 // TableData describes a Markdown table represented by table block events.
 type TableData struct {
 	Align []TableAlign
+}
+
+// TableRowData describes a table row in the event stream.
+type TableRowData struct {
+	Header bool // true for the header row (first row before delimiter)
 }
 
 // TableAlign describes the alignment of a table column.
@@ -88,13 +94,14 @@ const (
 // events. Level is used by hierarchical blocks such as headings. Span identifies
 // the source range that produced the event when a meaningful range exists.
 type Event struct {
-	Kind  EventKind
-	Block BlockKind
-	Text  string
-	Style InlineStyle
-	Level int
-	Info  string
-	Span  Span
-	List  *ListData
-	Table *TableData
+	Kind     EventKind
+	Block    BlockKind
+	Text     string
+	Style    InlineStyle
+	Level    int
+	Info     string
+	Span     Span
+	List     *ListData
+	Table    *TableData
+	TableRow *TableRowData
 }
