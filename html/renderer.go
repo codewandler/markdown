@@ -322,6 +322,12 @@ func (r *renderer) text(ev stream.Event) {
 
 	s := ev.Style
 
+	// Inline raw HTML: pass through without escaping.
+	if s.RawHTML {
+		r.write(ev.Text)
+		return
+	}
+
 	// Code spans: if Code is set, ignore other styles (CommonMark
 	// precedence — code spans bind tighter than emphasis/links).
 	if s.Code {

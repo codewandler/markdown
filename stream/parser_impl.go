@@ -2025,7 +2025,7 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference) []inl
 			}
 			// Raw HTML tag (same precedence as autolinks and code spans).
 			if tag, ok := parseRawHTMLTag(text); ok {
-				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: tag})
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: tag, style: InlineStyle{RawHTML: true}})
 				prevSource = tag
 				text = text[len(tag):]
 				continue
@@ -3615,7 +3615,7 @@ func coalesceText(events []Event) []Event {
 }
 
 func sameStyle(a, b InlineStyle) bool {
-	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.Image == b.Image
+	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.Image == b.Image && a.RawHTML == b.RawHTML
 }
 
 func isEscapablePunctuation(c byte) bool {

@@ -55,7 +55,8 @@ type InlineStyle struct {
 	Code      bool
 	Link      string
 	LinkTitle string
-	Image     bool // true for ![alt](url) and ![alt][ref]
+	Image     bool    // true for ![alt](url) and ![alt][ref]
+	RawHTML   bool    // true for inline raw HTML tags
 }
 
 // ListData describes a Markdown list represented by a list block event.
