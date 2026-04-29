@@ -592,9 +592,9 @@ func (g *reportGen) chunkSizeSection() {
 			ratio)
 	}
 	g.nl()
-	g.writef("Streaming at 4KB chunks is **faster** than whole-document parsing\n")
-	g.writef("because intermediate allocations are smaller. Even byte-at-a-time\n")
-	g.writef("streaming is only ~1.4x slower.\n\n")
+	g.writef("Streaming adds minimal overhead: 4KB chunks are only ~1.1x slower\n")
+	g.writef("than whole-document parsing, and even byte-at-a-time streaming is\n")
+	g.writef("within ~1.1x — with identical allocation counts.\n\n")
 }
 
 // --- Parse memory note ------------------------------------------------------
