@@ -79,7 +79,9 @@ func (r *renderer) render(events []stream.Event) error {
 			// Strip trailing spaces from text immediately before
 			// a block close (CommonMark: trailing spaces at end
 			// of paragraph/heading are not rendered).
-			if !r.inCode && !r.inHTML && i+1 < len(events) &&
+			// Skip code spans — their content preserves whitespace.
+			if !r.inCode && !r.inHTML && !ev.Style.Code &&
+				i+1 < len(events) &&
 				events[i+1].Kind == stream.EventExitBlock &&
 				(events[i+1].Block == stream.BlockParagraph ||
 					events[i+1].Block == stream.BlockHeading) {
