@@ -112,9 +112,11 @@ func (r *renderer) render(events []stream.Event) error {
 			}
 			r.text(ev)
 		case stream.EventSoftBreak:
-			// If the current open style has a link, close it at the
-			// soft break so separate links on different lines don't merge.
-			if r.openStyle.HasLink {
+			// Close tags that need to close before the newline.
+			if ns, ok := r.nextTextStyle(events, i); ok {
+				cs := r.closingStyle(ns)
+				r.transitionStyle(cs)
+			} else if r.openStyle.HasLink {
 				r.closeStyle()
 			}
 			r.write("\n")
@@ -557,6 +559,67 @@ func (r *renderer) writeCloseTag(t inlineTag) {
 	case tagLink:
 		r.write("</a>")
 	}
+}
+
+// sameVisualStyle checks if two styles produce the same HTML tags.
+// Ignores depth fields — only checks boolean/string fields that affect rendering.
+func sameVisualStyle(a, b stream.InlineStyle) bool {
+	aEm := a.EmphasisDepth
+	if aEm == 0 && a.Emphasis { aEm = 1 }
+	bEm := b.EmphasisDepth
+	if bEm == 0 && b.Emphasis { bEm = 1 }
+	aSt := a.StrongDepth
+	if aSt == 0 && a.Strong { aSt = 1 }
+	bSt := b.StrongDepth
+	if bSt == 0 && b.Strong { bSt = 1 }
+	return aEm == bEm && aSt == bSt &&
+		a.Strike == b.Strike && a.Code == b.Code &&
+		a.HasLink == b.HasLink && a.Link == b.Link && a.LinkTitle == b.LinkTitle &&
+		a.Image == b.Image && a.RawHTML == b.RawHTML
+}
+
+// closingStyle returns a style that keeps only the tags common to both
+// the current open style and the next style. This closes tags being removed
+// without opening new ones.
+func (r *renderer) closingStyle(next stream.InlineStyle) stream.InlineStyle {
+	o := r.openStyle
+	var s stream.InlineStyle
+	// Keep emphasis/strong at the minimum of current and next depths.
+	oEm := o.EmphasisDepth
+	if oEm == 0 && o.Emphasis { oEm = 1 }
+	nEm := next.EmphasisDepth
+	if nEm == 0 && next.Emphasis { nEm = 1 }
+	oSt := o.StrongDepth
+	if oSt == 0 && o.Strong { oSt = 1 }
+	nSt := next.StrongDepth
+	if nSt == 0 && next.Strong { nSt = 1 }
+	minEm := oEm
+	if nEm < minEm { minEm = nEm }
+	minSt := oSt
+	if nSt < minSt { minSt = nSt }
+	s.Emphasis = minEm > 0
+	s.EmphasisDepth = minEm
+	s.Strong = minSt > 0
+	s.StrongDepth = minSt
+	s.Strike = o.Strike && next.Strike
+	// Always close links at soft breaks — separate links on
+	// different lines must not merge.
+	return s
+}
+
+// nextTextStyle returns the style of the next text event after position i.
+func (r *renderer) nextTextStyle(events []stream.Event, i int) (stream.InlineStyle, bool) {
+	for j := i + 1; j < len(events); j++ {
+		switch events[j].Kind {
+		case stream.EventText:
+			return events[j].Style, true
+		case stream.EventExitBlock:
+			return stream.InlineStyle{}, false
+		default:
+			continue
+		}
+	}
+	return stream.InlineStyle{}, false
 }
 
 // nextTextChangesLink checks if the next text event after position i
