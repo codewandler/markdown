@@ -154,9 +154,9 @@ func TestParserBlocks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseAll(t, tt.in)
-			if !reflect.DeepEqual(viewEvents(got), tt.want) {
-				t.Fatalf("events mismatch\nwant: %#v\n got: %#v", tt.want, viewEvents(got))
+			got := viewEvents(parseAll(t, tt.in))
+			if !eventsMatchIgnoringDepth(got, tt.want) {
+				t.Fatalf("events mismatch\nwant: %#v\n got: %#v", tt.want, got)
 			}
 		})
 	}
@@ -362,11 +362,34 @@ func viewEvents(events []Event) []eventView {
 func assertContains(t *testing.T, events []eventView, want eventView) {
 	t.Helper()
 	for _, event := range events {
-		if reflect.DeepEqual(event, want) {
+		if eventMatchIgnoringDepth(event, want) {
 			return
 		}
 	}
 	t.Fatalf("missing event %#v in %#v", want, events)
+}
+
+// eventMatchIgnoringDepth compares two eventViews, ignoring
+// EmphasisDepth and StrongDepth (rendering hints, not semantic).
+func eventMatchIgnoringDepth(a, b eventView) bool {
+	a.Style.EmphasisDepth = 0
+	a.Style.StrongDepth = 0
+	b.Style.EmphasisDepth = 0
+	b.Style.StrongDepth = 0
+	return reflect.DeepEqual(a, b)
+}
+
+// eventsMatchIgnoringDepth compares two event slices, ignoring depth fields.
+func eventsMatchIgnoringDepth(a, b []eventView) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !eventMatchIgnoringDepth(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestNoPanicOnMalformedInline(t *testing.T) {

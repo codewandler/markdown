@@ -49,15 +49,17 @@ const (
 //
 // Renderers may ignore fields they do not support.
 type InlineStyle struct {
-	Emphasis  bool
-	Strong    bool
-	Strike    bool
-	Code      bool
-	Link      string
-	LinkTitle string
-	HasLink   bool    // true when Link was explicitly set (distinguishes "" from no link)
-	Image     bool    // true for ![alt](url) and ![alt][ref]
-	RawHTML   bool    // true for inline raw HTML tags
+	Emphasis      bool
+	Strong        bool
+	Strike        bool
+	Code          bool
+	Link          string
+	LinkTitle     string
+	HasLink       bool // true when Link was explicitly set (distinguishes "" from no link)
+	Image         bool // true for ![alt](url) and ![alt][ref]
+	RawHTML       bool // true for inline raw HTML tags
+	EmphasisDepth int  // nesting depth for emphasis (0 = not emphasized)
+	StrongDepth   int  // nesting depth for strong (0 = not strong)
 }
 
 // ListData describes a Markdown list represented by a list block event.

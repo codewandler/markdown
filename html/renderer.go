@@ -375,26 +375,35 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 	o := r.openStyle
 
 	// Close innermost first: link, del, em, strong.
-	// Only close tags that are actually being removed.
 	if o.HasLink && (!s.HasLink || o.Link != s.Link || o.LinkTitle != s.LinkTitle) {
 		r.write("</a>")
 	}
 	if o.Strike && !s.Strike {
 		r.write("</del>")
 	}
-	if o.Emphasis && !s.Emphasis {
+	// Use depth for emphasis/strong to handle nesting.
+	// Fall back to boolean when depth is not set (hand-crafted events).
+	oEm := o.EmphasisDepth
+	if oEm == 0 && o.Emphasis { oEm = 1 }
+	sEm := s.EmphasisDepth
+	if sEm == 0 && s.Emphasis { sEm = 1 }
+	oSt := o.StrongDepth
+	if oSt == 0 && o.Strong { oSt = 1 }
+	sSt := s.StrongDepth
+	if sSt == 0 && s.Strong { sSt = 1 }
+
+	for i := oEm; i > sEm; i-- {
 		r.write("</em>")
 	}
-	if o.Strong && !s.Strong {
+	for i := oSt; i > sSt; i-- {
 		r.write("</strong>")
 	}
 
 	// Open outermost first: strong, em, del, link.
-	// Only open tags that are actually being added.
-	if s.Strong && !o.Strong {
+	for i := oSt; i < sSt; i++ {
 		r.write("<strong>")
 	}
-	if s.Emphasis && !o.Emphasis {
+	for i := oEm; i < sEm; i++ {
 		r.write("<em>")
 	}
 	if s.Strike && !o.Strike {

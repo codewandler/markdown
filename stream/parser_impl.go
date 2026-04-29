@@ -2269,37 +2269,67 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 		events[idx] = ev
 	}
 
+	// Track emphasis/strong depth so nested emphasis produces
+	// separate text events at boundaries.
+	type depthStyle struct {
+		emDepth     int
+		strongDepth int
+		strike      bool
+		base        InlineStyle // non-emphasis styles (link, code, etc.)
+	}
+
+	toInlineStyle := func(ds depthStyle) InlineStyle {
+		s := ds.base
+		s.Emphasis = ds.emDepth > 0
+		s.Strong = ds.strongDepth > 0
+		s.Strike = ds.strike
+		s.EmphasisDepth = ds.emDepth
+		s.StrongDepth = ds.strongDepth
+		return s
+	}
+
 	var out []inlineToken
-	var styleStack []InlineStyle
-	currentStyle := InlineStyle{}
+	var dsStack []depthStyle
+	current := depthStyle{}
 
 	for i, tok := range tokens {
 		if evs, ok := events[i]; ok {
 			// Emit remaining delimiter text before processing events.
 			if tok.kind == inlineTokenDelimiter && tok.run > 0 {
-				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: currentStyle})
+				s := toInlineStyle(current)
+				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: s})
 			}
 			for _, ev := range evs {
 				if ev.open {
-					styleStack = append(styleStack, currentStyle)
-					currentStyle = applyDelimiterStyle(currentStyle, ev.use, ev.delim)
+					dsStack = append(dsStack, current)
+					if ev.delim == '~' {
+						current.strike = true
+					} else {
+						for c := ev.use; c >= 2; c -= 2 {
+							current.strongDepth++
+						}
+						if ev.use%2 == 1 {
+							current.emDepth++
+						}
+					}
 				} else {
-					if len(styleStack) > 0 {
-						currentStyle = styleStack[len(styleStack)-1]
-						styleStack = styleStack[:len(styleStack)-1]
+					if len(dsStack) > 0 {
+						current = dsStack[len(dsStack)-1]
+						dsStack = dsStack[:len(dsStack)-1]
 					}
 				}
 			}
 			continue
 		}
 
+		s := toInlineStyle(current)
 		switch tok.kind {
 		case inlineTokenDelimiter:
 			if tok.run > 0 {
-				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: currentStyle})
+				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: s})
 			}
 		case inlineTokenText:
-			out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: mergeInlineStyles(currentStyle, tok.style)})
+			out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: mergeInlineStyles(s, tok.style)})
 		case inlineTokenSoftBreak:
 			out = append(out, inlineToken{kind: inlineTokenSoftBreak})
 		case inlineTokenLineBreak:
@@ -3608,7 +3638,7 @@ func coalesceText(events []Event) []Event {
 		out = append(out, current)
 	}
 	for _, ev := range events[1:] {
-		if current.Kind == EventText && ev.Kind == EventText && sameStyle(current.Style, ev.Style) {
+		if current.Kind == EventText && ev.Kind == EventText && sameCoalesceStyle(current.Style, ev.Style) {
 			if !merging {
 				builder.WriteString(current.Text)
 				merging = true
@@ -3626,6 +3656,12 @@ func coalesceText(events []Event) []Event {
 
 func sameStyle(a, b InlineStyle) bool {
 	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.HasLink == b.HasLink && a.Image == b.Image && a.RawHTML == b.RawHTML
+}
+
+// sameCoalesceStyle is like sameStyle but also compares emphasis/strong
+// depth to prevent coalescing across nesting boundaries.
+func sameCoalesceStyle(a, b InlineStyle) bool {
+	return sameStyle(a, b) && a.EmphasisDepth == b.EmphasisDepth && a.StrongDepth == b.StrongDepth
 }
 
 func isEscapablePunctuation(c byte) bool {

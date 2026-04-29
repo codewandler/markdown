@@ -503,11 +503,21 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	365: expectParagraphText("_foo*"),
 	366: expectParagraphText("*foo bar *"),
 	368: expectParagraphText("*(*foo)"),
-	369: expectTextStyle("(foo)", InlineStyle{Emphasis: true}),
+	369: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("(", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle(")", InlineStyle{Emphasis: true})(t, events)
+	},
 	// Rule 4: _ can close emphasis with extra restrictions.
 	371: expectParagraphText("_foo bar _"),
 	372: expectParagraphText("_(_foo)"),
-	373: expectTextStyle("(foo)", InlineStyle{Emphasis: true}),
+	373: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("(", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle(")", InlineStyle{Emphasis: true})(t, events)
+	},
 	374: expectParagraphText("_foo_bar"),
 	375: expectParagraphText("_пристаням_стремятся"),
 	// Rule 5: ** can open strong iff left-flanking.
@@ -520,7 +530,12 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	386: expectParagraphText("foo__bar__"),
 	387: expectParagraphText("5__6__78"),
 	388: expectParagraphText("пристаням__стремятся__"),
-	389: expectTextStyle("foo, bar, baz", InlineStyle{Strong: true}),
+	389: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo, ", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Strong: true})(t, events)
+		expectTextStyle(", baz", InlineStyle{Strong: true})(t, events)
+	},
 	// Rule 7: ** can close strong iff right-flanking.
 	391: expectParagraphText("**foo bar **"),
 	392: expectParagraphText("**(**foo)"),
@@ -540,9 +555,22 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true})(t, events)
 		expectTextStyle(" baz", InlineStyle{Emphasis: true})(t, events)
 	},
-	407: expectTextStyle("foo bar baz", InlineStyle{Emphasis: true}),
-	408: expectTextStyle("foo bar", InlineStyle{Emphasis: true}),
-	409: expectTextStyle("foo bar", InlineStyle{Emphasis: true}),
+	407: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle(" baz", InlineStyle{Emphasis: true})(t, events)
+	},
+	408: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle(" bar", InlineStyle{Emphasis: true})(t, events)
+	},
+	409: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Emphasis: true})(t, events)
+	},
 	410: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
@@ -559,7 +587,8 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	418: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectTextStyle("foo ", InlineStyle{Emphasis: true})(t, events)
-		expectTextStyle("bar baz bim", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle("bar ", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle("baz", InlineStyle{Emphasis: true, Strong: true})(t, events)
 		expectTextStyle(" bop", InlineStyle{Emphasis: true})(t, events)
 	},
 	// Rule 10: strong emphasis nesting.
@@ -572,9 +601,22 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 		expectTextStyle("bar", InlineStyle{Emphasis: true, Strong: true})(t, events)
 		expectTextStyle(" baz", InlineStyle{Strong: true})(t, events)
 	},
-	425: expectTextStyle("foo bar baz", InlineStyle{Strong: true}),
-	426: expectTextStyle("foo bar", InlineStyle{Strong: true}),
-	427: expectTextStyle("foo bar", InlineStyle{Strong: true}),
+	425: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Strong: true})(t, events)
+		expectTextStyle(" baz", InlineStyle{Strong: true})(t, events)
+	},
+	426: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo", InlineStyle{Strong: true})(t, events)
+		expectTextStyle(" bar", InlineStyle{Strong: true})(t, events)
+	},
+	427: func(t *testing.T, events []eventView) {
+		t.Helper()
+		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
+		expectTextStyle("bar", InlineStyle{Strong: true})(t, events)
+	},
 	428: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
@@ -587,7 +629,8 @@ var supportedCommonMarkExamples = map[int]func(*testing.T, []eventView){
 	432: func(t *testing.T, events []eventView) {
 		t.Helper()
 		expectTextStyle("foo ", InlineStyle{Strong: true})(t, events)
-		expectTextStyle("bar baz", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle("bar ", InlineStyle{Emphasis: true, Strong: true})(t, events)
+		expectTextStyle("baz", InlineStyle{Emphasis: true, Strong: true})(t, events)
 		expectTextStyle(" bop", InlineStyle{Strong: true})(t, events)
 	},
 	// Rules 11-12: literal delimiters.
