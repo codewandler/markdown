@@ -4325,7 +4325,7 @@ func scanAutolinkLiteralCandidate(text string) (string, string) {
 	end := 0
 	for end < len(text) {
 		c := text[end]
-		if c <= ' ' || c == '<' || c == '>' {
+		if c <= ' ' || c == '<' || c == '>' || c == '"' || c == '\'' {
 			break
 		}
 		end++
@@ -4463,7 +4463,17 @@ func isWWWAutolink(target string) bool {
 		}
 		host = hostPort[:colon]
 	}
-	return isDomainAutolink(host)
+	if !isDomainAutolink(host) {
+		return false
+	}
+	// GFM: no underscores in the last two segments of the domain.
+	labels := strings.Split(host, ".")
+	for i := len(labels) - 1; i >= 0 && i >= len(labels)-2; i-- {
+		if strings.ContainsRune(labels[i], '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func isEmailAutolink(target string) bool {
