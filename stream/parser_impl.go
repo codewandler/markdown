@@ -3,7 +3,6 @@ package stream
 import (
 	"bytes"
 	"html"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -2923,18 +2922,28 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 	// The first-matched pair is the innermost (closest opener-closer),
 	// so opens sort by seq descending (outer first = last matched)
 	// and closes sort by seq ascending (inner first = first matched).
+	// Sort events at each position: opens before closes,
+	// opens by seq descending, closes by seq ascending.
+	// Insertion sort — slices are typically 1-4 elements.
 	for idx := range events {
 		ev := events[idx]
-		sort.SliceStable(ev, func(i, j int) bool {
-			if ev[i].open != ev[j].open {
-				return ev[i].open // opens before closes
+		for i := 1; i < len(ev); i++ {
+			for j := i; j > 0; j-- {
+				a, b := ev[j], ev[j-1]
+				swap := false
+				if a.open != b.open {
+					swap = a.open // opens before closes
+				} else if a.open {
+					swap = a.seq > b.seq // opens: outer first
+				} else {
+					swap = a.seq < b.seq // closes: inner first
+				}
+				if !swap {
+					break
+				}
+				ev[j], ev[j-1] = ev[j-1], ev[j]
 			}
-			if ev[i].open {
-				return ev[i].seq > ev[j].seq // opens: outer first (last matched)
-			}
-			return ev[i].seq < ev[j].seq // closes: inner first (first matched)
-		})
-		events[idx] = ev
+		}
 	}
 
 	// Track emphasis/strong depth so nested emphasis produces

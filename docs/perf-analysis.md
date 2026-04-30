@@ -329,3 +329,17 @@ reallocation during event emission.
 | Allocations | 4,435 | 4,420 | -0.3% |
 
 Cumulative from baseline: speed -39.2%, memory -73.6%, allocs -42.3%.
+
+### Opt 8: Replace sort.SliceStable with insertion sort in resolveEmphasis (2026-04-30)
+
+Replace `sort.SliceStable` (which uses `reflectlite.Swapper`, allocating
+per call) with a hand-written insertion sort. The style event slices are
+typically 1-4 elements. Removed `sort` import entirely.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.24 ms | 1.19 ms | **-4.0%** |
+| Memory | 1.48 MB | 1.47 MB | ~same |
+| Allocations | 4,420 | 4,079 | **-7.7%** |
+
+Cumulative from baseline: speed -41.7%, memory -73.8%, allocs -46.8%.
