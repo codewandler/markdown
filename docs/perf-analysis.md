@@ -244,3 +244,18 @@ for non-method call paths (recursive link content parsing).
 | Allocations | 6,522 | 4,581 | **-29.8%** |
 
 Cumulative from baseline: speed -20.6%, memory -28.6%, allocs -40.3%.
+
+### Opt 3: eliminate string allocations in HTML block check + ref label normalization (2026-04-30)
+
+- Replace `strings.Contains(strings.ToLower(...), strings.ToLower(...))` in
+  HTML block end detection with zero-alloc `containsFold` helper.
+- Add fast path in `normalizeReferenceLabel`: skip `Fields`/`Join`/`ToLower`
+  when label is already trimmed, single-spaced, lowercase ASCII.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.62 ms | 1.65 ms | ~same |
+| Memory | 4.0 MB | 4.0 MB | ~same |
+| Allocations | 4,581 | 4,362 | **-4.8%** |
+
+Cumulative from baseline: speed -19.1%, memory -28.6%, allocs -43.1%.

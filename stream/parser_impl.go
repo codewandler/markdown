@@ -1631,7 +1631,7 @@ func (p *parser) processHTMLBlockLine(line lineInfo, events *[]Event) {
 
 	// Check end condition for types 1-5.
 	if p.htmlBlockType >= 1 && p.htmlBlockType <= 5 {
-		if strings.Contains(strings.ToLower(line.text), strings.ToLower(p.htmlBlockEnd)) {
+		if containsFold(line.text, p.htmlBlockEnd) {
 			p.closeHTMLBlock(events)
 		}
 	}
@@ -3451,11 +3451,48 @@ func detectPendingTitle(text string, start int) (opener byte, content string, ok
 }
 
 func normalizeReferenceLabel(label string) string {
+	// Fast path: if the label has no leading/trailing whitespace,
+	// no consecutive whitespace, and is already lowercase ASCII,
+	// we can return it without allocation.
+	if isNormalized(label) {
+		return label
+	}
 	fields := strings.Fields(label)
 	if len(fields) == 0 {
 		return ""
 	}
 	return unicodeCaseFold(strings.Join(fields, " "))
+}
+
+// isNormalized reports whether label is already in normalized form:
+// trimmed, single-spaced, and lowercase.
+func isNormalized(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	if s[0] == ' ' || s[0] == '\t' || s[len(s)-1] == ' ' || s[len(s)-1] == '\t' {
+		return false
+	}
+	prevSpace := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			if prevSpace {
+				return false
+			}
+			prevSpace = true
+			continue
+		}
+		prevSpace = false
+		if c >= 'A' && c <= 'Z' {
+			return false
+		}
+		if c >= 0x80 {
+			// Non-ASCII: might need case folding, bail to slow path.
+			return false
+		}
+	}
+	return true
 }
 
 // unicodeCaseFold performs a simple Unicode case fold. It handles
@@ -3474,6 +3511,23 @@ func unicodeCaseFold(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// containsFold reports whether substr (assumed lowercase ASCII) is
+// contained in s, using case-insensitive comparison. Zero allocations.
+func containsFold(s, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if strings.EqualFold(s[i:i+len(substr)], substr) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseRawHTMLTag tries to parse a raw HTML tag at the start of text.
