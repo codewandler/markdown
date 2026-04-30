@@ -20,6 +20,9 @@ Repository guidance for Codex and other agents working in this workspace.
 
 - The parser must remain append-only and chunk-safe.
 - Renderer code must not parse Markdown syntax.
+- Custom inline syntax should use `stream.InlineScanner` and `EventInline`, not
+  source preprocessing. Scanners must preserve CommonMark precedence: escapes,
+  code spans, autolinks, and raw HTML bind before custom atoms.
 - Memory usage should stay bounded by unresolved state, not by replaying the
   whole document.
 - Terminal rendering is the first-class output path.
@@ -42,6 +45,9 @@ Repository guidance for Codex and other agents working in this workspace.
   list stack), fenced/indented code, blockquotes, and headings inside items.
 - Forward link reference definitions are supported via the `pendingBlocks`
   mechanism — paragraphs defer inline parsing until ref defs are collected.
+- Inline extension support includes `stream.InlineScanner`, `EventInline`,
+  `InlineData`, and terminal `WithInlineRenderer`/`WithWidthFunc`. `cmd/mdview`
+  uses this path for emoji shortcodes so table widths can use `DisplayWidth`.
 
 ## CommonMark Compliance Process
 
@@ -80,6 +86,15 @@ When working on CommonMark compliance:
 - **Inline precedence** — code spans, autolinks, and raw HTML tags bind more
   tightly than emphasis and links. `matchingBracketEnd` skips over code spans
   and HTML tags when scanning for the closing `]` of a link label.
+- **Inline scanners** — custom scanners run from `tokenizeInlineReuse` after
+  escapes/code/autolinks/raw HTML and before emphasis delimiter handling.
+  `TriggerBytes` must be narrow so the plain-text fast path remains cheap.
+  Scanner events are represented as `inlineTokenEvent`, inherit emphasis/link
+  style during `resolveEmphasisReuse`/`coalesceInlineTokensInto`, and should set
+  `InlineData.DisplayWidth` when terminal width differs from byte/rune count.
+- **Terminal inline rendering** — table rendering buffers cell events and tracks
+  rendered text plus display width. Do not reintroduce width calculation from
+  rendered ANSI strings for custom inline atoms.
 
 ## File Inventory
 
@@ -87,11 +102,11 @@ Key files by size (lines), for planning read strategies:
 
 | File | Lines | Role |
 | --- | ---: | --- |
-| `stream/parser_impl.go` | 4,737 | Entire parser: block + inline |
-| `terminal/renderer.go` | 817 | Terminal ANSI renderer |
+| `stream/parser_impl.go` | 4,916 | Entire parser: block + inline + scanner hooks |
+| `terminal/renderer.go` | 909 | Terminal ANSI renderer |
 | `html/renderer.go` | 769 | HTML renderer |
-| `stream/event.go` | 202 | Event/Block/Style/LinkData types (public API) |
-| `stream/parser.go` | 47 | Parser interface + config |
+| `stream/event.go` | 247 | Event/Block/Style/LinkData/InlineData types (public API) |
+| `stream/parser.go` | 83 | Parser interface + config + InlineScanner API |
 | `stream/bench_test.go` | 121 | Parser-only benchmarks |
 | `competition/benchmarks/bench_test.go` | 286 | Cross-library comparison benchmarks |
 
@@ -131,8 +146,12 @@ Key changes that future work should be aware of:
 - **`InlineStyle.LinkData`** is a `*LinkData` pointer, nil for non-link
   events. Use `GetLink()`, `GetHasLink()` etc. accessor methods, or check
   `LinkData != nil` before accessing fields directly.
-- **Event struct is 144 bytes** (down from 248). InlineStyle is 24 bytes
-  (down from 104). Don't add fields to these structs without measuring impact.
+- **`Event.Inline` is a `*InlineData` pointer**, nil for normal Markdown text.
+  Use `EventInline` for custom atoms rather than adding fields to `InlineStyle`
+  or rewriting source text.
+- **Event struct is 152 bytes** (InlineStyle 24B + *LinkData + 4 pointers +
+  Span 48B). InlineStyle is 24 bytes. Don't add fields to these structs without
+  measuring impact.
 - **No `sort` import** in parser_impl.go. Emphasis style events use
   hand-written insertion sort (slices are 1-4 elements).
 - **`containsFold`/`indexFold`** are zero-alloc case-insensitive helpers.
@@ -149,8 +168,8 @@ Key changes that future work should be aware of:
 
 ### Struct Sizes
 
-- `Event`: 144 bytes (InlineStyle 24B + *LinkData + 3 pointers + Span 48B)
-- `inlineToken`: ~80 bytes (InlineStyle 24B + delimiter fields)
+- `Event`: 152 bytes (InlineStyle 24B + *LinkData + 4 pointers + Span 48B)
+- `inlineToken`: ~96 bytes (InlineStyle 24B + delimiter fields + Event for custom inline tokens)
 - `InlineStyle`: 24 bytes (6 bools + 2 int16 + *LinkData pointer)
 - `LinkData`: 72 bytes (4 strings + 1 bool)
 

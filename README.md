@@ -64,6 +64,7 @@ See [docs/compliance.md](docs/compliance.md) for details on remaining gaps.
 | Terminal render | yes | yes | yes | no | no |
 | Go fast path | **18x faster** | no | no | n/a | n/a |
 | OSC 8 hyperlinks | yes | no | no | n/a | n/a |
+| Inline extension events | yes | no | no | parser only | no |
 | TTY auto-detect | yes | no | no | n/a | n/a |
 | Dependencies | **2** | ~20 | ~15 | 0 | 0 |
 
@@ -112,7 +113,8 @@ chunks --> stream.Parser --> events --> terminal.Renderer --> output
 | `examples/demo`      | Streaming showcase with recording support   |
 
 The parser emits structure. The renderer owns presentation. Neither
-knows about the other's internals.
+knows about the other's internals. Custom inline scanners can add semantic
+inline atoms to the stream without preprocessing the source document.
 
 ## Dependencies
 
@@ -127,6 +129,69 @@ The terminal renderer has one dependency:
 No framework, no goldmark, no blackfriday. Written from scratch for
 streaming.
 
+## Inline Extensions
+
+Use `stream.WithInlineScanner` for small inline syntaxes that are not Markdown
+itself, such as emoji shortcodes, issue references, or mentions. Scanners run
+during inline tokenization after higher-precedence Markdown constructs such as
+backslash escapes and code spans, so `:ok:` inside backticks remains literal
+code while `**:ok:**` can produce a styled custom inline event.
+
+```go
+type emojiScanner struct{}
+
+func (emojiScanner) TriggerBytes() string { return ":" }
+
+func (emojiScanner) ScanInline(input string, _ stream.InlineContext) (stream.InlineScanResult, bool) {
+    if !strings.HasPrefix(input, ":ok:") {
+        return stream.InlineScanResult{}, false
+    }
+    return stream.InlineScanResult{
+        Consume: len(":ok:"),
+        Event: stream.Event{
+            Kind: stream.EventInline,
+            Inline: &stream.InlineData{
+                Type:         "emoji",
+                Source:       ":ok:",
+                Text:         "✅",
+                DisplayWidth: 2,
+            },
+        },
+    }, true
+}
+```
+
+Register the scanner directly on a parser:
+
+```go
+p := stream.NewParser(stream.WithInlineScanner(emojiScanner{}))
+```
+
+or through the terminal stream renderer:
+
+```go
+r := terminal.NewStreamRenderer(
+    os.Stdout,
+    terminal.WithParserOptions(stream.WithInlineScanner(emojiScanner{})),
+)
+```
+
+Terminal renderers handle unknown inline atoms by rendering `Inline.Text` and
+using `Inline.DisplayWidth` for tables and layout. For custom presentation,
+register a renderer by inline type:
+
+```go
+renderer := terminal.NewRenderer(os.Stdout,
+    terminal.WithInlineRenderer("emoji", func(ev stream.Event) (terminal.InlineRenderResult, bool) {
+        return terminal.InlineRenderResult{Text: ev.Inline.Text, Width: ev.Inline.DisplayWidth}, true
+    }),
+)
+```
+
+Source preprocessors are intentionally not the main extension mechanism: they
+can break source spans, CommonMark precedence, and chunk-safety. Prefer scanners
+for inline syntax and renderer hooks for presentation.
+
 ## Terminal Renderer
 
 - **Syntax highlighting** -- Go via stdlib AST (18x faster than Chroma),
@@ -134,6 +199,8 @@ streaming.
 - **OSC 8 hyperlinks** -- inline and reference links are clickable
 - **Word wrapping** -- auto-detected terminal width or `WithWrapWidth`
 - **TTY detection** -- ANSI escapes stripped when piped or redirected
+- **Inline atoms** -- custom `EventInline` renderers with display-width-aware
+  table layout
 - **Configurable** -- code block borders, padding, indentation, ANSI mode
 
 ## Testing
@@ -160,7 +227,8 @@ task competition:full       # full pipeline: metadata + compliance + bench + rep
 2. Events emit at **block boundaries** -- not deferred until flush
 3. Memory bounded by **unresolved state** -- not document size
 4. Renderer **never parses** Markdown syntax
-5. Terminal rendering is the **first-class output path**
+5. Custom inline syntax uses **scanner events**, not source preprocessing
+6. Terminal rendering is the **first-class output path**
 
 ## Roadmap
 
