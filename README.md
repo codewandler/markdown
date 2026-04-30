@@ -8,7 +8,7 @@ Parse incrementally. Render immediately. Keep memory bounded.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![CommonMark](https://img.shields.io/badge/CommonMark-100%25-brightgreen)](https://spec.commonmark.org/)
-[![GFM](https://img.shields.io/badge/GFM-98.7%25-brightgreen)](https://github.github.com/gfm/)
+[![GFM](https://img.shields.io/badge/GFM-97.1%25-brightgreen)](https://github.github.com/gfm/)
 
 <img src="examples/demo/demo.gif" alt="demo" width="720">
 
@@ -21,9 +21,10 @@ Parse incrementally. Render immediately. Keep memory bounded.
 - **3-7x faster** than glamour on real-world documents, up to
   **121x faster** on pathological inputs
   ([benchmarks](COMPARISON.md))
-- **100% CommonMark** (652/652), **98.7% GFM** (663/672) -- higher compliance than
-  goldmark (99.2% / 97.5%), blackfriday (37.4%), and gomarkdown (40.3%)
-  ([measured](competition/benchmarks/compliance_test.go))
+- **100% CommonMark** (652/652), **97.1% GFM** (707/728) -- higher compliance than
+  goldmark (94.8%), blackfriday (34.6%), and gomarkdown (36.8%)
+  ([measured](competition/benchmarks/gfmext_test.go),
+  [details](docs/compliance.md))
 - **2 dependencies** -- parser is pure stdlib; only Chroma for
   non-Go syntax highlighting
 - **18x faster Go highlighting** than Chroma via built-in stdlib
@@ -47,8 +48,13 @@ Benchmarked against 5 Go Markdown libraries. Full results in
 
 | Spec | ours | goldmark | blackfriday | gomarkdown |
 | --- | ---: | ---: | ---: | ---: |
-| CommonMark 0.31.2 | **652/652 (100.0%)** | 647/652 (99.2%) | 244/652 (37.4%) | 263/652 (40.3%) |
-| GFM 0.29 | **663/672 (98.7%)** | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
+| CommonMark 0.31.2 | **652/652 (100%)** | 647/652 (99.2%) | 244/652 (37.4%) | 263/652 (40.3%) |
+| GFM 0.29 spec.txt | **663/672 (98.7%)** | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
+| GFM extensions.txt | **16/30** | 21/30 | 1/30 | 1/30 |
+| GFM regression.txt | **15/26** | 14/26 | 4/26 | 4/26 |
+| **GFM total** | **707/728 (97.1%)** | 690/728 (94.8%) | 252/728 (34.6%) | 268/728 (36.8%) |
+
+See [docs/compliance.md](docs/compliance.md) for details on remaining gaps.
 
 ### Feature matrix
 
@@ -101,8 +107,9 @@ chunks --> stream.Parser --> events --> terminal.Renderer --> output
 | -------------------- | ------------------------------------------- |
 | `stream`             | Incremental parser, append-only event model |
 | `terminal`           | Terminal renderer over `stream.Event`       |
+| `html`               | HTML renderer over `stream.Event`           |
+| `competition`        | Comparative benchmarks against 5 libraries  |
 | `examples/demo`      | Streaming showcase with recording support   |
-| `benchmarks`         | Comparative benchmarks against 5 libraries  |
 
 The parser emits structure. The renderer owns presentation. Neither
 knows about the other's internals.
