@@ -394,7 +394,7 @@ func TestCombinedStyles(t *testing.T) {
 		exitPara(), exitDoc(),
 	}
 	got, _ := RenderString(events)
-	want := "<p><strong><em>text</em></strong></p>\n"
+	want := "<p><em><strong>text</strong></em></p>\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

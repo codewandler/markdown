@@ -555,7 +555,7 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 		r.tagStack = append(r.tagStack, t)
 	}
 
-	// Open new tags. Order: del (outermost) → link → strong → em (innermost).
+	// Open new tags. Order per Rule 14: del → link → em → strong (innermost).
 	if s.Strike && !r.hasTag(tagDel) {
 		tag := inlineTag{kind: tagDel}
 		r.writeOpenTag(tag)
@@ -566,21 +566,21 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 		r.writeOpenTag(tag)
 		r.tagStack = append(r.tagStack, tag)
 	}
-	newSt := 0
-	for _, t := range r.tagStack {
-		if t.kind == tagStrong { newSt++ }
-	}
-	for i := newSt; i < sSt; i++ {
-		tag := inlineTag{kind: tagStrong}
-		r.writeOpenTag(tag)
-		r.tagStack = append(r.tagStack, tag)
-	}
 	newEm := 0
 	for _, t := range r.tagStack {
 		if t.kind == tagEm { newEm++ }
 	}
 	for i := newEm; i < sEm; i++ {
 		tag := inlineTag{kind: tagEm}
+		r.writeOpenTag(tag)
+		r.tagStack = append(r.tagStack, tag)
+	}
+	newSt := 0
+	for _, t := range r.tagStack {
+		if t.kind == tagStrong { newSt++ }
+	}
+	for i := newSt; i < sSt; i++ {
+		tag := inlineTag{kind: tagStrong}
 		r.writeOpenTag(tag)
 		r.tagStack = append(r.tagStack, tag)
 	}

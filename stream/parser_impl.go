@@ -980,14 +980,16 @@ func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) 
 }
 
 func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
-	if p.table.active || len(p.paragraph.lines) != 1 {
+	if p.table.active || len(p.paragraph.lines) == 0 {
 		return false
 	}
 	align, ok := parseTableSeparator(line.text)
 	if !ok {
 		return false
 	}
-	header := p.paragraph.lines[0]
+	// The table header is the last paragraph line. If there are
+	// earlier lines, emit them as a paragraph first.
+	header := p.paragraph.lines[len(p.paragraph.lines)-1]
 	headerCells, headerHasPipe := splitTableRow(header.text)
 	if !headerHasPipe {
 		return false
@@ -1010,9 +1012,11 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 
 	p.ensureDocument(events)
 	p.closeIndentedCode(events)
-	clear(p.paragraph.lines)
-	if cap(p.paragraph.lines) > 1024 {
-		p.paragraph.lines = nil
+	// If the paragraph had lines before the header, emit them as a paragraph.
+	if len(p.paragraph.lines) > 1 {
+		prevLines := p.paragraph.lines[:len(p.paragraph.lines)-1]
+		p.paragraph.lines = prevLines
+		p.closeParagraph(events)
 	} else {
 		p.paragraph.lines = p.paragraph.lines[:0]
 	}
