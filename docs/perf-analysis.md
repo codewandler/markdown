@@ -656,3 +656,40 @@ cd competition && go test -run='^$' -bench='BenchmarkParse/ours/Spec$' -benchmem
 This is kept primarily as a robustness/adversarial-input allocation win; main
 corpus speed remains within local benchmark noise.
 
+
+### Opt 16: Remove maps from emphasis resolver hot path (2026-04-30)
+
+Replaced two small maps in `resolveEmphasisReuse`:
+
+- `openersBottom map[int]int` -> fixed `[18]int` array keyed by delimiter,
+  closer-can-open state, and original-run modulo.
+- `events map[int][]styleEvent` -> flat `[]styleEvent` sorted by token index
+  and event ordering.
+
+The flat event slice removes per-emphasis map allocation and map lookups during
+phase 2. The pathological delimiter benchmark benefits most because it creates
+many emphasis candidates.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | 0.96 ms | 0.95 ms | ~same / slight win |
+| CommonMark corpus memory | 1.46 MB | 1.46 MB | same |
+| CommonMark corpus allocations | 3,225 | 3,019 | **-6.4%** |
+| Tiny chunks allocations | 22,916 | 22,710 | **-206 allocs** |
+| Pathological delimiter speed | ~36 ms | ~32 ms | **~11% faster** |
+| Pathological delimiter memory | 75.9 MB | 74.7 MB | **-1.6%** |
+| Pathological delimiter allocations | 26,863 | 13,453 | **-49.9%** |
+| Competition Spec speed | ~2.70 ms | ~2.57 ms | **~5% faster** |
+| Competition Spec allocations | 8,835 | 7,835 | **-11.3%** |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus|BenchmarkParserMalformedInlineDelimiters|BenchmarkParserPathologicalInlineDelimiters$' -benchmem -count=3 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/Spec$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+A standalone `openersBottom` array change improved normal corpus allocations but
+regressed pathological delimiter speed. The final version keeps that array and
+also removes the style-event map, which restores and improves pathological
+performance while reducing allocation count substantially.

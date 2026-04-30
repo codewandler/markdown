@@ -3009,49 +3009,43 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 	// We build a stack of active styles. For each token position, we check
 	// if any pair opens or closes here.
 
-	// Build open/close events keyed by token index.
+	// Build open/close events sorted by token index. A flat slice avoids the
+	// per-paragraph map allocation from the original implementation.
 	type styleEvent struct {
+		idx   int
 		use   int
 		delim byte
 		open  bool // true = open, false = close
 		seq   int  // ordering for multiple events at same position
 	}
-	events := map[int][]styleEvent{}
+	events := make([]styleEvent, 0, len(pairs)*2)
 	for i, p := range pairs {
 		// Open event goes right after the opener token.
 		// Close event goes right before the closer token.
-		// We key by token index and use a convention:
-		// opener: event at openerIdx, phase=open
-		// closer: event at closerIdx, phase=close
-		events[p.openerIdx] = append(events[p.openerIdx], styleEvent{use: p.use, delim: p.delim, open: true, seq: i})
-		events[p.closerIdx] = append(events[p.closerIdx], styleEvent{use: p.use, delim: p.delim, open: false, seq: i})
+		events = append(events, styleEvent{idx: p.openerIdx, use: p.use, delim: p.delim, open: true, seq: i})
+		events = append(events, styleEvent{idx: p.closerIdx, use: p.use, delim: p.delim, open: false, seq: i})
 	}
 
-	// Sort events at each position so opens come before closes.
-	// The first-matched pair is the innermost (closest opener-closer),
-	// so opens sort by seq descending (outer first = last matched)
-	// and closes sort by seq ascending (inner first = first matched).
-	// Sort events at each position: opens before closes,
-	// opens by seq descending, closes by seq ascending.
-	// Insertion sort — slices are typically 1-4 elements.
-	for idx := range events {
-		ev := events[idx]
-		for i := 1; i < len(ev); i++ {
-			for j := i; j > 0; j-- {
-				a, b := ev[j], ev[j-1]
-				swap := false
-				if a.open != b.open {
-					swap = a.open // opens before closes
-				} else if a.open {
-					swap = a.seq > b.seq // opens: outer first
-				} else {
-					swap = a.seq < b.seq // closes: inner first
-				}
-				if !swap {
-					break
-				}
-				ev[j], ev[j-1] = ev[j-1], ev[j]
+	// Sort events by token index, then by event order at that position:
+	// opens before closes, opens by seq descending, closes by seq ascending.
+	// Insertion sort keeps the common small-pair case allocation-free.
+	for i := 1; i < len(events); i++ {
+		for j := i; j > 0; j-- {
+			a, b := events[j], events[j-1]
+			swap := false
+			if a.idx != b.idx {
+				swap = a.idx < b.idx
+			} else if a.open != b.open {
+				swap = a.open // opens before closes
+			} else if a.open {
+				swap = a.seq > b.seq // opens: outer first
+			} else {
+				swap = a.seq < b.seq // closes: inner first
 			}
+			if !swap {
+				break
+			}
+			events[j], events[j-1] = events[j-1], events[j]
 		}
 	}
 
@@ -3077,8 +3071,14 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 	var dsStack []depthStyle
 	current := depthStyle{}
 
+	eventPos := 0
 	for i, tok := range tokens {
-		if evs, ok := events[i]; ok {
+		eventStart := eventPos
+		for eventPos < len(events) && events[eventPos].idx == i {
+			eventPos++
+		}
+		if eventStart < eventPos {
+			evs := events[eventStart:eventPos]
 			// For openers, remaining delimiter text is a prefix
 			// (emitted before the open, as literal text).
 			// For closers, remaining text is a suffix (emitted
