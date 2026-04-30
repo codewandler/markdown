@@ -15,6 +15,9 @@ import (
 // local image references with ANSI-rendered pixel art. Remote URLs are
 // left as-is for the Markdown renderer to handle.
 func replaceAllImages(input string, baseDir string) string {
+	// Replace HTML <img> tags with rendered images.
+	input = replaceHTMLImages(input, baseDir)
+
 	if !strings.Contains(input, "![") {
 		return input
 	}
@@ -94,6 +97,73 @@ func renderImage(src string, baseDir string) string {
 	}
 
 	return img.Render()
+}
+
+// replaceHTMLImages finds <img src="..."> tags and replaces local
+// image references with ANSI-rendered pixel art.
+func replaceHTMLImages(input string, baseDir string) string {
+	if !strings.Contains(input, "<img") {
+		return input
+	}
+	var b strings.Builder
+	b.Grow(len(input))
+	i := 0
+	for i < len(input) {
+		idx := strings.Index(input[i:], "<img")
+		if idx < 0 {
+			b.WriteString(input[i:])
+			break
+		}
+		b.WriteString(input[i : i+idx])
+		pos := i + idx
+
+		// Find the closing >
+		end := strings.IndexByte(input[pos:], '>')
+		if end < 0 {
+			b.WriteString(input[pos:])
+			break
+		}
+		tag := input[pos : pos+end+1]
+
+		// Extract src attribute.
+		src := extractAttr(tag, "src")
+		if src != "" && !isURL(src) {
+			rendered := renderImage(src, baseDir)
+			if rendered != "" {
+				b.WriteString(rendered)
+			} else {
+				alt := extractAttr(tag, "alt")
+				if alt == "" {
+					alt = src
+				}
+				b.WriteString(fmt.Sprintf("[image: %s]", alt))
+			}
+		} else {
+			// Remote or no src — keep as-is.
+			b.WriteString(tag)
+		}
+		i = pos + end + 1
+	}
+	return b.String()
+}
+
+// extractAttr extracts the value of an HTML attribute from a tag string.
+func extractAttr(tag, attr string) string {
+	// Look for attr="value" or attr='value'
+	for _, q := range []byte{'"', '\''} {
+		pattern := attr + "=" + string(q)
+		idx := strings.Index(tag, pattern)
+		if idx < 0 {
+			continue
+		}
+		start := idx + len(pattern)
+		end := strings.IndexByte(tag[start:], q)
+		if end < 0 {
+			continue
+		}
+		return tag[start : start+end]
+	}
+	return ""
 }
 
 func isURL(s string) bool {
