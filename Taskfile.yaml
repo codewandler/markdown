@@ -40,6 +40,10 @@ tasks:
     desc: Build all packages
     cmd: go build ./...
 
+  view:
+    desc: Render a Markdown file in the terminal
+    cmd: go run ./cmd/mdview {{.CLI_ARGS}}
+
   # --- Competition pipeline ---
 
   competition:metadata:

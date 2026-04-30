@@ -54,9 +54,9 @@ type parser struct {
 	listData           ListData
 	listLoose          bool
 	inListItem         bool
-	listItemIndent     int  // content column: marker indent + marker width + padding
-	listItemBlankLine  bool // saw a blank line inside the current list item
-	listItemHasContent bool // true if the list item has had any content
+	listItemIndent     int         // content column: marker indent + marker width + padding
+	listItemBlankLine  bool        // saw a blank line inside the current list item
+	listItemHasContent bool        // true if the list item has had any content
 	listStack          []savedList // stack for nested lists
 	inIndented         bool
 	indentedBlankLines []string // buffered whitespace-only lines (after indent strip)
@@ -73,12 +73,12 @@ type parser struct {
 
 // savedList stores the state of an outer list when entering a sublist.
 type savedList struct {
-	inList            bool
-	listData          ListData
-	listLoose         bool
-	inListItem        bool
-	listItemIndent    int
-	listItemBlankLine bool
+	inList             bool
+	listData           ListData
+	listLoose          bool
+	inListItem         bool
+	listItemIndent     int
+	listItemBlankLine  bool
 	listItemHasContent bool
 }
 
@@ -262,7 +262,7 @@ func (p *parser) processLine(line lineInfo, events *[]Event) {
 		} else if p.inListItem {
 			// Inside a list item, check if the line starts a new list item
 			// (for type 6/7 HTML blocks which end at blank lines or new containers).
-			if (p.htmlBlockType == 6 || p.htmlBlockType == 7) {
+			if p.htmlBlockType == 6 || p.htmlBlockType == 7 {
 				if _, ok := listItem(line.text); ok {
 					p.closeHTMLBlock(events)
 					// Fall through to process the line normally.
@@ -1759,7 +1759,6 @@ func (p *parser) closeListItem(events *[]Event) {
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockListItem})
 }
 
-
 func (p *parser) processFenceLine(line lineInfo, events *[]Event) {
 	if p.isClosingFence(line.text) {
 		p.fence.open = false
@@ -2293,8 +2292,8 @@ func blockquoteContent(line string) (string, bool) {
 }
 
 type listItemData struct {
-	data         ListData
-	content      string
+	data          ListData
+	content       string
 	contentIndent int // column where content starts
 }
 
@@ -2600,8 +2599,8 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAu
 
 func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, gfmAutolinks bool, tokens []inlineToken) []inlineToken {
 	var prevSource string
-	imagePossible := strings.Contains(text, "](")
 	linkPossible := strings.Contains(text, "](")
+	imagePossible := linkPossible
 	autolinkPossible := strings.Contains(text, ">")
 	for len(text) > 0 {
 		if text[0] == '\n' {
@@ -3131,8 +3130,12 @@ func mergeInlineStyles(base, add InlineStyle) InlineStyle {
 	// Depths are additive: outer emphasis + inner emphasis = nested.
 	out.EmphasisDepth += add.EmphasisDepth
 	out.StrongDepth += add.StrongDepth
-	if out.EmphasisDepth > 0 { out.Emphasis = true }
-	if out.StrongDepth > 0 { out.Strong = true }
+	if out.EmphasisDepth > 0 {
+		out.Emphasis = true
+	}
+	if out.StrongDepth > 0 {
+		out.Strong = true
+	}
 	if add.LinkData != nil && add.LinkData.HasLink {
 		out.LinkData = add.LinkData
 	}
@@ -3578,7 +3581,7 @@ func indexFold(s, substr string) int {
 		return -1
 	}
 	for i := 0; i <= len(s)-len(substr); i++ {
-		if strings.EqualFold(s[i:i+len(substr)], substr) {
+		if equalFoldASCII(s[i:i+len(substr)], substr) {
 			return i
 		}
 	}
@@ -3595,11 +3598,35 @@ func containsFold(s, substr string) bool {
 		return false
 	}
 	for i := 0; i <= len(s)-len(substr); i++ {
-		if strings.EqualFold(s[i:i+len(substr)], substr) {
+		if equalFoldASCII(s[i:i+len(substr)], substr) {
 			return true
 		}
 	}
 	return false
+}
+
+// equalFoldASCII reports whether s equals lowerASCII under ASCII-only case
+// folding. lowerASCII must already be lowercase ASCII. This intentionally
+// avoids strings.EqualFold's Unicode handling for CommonMark's ASCII-only
+// HTML tag and URI scheme matching hot paths.
+func equalFoldASCII(s, lowerASCII string) bool {
+	if len(s) != len(lowerASCII) {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := asciiLower(s[i])
+		if c != lowerASCII[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func asciiLower(c byte) byte {
+	if 'A' <= c && c <= 'Z' {
+		return c + ('a' - 'A')
+	}
+	return c
 }
 
 // parseRawHTMLTag tries to parse a raw HTML tag at the start of text.
@@ -4504,40 +4531,39 @@ func trimAutolinkLiteralSuffix(candidate string) string {
 }
 
 func nextAutolinkLiteralStart(text string, prevSource string) int {
-	best := -1
-	for _, prefix := range []string{"http://", "https://", "ftp://", "www."} {
-		search := 0
-		for {
-			i := indexFold(text[search:], prefix)
-			if i < 0 {
-				break
-			}
-			i += search
-			if autolinkLiteralBoundaryAt(text, i, prevSource) && (best < 0 || i < best) {
-				best = i
-				break
-			}
-			search = i + 1
-		}
-	}
 	for i := 0; i < len(text); i++ {
-		if text[i] != '@' {
-			continue
-		}
-		start := i
-		for start > 0 && isEmailLocalAutolinkByte(text[start-1]) {
-			start--
-		}
-		if start == i || !autolinkLiteralBoundaryAt(text, start, prevSource) {
-			continue
-		}
-		candidate, _ := scanAutolinkLiteralCandidate(text[start:])
-		candidate = trimAutolinkLiteralSuffix(candidate)
-		if isEmailAutolink(candidate) && (best < 0 || start < best) {
-			best = start
+		switch asciiLower(text[i]) {
+		case 'h':
+			if i+7 <= len(text) && equalFoldASCII(text[i:i+7], "http://") && autolinkLiteralBoundaryAt(text, i, prevSource) {
+				return i
+			}
+			if i+8 <= len(text) && equalFoldASCII(text[i:i+8], "https://") && autolinkLiteralBoundaryAt(text, i, prevSource) {
+				return i
+			}
+		case 'f':
+			if i+6 <= len(text) && equalFoldASCII(text[i:i+6], "ftp://") && autolinkLiteralBoundaryAt(text, i, prevSource) {
+				return i
+			}
+		case 'w':
+			if i+4 <= len(text) && equalFoldASCII(text[i:i+4], "www.") && autolinkLiteralBoundaryAt(text, i, prevSource) {
+				return i
+			}
+		case '@':
+			start := i
+			for start > 0 && isEmailLocalAutolinkByte(text[start-1]) {
+				start--
+			}
+			if start == i || !autolinkLiteralBoundaryAt(text, start, prevSource) {
+				continue
+			}
+			candidate, _ := scanAutolinkLiteralCandidate(text[start:])
+			candidate = trimAutolinkLiteralSuffix(candidate)
+			if isEmailAutolink(candidate) {
+				return start
+			}
 		}
 	}
-	return best
+	return -1
 }
 
 func autolinkLiteralBoundaryAt(text string, start int, prevSource string) bool {

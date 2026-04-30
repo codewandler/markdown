@@ -371,3 +371,71 @@ on the common path instead of `bytes.IndexAny(_, "\r\n")` (generic).
 | Allocations | 3,735 | 3,735 | same |
 
 Cumulative from baseline: speed -47.1%, memory -73.9%, allocs -51.3%.
+
+### Opt 11: ASCII-only fold matching for hot-path tag/scheme scans (2026-04-30)
+
+Replaced `strings.EqualFold` inside `indexFold`/`containsFold` with a
+byte-wise ASCII-only fold helper. These helpers are used for CommonMark/GFM
+HTML tag and URI scheme matching, where the match strings are lowercase ASCII.
+This avoids Unicode case-folding overhead in the inline/autolink hot path.
+
+- Added `equalFoldASCII(s, lowerASCII)`.
+- Updated `indexFold` and `containsFold` to use ASCII byte comparison.
+- Kept zero-allocation behavior.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.22 ms | 0.99 ms | **-18.5%** |
+| Memory | 1.47 MB | 1.47 MB | same |
+| Allocations | 3,893 | 3,893 | same |
+
+Benchmark command: `go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus$' -benchmem -count=5 -benchtime=1s ./stream/`.
+The before number uses the immediately preceding local baseline run (count=3,
+noisy but representative); the after number is the five-run average.
+
+Cumulative from current post-Opt-10 baseline: speed ~-18.5%, memory same,
+allocs same.
+
+### Opt 12: Reuse inline link scan result for image precheck (2026-04-30)
+
+Removed a duplicate `strings.Contains(text, "](")` scan at the start of
+`tokenizeInlineReuse`. Inline links and inline images use the same cheap
+precheck marker, so the result can be computed once and assigned to both
+`linkPossible` and `imagePossible`.
+
+```go
+linkPossible := strings.Contains(text, "](")
+imagePossible := linkPossible
+```
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 0.99 ms | 1.06 ms | noisy / no measurable win |
+| Memory | 1.47 MB | 1.47 MB | same |
+| Allocations | 3,893 | 3,893 | same |
+
+Benchmark command: `GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus$' -benchmem -count=5 -benchtime=1s ./stream/`.
+The measured runtime was within local benchmark noise and did not show a stable
+win, but the change removes a provably redundant full-string scan with no API or
+correctness trade-off.
+
+### Opt 13: Single-pass GFM autolink literal start scan (2026-04-30)
+
+Replaced `nextAutolinkLiteralStart`'s four separate case-insensitive prefix
+searches plus email scan with one left-to-right byte scan. The scanner checks
+only bytes that can start a GFM autolink literal candidate (`h`, `f`, `w`, `@`)
+and returns the first valid boundary-preserving candidate.
+
+This removes repeated full-string scans for `http://`, `https://`, `ftp://`,
+`www.`, and email starts on plain text segments.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.06 ms | 1.02 ms | **-3.1%** |
+| Memory | 1.47 MB | 1.47 MB | same |
+| Allocations | 3,893 | 3,893 | same |
+
+Benchmark command: `GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus$' -benchmem -count=5 -benchtime=1s ./stream/`.
+The improvement is CPU-only and benchmark noise is still visible, but the code
+now does one autolink candidate pass instead of up to five passes over the same
+text segment.
