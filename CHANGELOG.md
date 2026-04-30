@@ -10,6 +10,87 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-04-30
+
+### Performance
+
+- **10 parser optimizations** — speed -45%, memory -74%, allocations -49%.
+  Internal benchmark: 2.04ms/5.6MB/7,668 allocs → 1.12ms/1.47MB/3,893 allocs.
+  - `parseInline` appends directly into `*[]Event` (eliminates intermediate slice).
+  - `resolveEmphasis` output slice pooled on parser struct.
+  - Zero-alloc `containsFold`/`indexFold` helpers replace `strings.ToLower`.
+  - `splitTableRow` cells slice pooled on parser struct.
+  - `EventKind`/`BlockKind` changed from `string` to `uint8` (Event 248B → 224B).
+  - `InlineStyle` link fields moved behind `*LinkData` pointer (Event 224B → 144B).
+  - Events slice pre-sized by counting newlines in `Write`.
+  - `sort.SliceStable` replaced with hand-written insertion sort.
+  - `strings.ToLower` eliminated from autolink detection hot path.
+  - `bytes.IndexByte` replaces `bytes.IndexAny` in Write line-splitting loop.
+- Full optimization log with per-change benchmarks in `docs/perf-analysis.md`.
+
+**Parse-only vs goldmark** (competition benchmark):
+
+| Metric | v0.39.1 | v0.40.0 | goldmark | improvement |
+| --- | ---: | ---: | ---: | --- |
+| Speed (Spec) | 7.8ms | 3.8ms | 1.7ms | 4.6x → **2.3x slower** |
+| Speed (README) | 908µs | 522µs | 214µs | 3.8x → **2.4x slower** |
+| Allocs (Spec) | 22.3K | **9.8K** | 11.4K | 2.0x more → **1.2x fewer** ⭐ |
+| Allocs (README) | 3.2K | **942** | 1.4K | 2.4x more → **1.5x fewer** ⭐ |
+| Memory (Spec) | 25.8MB | 8.1MB | 1.7MB | 15.5x → **4.9x more** |
+| Memory (README) | 2.8MB | 993KB | 209KB | 14.0x → **4.8x more** |
+
+We now **beat goldmark on allocation count** across all inputs — a first.
+
+**Terminal rendering vs glamour** (parse + render):
+
+| Metric | v0.39.1 | v0.40.0 | improvement |
+| --- | ---: | ---: | --- |
+| Spec speed | 9.2ms | **4.9ms** | 4.4x → **8.4x faster** than glamour |
+| Spec allocs | 56.1K | **43.6K** | 5.4x → **7.0x fewer** than glamour |
+| Spec memory | 21.8MB | **4.2MB** | 1.7x → **8.9x less** than glamour |
+| README memory | 2.6MB | **762KB** | 2.0x → **6.6x less** than glamour |
+| GitHubTop10 allocs | 40.2K | **28.9K** | 9.1x → **12.7x fewer** than glamour |
+
+**Streaming** ⭐ — still the only Go Markdown parser that streams, now
+twice as fast. Parse incrementally, render immediately, keep memory bounded.
+
+### Fixed
+
+- **GFM compliance: 663/672 → 707/728 (97.1% full suite)**, surpassing
+  goldmark (690/728, 94.8%). Now tested against the complete GFM corpus:
+  spec.txt (663/672) + extensions.txt (22/30) + regression.txt (22/26).
+- GFM emphasis nesting order and code span wrapping edge cases.
+- GFM autolink quote terminators and www underscore domain validation.
+- GFM strikethrough nesting and delimiter matching.
+- GFM table delimiter/header column count mismatch handling.
+- Table header detection now uses last paragraph line (not first) when
+  paragraph has multiple lines before the delimiter row.
+- HTML renderer: strikethrough tag ordering per Rule 14 (del → link → em → strong).
+
+### Added
+
+- GFM `extensions.txt` and `regression.txt` test corpora (30 + 26 examples).
+- COMPARISON.md now shows full GFM corpus breakdown (spec + extensions + regression).
+- `docs/compliance.md` — GFM compliance tracking document.
+- `LinkData` type — holds link-related strings, allocated only for link/image events.
+- `InlineStyle.GetLink()`, `GetHasLink()`, `GetLinkTitle()`, `GetImageLink()`,
+  `GetImageLinkTitle()` accessor methods.
+- `EventKind.String()` and `BlockKind.String()` methods.
+
+### Changed (Breaking)
+
+- **`EventKind` and `BlockKind`** changed from `string` to `uint8`. All
+  switch/comparison code works unchanged. Code that formats these values
+  as strings should use the `.String()` method.
+- **`InlineStyle`** restructured: `Link`, `LinkTitle`, `HasLink`, `ImageLink`,
+  `ImageLinkTitle` fields moved to `*LinkData` pointer (`InlineStyle.LinkData`).
+  Use accessor methods (`GetLink()`, `GetHasLink()`, etc.) or check
+  `LinkData != nil` before accessing fields directly.
+- `Event` struct size reduced from 248 to 144 bytes.
+- `InlineStyle` struct size reduced from 104 to 24 bytes.
+- `EmphasisDepth` and `StrongDepth` changed from `int` to `int16`.
+- `sort` package no longer imported in `parser_impl.go`.
+
 ## [0.39.1] - 2026-04-30
 
 ### Fixed

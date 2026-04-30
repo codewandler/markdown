@@ -18,8 +18,8 @@ Parse incrementally. Render immediately. Keep memory bounded.
 
 - **Only streaming Markdown renderer in Go** -- no other library
   supports chunk-by-chunk parsing and rendering
-- **3-7x faster** than glamour on real-world documents, up to
-  **121x faster** on pathological inputs
+- **3-8x faster** than glamour on real-world documents, **fewer
+  allocations than goldmark** on every input
   ([benchmarks](COMPARISON.md))
 - **100% CommonMark** (652/652), **97.1% GFM** (707/728) -- higher compliance than
   goldmark (94.8%), blackfriday (34.6%), and gomarkdown (36.8%)
