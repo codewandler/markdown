@@ -2639,6 +2639,17 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 				}
 			}
 		}
+		// Footnote references [^...] — not supported, emit as literal text.
+		if text[0] == '[' && len(text) > 1 && text[1] == '^' {
+			close := strings.IndexByte(text[2:], ']')
+			if close >= 0 {
+				end := 2 + close + 1
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:end]})
+				prevSource = text[:end]
+				text = text[end:]
+				continue
+			}
+		}
 		if text[0] == '[' && linkPossible {
 			if ev, rest, labelRaw, ok := parseInlineLink(text, span); ok {
 				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
@@ -3903,6 +3914,9 @@ func parseInlineLinkDestination(text string, start int) (string, int, bool) {
 				escaped = true
 				continue
 			}
+			if c == '<' {
+				return "", start, false
+			}
 			if c == '>' {
 				dest := decodeCharacterReferences(unescapeBackslashPunctuation(text[start+1 : i]))
 				return dest, i + 1, true
@@ -3921,7 +3935,7 @@ func parseInlineLinkDestination(text string, start int) (string, int, bool) {
 			escaped = false
 			continue
 		}
-		if c == '\\' {
+		if c == '\\' && i+1 < len(text) && isEscapablePunctuation(text[i+1]) {
 			escaped = true
 			continue
 		}
