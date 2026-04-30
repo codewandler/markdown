@@ -14,6 +14,11 @@ match these entries as the project starts publishing releases.
 
 ### Added
 
+- `cmd/mdview` terminal Markdown viewer, including emoji shortcodes, HTML noise
+  stripping, inline/HTML image handling, remote image downloads, and Kitty
+  graphics protocol output for supported terminals.
+- `stream.InlineScanner` extension points and `EventInline`/`InlineData` events
+  for chunk-safe custom inline atoms such as emoji shortcodes.
 - `terminal.LiveRenderer` for interactive terminal output that redraws the active
   table as rows arrive, avoiding visibly misaligned streaming tables when later
   rows widen a column.
@@ -25,6 +30,17 @@ match these entries as the project starts publishing releases.
   `--table-overflow`, `--table-max-width`, and `--live`.
 - `examples/demo` now uses live table redraws by default; pass `--live=false`
   to use append-only streaming.
+
+### Fixed
+
+- Preserved spacing around rendered images and stripped HTML wrapper tags without
+  collapsing surrounding Markdown content.
+- Skipped GIF raster rendering in `mdview`, showing a placeholder instead.
+
+### Performance
+
+- Reduced inline parser overhead in emphasis, paragraph, table, punctuation, and
+  image-alt-text hot paths.
 
 ## [0.40.0] - 2026-04-30
 
