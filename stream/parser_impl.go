@@ -1042,16 +1042,10 @@ func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) 
 	p.drainPendingBlocks(events)
 	start := p.paragraph.lines[0].span.Start
 	end := underline.End
-	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: Span{Start: start, End: end}})
-	var text strings.Builder
-	for i, line := range p.paragraph.lines {
-		if i > 0 {
-			text.WriteByte('\n')
-		}
-		text.WriteString(line.text)
-	}
-	p.parseInline(text.String(), Span{Start: start, End: end}, events)
-	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: Span{Start: start, End: end}})
+	span := Span{Start: start, End: end}
+	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: span})
+	p.parseInline(paragraphText(p.paragraph.lines), span, events)
+	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: span})
 	p.clearParagraphLines()
 }
 

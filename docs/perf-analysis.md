@@ -592,3 +592,33 @@ cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec
 This is a small but stable win on the CommonMark corpus and avoids wasted work
 on non-table paragraph continuations.
 
+
+### Opt 18: Reuse paragraph text helper for setext headings (2026-04-30)
+
+`closeSetextHeading` manually built heading text with a fresh `strings.Builder`.
+It now reuses `paragraphText`, which has the single-line no-copy fast path added
+for paragraph emission. This avoids unnecessary string building for single-line
+setext headings.
+
+Implementation details:
+
+- Replaced the local `strings.Builder` join in `closeSetextHeading` with
+  `paragraphText(p.paragraph.lines)`.
+- Reused one `Span` value for heading enter/inline/exit events.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | 0.96 ms | 0.99 ms | noisy / no clear win |
+| CommonMark corpus memory | 1.46 MB | 1.46 MB | ~same |
+| CommonMark corpus allocations | 3,246 | 3,225 | **-21 allocs** |
+| Competition Spec allocations | 8,835 | 8,835 | same |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus$' -benchmem -count=5 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/ours/Spec$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+This is kept as a small allocation-only cleanup; speed measurements were within
+local benchmark noise.
