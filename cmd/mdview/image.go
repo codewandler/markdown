@@ -56,6 +56,22 @@ func splitImages(input string, baseDir string) []segment {
 			}
 		}
 
+		// Check for [![alt](img-src)](link) — linked image (e.g. badges).
+		if strings.HasPrefix(input[i:], "[![") {
+			if end := matchLinkedImage(input[i:]); end > 0 {
+				src := extractImageSrc(input[i+1 : i+end])
+				if src != "" {
+					rendered := renderImage(src, baseDir)
+					if rendered != "" {
+						flushText()
+						segs = append(segs, segment{content: rendered, isImage: true})
+						i += end
+						continue
+					}
+				}
+			}
+		}
+
 		// Check for ![alt](src).
 		if strings.HasPrefix(input[i:], "![") {
 			altEnd := strings.Index(input[i+2:], "](")
@@ -68,7 +84,7 @@ func splitImages(input string, baseDir string) []segment {
 					rendered := renderImage(src, baseDir)
 					if rendered != "" {
 						flushText()
-						segs = append(segs, segment{content: rendered + "\n", isImage: true})
+						segs = append(segs, segment{content: rendered, isImage: true})
 						i = srcEnd + 1
 						continue
 					}
@@ -144,6 +160,47 @@ func rewriteImageURL(u string) string {
 		return strings.Replace(u, "img.shields.io", "raster.shields.io", 1)
 	}
 	return u
+}
+
+// matchLinkedImage matches [![alt](img-src)](link-url) and returns
+// the total length consumed, or 0 if no match.
+func matchLinkedImage(s string) int {
+	// s starts with "[!["
+	// Find the inner ![alt](src) end.
+	inner := strings.Index(s[1:], ")")
+	if inner < 0 {
+		return 0
+	}
+	inner += 2 // position after the inner )
+	// Expect ](link)
+	if inner >= len(s) || s[inner] != ']' {
+		return 0
+	}
+	if inner+1 >= len(s) || s[inner+1] != '(' {
+		return 0
+	}
+	linkEnd := strings.IndexByte(s[inner+2:], ')')
+	if linkEnd < 0 {
+		return 0
+	}
+	return inner + 2 + linkEnd + 1
+}
+
+// extractImageSrc extracts the src from ![alt](src).
+func extractImageSrc(s string) string {
+	if !strings.HasPrefix(s, "![") {
+		return ""
+	}
+	altEnd := strings.Index(s[2:], "](")
+	if altEnd < 0 {
+		return ""
+	}
+	altEnd += 2
+	srcEnd := strings.IndexByte(s[altEnd+2:], ')')
+	if srcEnd < 0 {
+		return ""
+	}
+	return s[altEnd+2 : altEnd+2+srcEnd]
 }
 
 func isURL(s string) bool {
