@@ -57,7 +57,8 @@ func main() {
 		opts = append(opts, terminal.WithAnsi(terminal.AnsiOff))
 	}
 
-	sr := terminal.NewStreamRenderer(os.Stdout, opts...)
+	ew := newEmojiWriter(os.Stdout)
+	sr := terminal.NewStreamRenderer(ew, opts...)
 	buf := make([]byte, 8192)
 	for {
 		n, err := r.Read(buf)
@@ -76,6 +77,10 @@ func main() {
 		}
 	}
 	if err := sr.Flush(); err != nil {
+		fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
+		os.Exit(1)
+	}
+	if err := ew.Flush(); err != nil {
 		fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
 		os.Exit(1)
 	}

@@ -42,11 +42,13 @@ tasks:
 
   view:
     desc: Render a Markdown file in the terminal
-    cmd: go run ./cmd/mdview {{.CLI_ARGS}}
+    dir: cmd/mdview
+    cmd: go run . {{.CLI_ARGS}}
 
   install:
     desc: Install mdview to $GOPATH/bin
-    cmd: go install ./cmd/mdview
+    dir: cmd/mdview
+    cmd: go install .
 
   # --- Competition pipeline ---
 
