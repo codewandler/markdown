@@ -48,8 +48,9 @@ func splitImages(input string, baseDir string) []segment {
 					rendered := renderImage(src, baseDir)
 					if rendered != "" {
 						flushText()
-						segs = append(segs, segment{content: rendered + "\n\n", isImage: true})
-						i += end + 1
+						nextPos := i + end + 1
+						segs = append(segs, segment{content: rendered + trailingSep(input, nextPos), isImage: true})
+						i = nextPos
 						continue
 					}
 				}
@@ -64,8 +65,9 @@ func splitImages(input string, baseDir string) []segment {
 					rendered := renderImage(src, baseDir)
 					if rendered != "" {
 						flushText()
-						segs = append(segs, segment{content: rendered + "\n\n", isImage: true})
-						i += end
+						nextPos := i + end
+						segs = append(segs, segment{content: rendered + trailingSep(input, nextPos), isImage: true})
+						i = nextPos
 						continue
 					}
 				}
@@ -84,8 +86,9 @@ func splitImages(input string, baseDir string) []segment {
 					rendered := renderImage(src, baseDir)
 					if rendered != "" {
 						flushText()
-						segs = append(segs, segment{content: rendered + "\n\n", isImage: true})
-						i = srcEnd + 1
+						nextPos := srcEnd + 1
+						segs = append(segs, segment{content: rendered + trailingSep(input, nextPos), isImage: true})
+						i = nextPos
 						continue
 					}
 				}
@@ -201,6 +204,21 @@ func extractImageSrc(s string) string {
 		return ""
 	}
 	return s[altEnd+2 : altEnd+2+srcEnd]
+}
+
+// trailingSep returns the separator to append after a rendered image.
+// If the next content has a blank line (double newline), return "\n\n".
+// Otherwise just "\n" to keep images on consecutive lines together.
+func trailingSep(input string, pos int) string {
+	// Skip the newline right after the image pattern.
+	if pos < len(input) && input[pos] == '\n' {
+		pos++
+	}
+	// If the next char is also a newline, there's a blank line.
+	if pos < len(input) && input[pos] == '\n' {
+		return "\n\n"
+	}
+	return "\n"
 }
 
 func isURL(s string) bool {
