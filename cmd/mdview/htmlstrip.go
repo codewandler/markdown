@@ -1,14 +1,10 @@
 package main
 
-import (
-	"strings"
-)
+import "strings"
 
 // stripHTML removes common HTML tags from the input that don't render
-// meaningfully in a terminal. Handles <div>, </div>, <br>, <br/>,
-// <p>, </p>, <span>, </span>, and badge image links.
-//
-// For <div align="center">, content between the tags is centered.
+// meaningfully in a terminal. Strips <div>...</div> wrappers,
+// standalone block tags, and inline <br> tags.
 func stripHTML(input string) string {
 	if !strings.Contains(input, "<") {
 		return input
@@ -17,20 +13,12 @@ func stripHTML(input string) string {
 	var b strings.Builder
 	b.Grow(len(input))
 	lines := strings.Split(input, "\n")
-	centering := false
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
-		// Detect <div align="center">
-		if matchTag(trimmed, "div") && containsAttr(trimmed, "align", "center") {
-			centering = true
-			continue
-		}
-
-		// Detect </div>
-		if trimmed == "</div>" {
-			centering = false
+		// Strip <div ...> and </div> tags.
+		if matchTag(trimmed, "div") || trimmed == "</div>" {
 			continue
 		}
 
@@ -39,19 +27,10 @@ func stripHTML(input string) string {
 			continue
 		}
 
-		// Strip badge links: [![text](img-url)](link-url)
-		if strings.HasPrefix(trimmed, "[![") && strings.HasSuffix(trimmed, ")") {
-			continue
-		}
-
 		// Strip inline <br>, <br/>, <br />
 		line = stripInlineTags(line)
 
-		if centering && trimmed != "" {
-			b.WriteString(line)
-		} else {
-			b.WriteString(line)
-		}
+		b.WriteString(line)
 		b.WriteByte('\n')
 	}
 
