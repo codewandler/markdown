@@ -148,7 +148,15 @@ func (p *parser) Write(chunk []byte) ([]Event, error) {
 	}
 	p.partial = append(p.partial, chunk...)
 
+	// Count lines to pre-size events slice.
+	newlines := bytes.Count(p.partial, []byte("\n"))
+	if cr := bytes.Count(p.partial, []byte("\r")); cr > newlines {
+		newlines = cr
+	}
 	var events []Event
+	if newlines > 0 {
+		events = make([]Event, 0, newlines*4)
+	}
 	for {
 		// Find the next line ending: \n, \r\n, or bare \r.
 		i := bytes.IndexAny(p.partial, "\r\n")
@@ -174,7 +182,7 @@ func (p *parser) Flush() ([]Event, error) {
 	if p.flushed {
 		return nil, nil
 	}
-	var events []Event
+	events := make([]Event, 0, 32)
 	if len(p.partial) > 0 {
 		raw := p.partial
 		if len(raw) > 0 && raw[len(raw)-1] == '\r' {

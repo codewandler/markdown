@@ -315,3 +315,17 @@ Cumulative from baseline: speed -40.2%, memory -52.5%, allocs -42.2%.
 **Breaking API change**: InlineStyle fields Link, LinkTitle, HasLink,
 ImageLink, ImageLinkTitle moved to LinkData. Access via GetLink(),
 GetHasLink(), etc. methods or direct LinkData pointer.
+
+### Opt 7: Pre-size events slice in Write by counting newlines (2026-04-30)
+
+Count newlines in partial buffer before processing to pre-allocate the
+events slice with capacity = lines × 4. Eliminates all growslice
+reallocation during event emission.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.22 ms | 1.24 ms | ~same |
+| Memory | 2.66 MB | 1.48 MB | **-44.4%** |
+| Allocations | 4,435 | 4,420 | -0.3% |
+
+Cumulative from baseline: speed -39.2%, memory -73.6%, allocs -42.3%.
