@@ -3,3 +3,4 @@ mem.out
 mem*.out
 *.test
 cpu.out
+mdview
