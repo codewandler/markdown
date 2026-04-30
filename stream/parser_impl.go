@@ -3540,6 +3540,23 @@ func unicodeCaseFold(s string) string {
 	return b.String()
 }
 
+// indexFold returns the index of the first case-insensitive match of
+// substr (assumed lowercase ASCII) in s, or -1. Zero allocations.
+func indexFold(s, substr string) int {
+	if len(substr) == 0 {
+		return 0
+	}
+	if len(substr) > len(s) {
+		return -1
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if strings.EqualFold(s[i:i+len(substr)], substr) {
+			return i
+		}
+	}
+	return -1
+}
+
 // containsFold reports whether substr (assumed lowercase ASCII) is
 // contained in s, using case-insensitive comparison. Zero allocations.
 func containsFold(s, substr string) bool {
@@ -4326,16 +4343,20 @@ func parseAutolinkLiteral(text string, span Span, prevSource string) (Event, str
 	if candidate == "" {
 		return Event{}, text, false
 	}
-	lower := strings.ToLower(candidate)
 	switch {
-	case strings.HasPrefix(lower, "http://"),
-		strings.HasPrefix(lower, "https://"),
-		strings.HasPrefix(lower, "ftp://"):
-		scheme := lower[:strings.Index(lower, "://")+3]
-		if len(candidate) > len(scheme) && isURIAutolink(candidate) {
+	case len(candidate) > 7 && strings.EqualFold(candidate[:7], "http://"):
+		if isURIAutolink(candidate) {
 			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: candidate}}, Span: span}, text[len(candidate):], true
 		}
-	case strings.HasPrefix(lower, "www."):
+	case len(candidate) > 8 && strings.EqualFold(candidate[:8], "https://"):
+		if isURIAutolink(candidate) {
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: candidate}}, Span: span}, text[len(candidate):], true
+		}
+	case len(candidate) > 6 && strings.EqualFold(candidate[:6], "ftp://"):
+		if isURIAutolink(candidate) {
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: candidate}}, Span: span}, text[len(candidate):], true
+		}
+	case len(candidate) > 4 && strings.EqualFold(candidate[:4], "www."):
 		if isWWWAutolink(candidate) {
 			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: "http://" + candidate}}, Span: span}, text[len(candidate):], true
 		}
@@ -4449,10 +4470,9 @@ func trimAutolinkLiteralSuffix(candidate string) string {
 func nextAutolinkLiteralStart(text string, prevSource string) int {
 	best := -1
 	for _, prefix := range []string{"http://", "https://", "ftp://", "www."} {
-		lower := strings.ToLower(text)
 		search := 0
 		for {
-			i := strings.Index(lower[search:], prefix)
+			i := indexFold(text[search:], prefix)
 			if i < 0 {
 				break
 			}

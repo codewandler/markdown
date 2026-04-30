@@ -343,3 +343,18 @@ typically 1-4 elements. Removed `sort` import entirely.
 | Allocations | 4,420 | 4,079 | **-7.7%** |
 
 Cumulative from baseline: speed -41.7%, memory -73.8%, allocs -46.8%.
+
+### Opt 9: Eliminate strings.ToLower in autolink detection (2026-04-30)
+
+Replace `strings.ToLower(text)` called 4x per invocation in
+`nextAutolinkLiteralStart` with zero-alloc `indexFold` helper.
+Replace `strings.ToLower(candidate)` in `parseAutolinkLiteral` with
+direct `strings.EqualFold` prefix checks.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.19 ms | 1.13 ms | **-5.0%** |
+| Memory | 1.47 MB | 1.46 MB | ~same |
+| Allocations | 4,079 | 3,735 | **-8.4%** |
+
+Cumulative from baseline: speed -44.6%, memory -73.9%, allocs -51.3%.
