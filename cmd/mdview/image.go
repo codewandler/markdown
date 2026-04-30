@@ -48,7 +48,7 @@ func splitImages(input string, baseDir string) []segment {
 					rendered := renderImage(src, baseDir)
 					if rendered != "" {
 						flushText()
-						segs = append(segs, segment{content: rendered + "\n", isImage: true})
+						segs = append(segs, segment{content: rendered + "\n\n", isImage: true})
 						i += end + 1
 						continue
 					}
@@ -64,7 +64,7 @@ func splitImages(input string, baseDir string) []segment {
 					rendered := renderImage(src, baseDir)
 					if rendered != "" {
 						flushText()
-						segs = append(segs, segment{content: rendered, isImage: true})
+						segs = append(segs, segment{content: rendered + "\n\n", isImage: true})
 						i += end
 						continue
 					}
@@ -84,7 +84,7 @@ func splitImages(input string, baseDir string) []segment {
 					rendered := renderImage(src, baseDir)
 					if rendered != "" {
 						flushText()
-						segs = append(segs, segment{content: rendered, isImage: true})
+						segs = append(segs, segment{content: rendered + "\n\n", isImage: true})
 						i = srcEnd + 1
 						continue
 					}
