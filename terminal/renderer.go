@@ -165,7 +165,7 @@ func WithCodeBlockStyle(style CodeBlockStyle) RendererOption {
 func WithCodeHighlighter(highlighter CodeHighlighter) RendererOption {
 	return func(r *Renderer) {
 		if highlighter == nil {
-			highlighter = NewDefaultHighlighter()
+			highlighter = newDefaultHighlighter(r.theme.Syntax)
 		}
 		r.highlighter = highlighter
 	}
@@ -227,9 +227,10 @@ func DefaultCodeBlockStyle() CodeBlockStyle {
 func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 	var st styler
 	var hl CodeHighlighter
+	theme := DefaultTheme()
 	if isTerminal(w) {
 		st = ansiStyler{}
-		hl = NewHybridHighlighter()
+		hl = newHybridHighlighter(theme.Syntax)
 	} else {
 		st = plainStyler{}
 		hl = NewPlainHighlighter()
@@ -238,7 +239,7 @@ func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 		w:           w,
 		highlighter: hl,
 		codeBlock:   defaultCodeBlockStyle(),
-		theme:       DefaultTheme(),
+		theme:       theme,
 		wrapWidth:   detectWrapWidth(w),
 		lineStart:   true,
 		style:       st,
@@ -1227,7 +1228,7 @@ func WithAnsi(mode AnsiMode) RendererOption {
 		switch mode {
 		case AnsiOn:
 			r.style = ansiStyler{}
-			r.highlighter = NewHybridHighlighter()
+			r.highlighter = newHybridHighlighter(r.theme.Syntax)
 		case AnsiOff:
 			r.style = plainStyler{}
 			r.highlighter = NewPlainHighlighter()

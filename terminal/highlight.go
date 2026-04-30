@@ -4,13 +4,10 @@ import (
 	"go/scanner"
 	"go/token"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/alecthomas/chroma/v2/styles"
 )
 
 // CodeHighlighter highlights fenced-code content one line at a time.
@@ -23,12 +20,21 @@ type CodeHighlighter interface {
 // DefaultHighlighter is the dependency-free highlighter used by terminal
 // renderers unless an adapter is installed.
 type DefaultHighlighter struct {
-	lang string
+	lang  string
+	theme SyntaxTheme
 }
 
 // NewDefaultHighlighter creates the built-in fenced-code highlighter.
 func NewDefaultHighlighter() *DefaultHighlighter {
-	return &DefaultHighlighter{}
+	return newDefaultHighlighter(DefaultTheme().Syntax)
+}
+
+func newDefaultHighlighter(theme SyntaxTheme) *DefaultHighlighter {
+	return &DefaultHighlighter{theme: theme}
+}
+
+func (h *DefaultHighlighter) setSyntaxTheme(theme SyntaxTheme) {
+	h.theme = theme
 }
 
 // Start begins a fenced-code block.
@@ -40,9 +46,9 @@ func (h *DefaultHighlighter) Start(lang string, _ string) {
 func (h *DefaultHighlighter) HighlightLine(line string) string {
 	switch h.lang {
 	case "go", "golang":
-		return highlightGoLine(line)
+		return highlightGoLine(line, h.theme)
 	default:
-		return monokaiForeground + line + reset
+		return syntaxStyle(h.theme.Text, line)
 	}
 }
 
@@ -51,7 +57,7 @@ func (h *DefaultHighlighter) End() {
 	h.lang = ""
 }
 
-func highlightGoLine(line string) string {
+func highlightGoLine(line string, theme SyntaxTheme) string {
 	if line == "" {
 		return ""
 	}
@@ -84,7 +90,7 @@ func highlightGoLine(line string) string {
 		if text == "" {
 			text = tok.String()
 		}
-		out.WriteString(styleGoToken(tok, text))
+		out.WriteString(styleGoToken(tok, text, theme))
 		written = offset + len(text)
 	}
 	if written < len(line) {
@@ -93,43 +99,43 @@ func highlightGoLine(line string) string {
 	return out.String()
 }
 
-func styleGoToken(tok token.Token, text string) string {
-	style := monokaiForeground
+func styleGoToken(tok token.Token, text string, theme SyntaxTheme) string {
+	style := theme.Text
 	switch {
 	case tok.IsKeyword():
-		style = monokaiRed
+		style = theme.Keyword
 	case tok == token.IDENT:
-		style = styleGoIdent(text)
+		style = styleGoIdent(text, theme)
 	case tok == token.STRING || tok == token.CHAR:
-		style = monokaiYellow
+		style = theme.String
 	case tok == token.INT || tok == token.FLOAT || tok == token.IMAG:
-		style = monokaiPurple
+		style = theme.Number
 	case tok == token.COMMENT:
-		style = monokaiComment
+		style = theme.Comment
 	case tok.IsOperator():
-		style = monokaiRed
+		style = theme.Operator
 	}
-	return style + text + reset
+	return syntaxStyle(style, text)
 }
 
-func styleGoIdent(ident string) string {
+func styleGoIdent(ident string, theme SyntaxTheme) string {
 	switch ident {
 	case "any", "bool", "byte", "comparable", "complex64", "complex128",
 		"error", "float32", "float64", "int", "int8", "int16", "int32",
 		"int64", "rune", "string", "uint", "uint8", "uint16", "uint32",
 		"uint64", "uintptr":
-		return monokaiBlue
+		return theme.Type
 	case "append", "cap", "clear", "close", "complex", "copy", "delete",
 		"imag", "len", "make", "max", "min", "new", "panic", "print",
 		"println", "real", "recover":
-		return monokaiGreen
+		return theme.Function
 	case "nil", "true", "false", "iota":
-		return monokaiPurple
+		return theme.Number
 	default:
 		if first, _ := utf8.DecodeRuneInString(ident); first >= 'A' && first <= 'Z' {
-			return monokaiBlue
+			return theme.Type
 		}
-		return monokaiForeground
+		return theme.Text
 	}
 }
 
@@ -138,12 +144,22 @@ func styleGoIdent(ident string) string {
 type HybridHighlighter struct {
 	goHighlighter *DefaultHighlighter
 	lang          string
+	theme         SyntaxTheme
 	buf           strings.Builder // accumulates lines for Chroma batch highlight
 }
 
 // NewHybridHighlighter creates a hybrid fenced-code highlighter.
 func NewHybridHighlighter() *HybridHighlighter {
-	return &HybridHighlighter{goHighlighter: NewDefaultHighlighter()}
+	return newHybridHighlighter(DefaultTheme().Syntax)
+}
+
+func newHybridHighlighter(theme SyntaxTheme) *HybridHighlighter {
+	return &HybridHighlighter{goHighlighter: newDefaultHighlighter(theme), theme: theme}
+}
+
+func (h *HybridHighlighter) setSyntaxTheme(theme SyntaxTheme) {
+	h.theme = theme
+	h.goHighlighter.setSyntaxTheme(theme)
 }
 
 // Start begins a fenced-code block.
@@ -163,7 +179,7 @@ func (h *HybridHighlighter) HighlightLine(line string) string {
 	if h.lang == "go" || h.lang == "golang" {
 		return h.goHighlighter.HighlightLine(line)
 	}
-	return chromaHighlightLine(line, h.lang)
+	return chromaHighlightLine(line, h.lang, h.theme)
 }
 
 // End finishes a fenced-code block.
@@ -176,153 +192,60 @@ func (h *HybridHighlighter) End() {
 var _ CodeHighlighter = (*HybridHighlighter)(nil)
 
 // chromaHighlightLine highlights a single line using Chroma.
-// Falls back to plain monochrome if the language is unknown or highlighting fails.
-func chromaHighlightLine(line, lang string) string {
+// Falls back to themed text if the language is unknown or highlighting fails.
+func chromaHighlightLine(line, lang string, theme SyntaxTheme) string {
 	lexer := lexers.Get(lang)
 	if lexer == nil {
 		lexer = lexers.Fallback
 	}
 	lexer = chroma.Coalesce(lexer)
-	style := styles.Get("monokai")
-	if style == nil {
-		style = styles.Fallback
-	}
-	formatter := formatters.Get("terminal16m")
-	if formatter == nil {
-		return monokaiForeground + line + reset
-	}
 	iterator, err := lexer.Tokenise(nil, line)
 	if err != nil {
-		return monokaiForeground + line + reset
+		return syntaxStyle(theme.Text, line)
 	}
-	var buf strings.Builder
-	if err := formatter.Format(&buf, style, iterator); err != nil {
-		return monokaiForeground + line + reset
-	}
-	// Chroma terminal16m appends a newline; strip it so the renderer controls line endings.
-	return strings.TrimRight(buf.String(), "\n")
+	return renderChromaTokens(iterator, theme)
 }
 
-func highlightGenericLine(line string, lang string) string {
-	commentPrefix := genericCommentPrefix(lang)
-	keywords := genericKeywords()
+func renderChromaTokens(iterator chroma.Iterator, theme SyntaxTheme) string {
 	var out strings.Builder
-	for i := 0; i < len(line); {
-		if commentPrefix != "" && strings.HasPrefix(line[i:], commentPrefix) {
-			out.WriteString(monokaiComment)
-			out.WriteString(line[i:])
-			out.WriteString(reset)
-			return out.String()
-		}
-		if isQuoteByte(line[i]) {
-			end := scanQuotedSegment(line, i)
-			out.WriteString(monokaiYellow)
-			out.WriteString(line[i:end])
-			out.WriteString(reset)
-			i = end
-			continue
-		}
-		if isDigit(line[i]) {
-			end := i + 1
-			for end < len(line) && (isDigit(line[end]) || line[end] == '_' || line[end] == '.' || line[end] == 'x' || line[end] == 'X' || line[end] == 'b' || line[end] == 'o' || isHexDigit(line[end])) {
-				end++
-			}
-			out.WriteString(monokaiPurple)
-			out.WriteString(line[i:end])
-			out.WriteString(reset)
-			i = end
-			continue
-		}
-		if isIdentStart(line[i]) {
-			end := i + 1
-			for end < len(line) && isIdentPart(line[end]) {
-				end++
-			}
-			word := line[i:end]
-			if _, ok := keywords[word]; ok {
-				out.WriteString(monokaiRed)
-				out.WriteString(word)
-				out.WriteString(reset)
-			} else if first, _ := utf8.DecodeRuneInString(word); unicode.IsUpper(first) {
-				out.WriteString(monokaiBlue)
-				out.WriteString(word)
-				out.WriteString(reset)
-			} else {
-				out.WriteString(monokaiForeground)
-				out.WriteString(word)
-				out.WriteString(reset)
-			}
-			i = end
-			continue
-		}
-		out.WriteByte(line[i])
-		i++
+	for token := iterator(); token != chroma.EOF; token = iterator() {
+		out.WriteString(syntaxStyle(chromaTokenStyle(token.Type, theme), token.Value))
 	}
 	if out.Len() == 0 {
-		return monokaiForeground + line + reset
+		return ""
 	}
-	return out.String()
+	return strings.TrimRight(out.String(), "\n")
 }
 
-func scanQuotedSegment(line string, start int) int {
-	quote := line[start]
-	for i := start + 1; i < len(line); i++ {
-		if line[i] == '\\' {
-			i++
-			continue
+func chromaTokenStyle(tokenType chroma.TokenType, theme SyntaxTheme) string {
+	switch {
+	case tokenType.InCategory(chroma.Comment):
+		return theme.Comment
+	case tokenType.InCategory(chroma.Keyword):
+		if tokenType == chroma.KeywordType {
+			return theme.Type
 		}
-		if line[i] == quote {
-			return i + 1
-		}
-	}
-	return len(line)
-}
-
-func genericCommentPrefix(lang string) string {
-	switch lang {
-	case "python", "py", "bash", "sh", "zsh", "shell", "sql":
-		return "#"
+		return theme.Keyword
+	case tokenType.InSubCategory(chroma.LiteralString):
+		return theme.String
+	case tokenType.InSubCategory(chroma.LiteralNumber):
+		return theme.Number
+	case tokenType.InCategory(chroma.Operator):
+		return theme.Operator
+	case tokenType == chroma.NameFunction || tokenType.InSubCategory(chroma.NameFunction) || tokenType == chroma.NameBuiltin:
+		return theme.Function
+	case tokenType == chroma.NameClass || tokenType == chroma.NameException || tokenType == chroma.NameTag || tokenType == chroma.NameBuiltinPseudo:
+		return theme.Type
 	default:
-		return "//"
+		return theme.Text
 	}
 }
 
-func genericKeywords() map[string]struct{} {
-	words := []string{
-		"fn", "let", "mut", "pub", "impl", "struct", "enum", "trait", "match", "use",
-		"mod", "crate", "self", "super", "const", "static", "ref", "return", "if",
-		"else", "while", "for", "loop", "break", "continue", "async", "await",
-		"function", "class", "import", "export", "default", "extends",
-		"new", "this", "switch", "case", "try", "catch", "finally", "throw",
-		"def", "lambda", "yield", "with", "pass", "raise", "from", "as",
-		"true", "false", "null", "nil", "None", "undefined", "var", "do",
-		"end", "then", "fi", "select", "insert", "update", "delete", "create",
+func syntaxStyle(style, text string) string {
+	if text == "" || style == "" {
+		return text
 	}
-	out := make(map[string]struct{}, len(words))
-	for _, word := range words {
-		out[word] = struct{}{}
-	}
-	return out
-}
-
-func isQuoteByte(c byte) bool {
-	return c == '"' || c == '\'' || c == '`'
-}
-
-func isIdentStart(c byte) bool {
-	return c == '_' || unicode.IsLetter(rune(c))
-}
-
-func isIdentPart(c byte) bool {
-	return c == '_' || c == '-' || unicode.IsLetter(rune(c)) || unicode.IsDigit(rune(c))
-}
-
-func isDigit(c byte) bool {
-	return c >= '0' && c <= '9'
-}
-
-func isHexDigit(c byte) bool {
-	return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+	return style + text + reset
 }
 
 func firstWord(text string) string {
@@ -338,9 +261,9 @@ func firstWord(text string) string {
 // Used when the renderer is in plain (non-TTY) mode.
 type PlainHighlighter struct{}
 
-func NewPlainHighlighter() *PlainHighlighter        { return &PlainHighlighter{} }
-func (PlainHighlighter) Start(_ string, _ string)   {}
+func NewPlainHighlighter() *PlainHighlighter              { return &PlainHighlighter{} }
+func (PlainHighlighter) Start(_ string, _ string)         {}
 func (PlainHighlighter) HighlightLine(line string) string { return line }
-func (PlainHighlighter) End()                        {}
+func (PlainHighlighter) End()                             {}
 
 var _ CodeHighlighter = (*PlainHighlighter)(nil)

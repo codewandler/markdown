@@ -46,7 +46,7 @@ Flags:
 - OSC 8 clickable hyperlinks
 - Word wrapping with auto-detected terminal width
 - Buffered, fixed-width, auto-width, and live table rendering modes
-- Built-in structural themes: `monokai` and `plain`
+- Built-in themes for Markdown structure and fenced-code syntax: `monokai` and `plain`
 - Emoji shortcode rendering via inline scanner extensions
 - Terminal image rendering for supported terminals
 - TTY detection — ANSI stripped when piped
@@ -59,4 +59,4 @@ Flags:
 - [ ] **Scrollable viewport** — [Bubble Tea](https://github.com/charmbracelet/bubbletea)
       pager with `j`/`k`/arrows, `q` to quit, `/` to search
 - [ ] **`--pager`/`--no-pager`** — auto-detect when output exceeds terminal height
-- [x] **`--theme`** — structural color theme selection (`monokai`, `plain`)
+- [x] **`--theme`** — Markdown and fenced-code color theme selection (`monokai`, `plain`)

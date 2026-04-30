@@ -10,6 +10,15 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-04-30
+
+### Changed
+
+- `terminal.Theme` now includes `SyntaxTheme`, and the built-in Go and Chroma
+  fenced-code highlighters use it for token colours.
+- `mdview --theme plain` now suppresses syntax colours for Go and Chroma-backed
+  fenced code, not just Markdown structure.
+
 ## [0.43.0] - 2026-04-30
 
 ### Added

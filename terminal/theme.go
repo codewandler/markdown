@@ -1,8 +1,7 @@
 package terminal
 
-// Theme controls renderer-level terminal colours for Markdown structure.
-// Values are raw ANSI escape sequences. Syntax-highlighting colours are still
-// owned by the configured CodeHighlighter.
+// Theme controls renderer-level terminal colours.
+// Values are raw ANSI escape sequences.
 type Theme struct {
 	Text          string
 	Muted         string
@@ -14,6 +13,19 @@ type Theme struct {
 	ListMarker    string
 	ThematicBreak string
 	CodeBorder    string
+	Syntax        SyntaxTheme
+}
+
+// SyntaxTheme controls terminal colours for fenced-code syntax highlighting.
+type SyntaxTheme struct {
+	Text     string
+	Comment  string
+	Keyword  string
+	String   string
+	Number   string
+	Type     string
+	Function string
+	Operator string
 }
 
 // DefaultTheme returns the default terminal theme.
@@ -34,6 +46,16 @@ func MonokaiTheme() Theme {
 		ListMarker:    monokaiComment,
 		ThematicBreak: monokaiComment,
 		CodeBorder:    monokaiComment,
+		Syntax: SyntaxTheme{
+			Text:     monokaiForeground,
+			Comment:  monokaiComment,
+			Keyword:  monokaiRed,
+			String:   monokaiYellow,
+			Number:   monokaiPurple,
+			Type:     monokaiBlue,
+			Function: monokaiGreen,
+			Operator: monokaiRed,
+		},
 	}
 }
 
@@ -42,8 +64,9 @@ func NoColorTheme() Theme {
 	return Theme{}
 }
 
-// WithTheme configures renderer-level colours for Markdown structure. It does
-// not change syntax-highlighting colours; use WithCodeHighlighter for that.
+// WithTheme configures renderer-level colours for Markdown structure and the
+// built-in fenced-code highlighters. Custom CodeHighlighter implementations are
+// left unchanged.
 func WithTheme(theme Theme) RendererOption {
 	return func(r *Renderer) {
 		oldCodeBorder := r.theme.CodeBorder
@@ -51,6 +74,9 @@ func WithTheme(theme Theme) RendererOption {
 			oldCodeBorder = MonokaiTheme().CodeBorder
 		}
 		r.theme = normalizeTheme(theme)
+		if highlighter, ok := r.highlighter.(interface{ setSyntaxTheme(SyntaxTheme) }); ok {
+			highlighter.setSyntaxTheme(r.theme.Syntax)
+		}
 		if r.codeBlock.BorderColor == "" || r.codeBlock.BorderColor == oldCodeBorder {
 			r.codeBlock.BorderColor = r.theme.CodeBorder
 		}

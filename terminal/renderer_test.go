@@ -206,6 +206,53 @@ func TestHybridHighlighter(t *testing.T) {
 		t.Fatalf("expected Chroma highlighting with ANSI codes, got %q", got)
 	}
 }
+func TestHybridHighlighterUsesSyntaxThemeForGoAndChroma(t *testing.T) {
+	theme := SyntaxTheme{
+		Text:     "\x1b[38;2;1;1;1m",
+		Comment:  "\x1b[38;2;2;2;2m",
+		Keyword:  "\x1b[38;2;3;3;3m",
+		String:   "\x1b[38;2;4;4;4m",
+		Number:   "\x1b[38;2;5;5;5m",
+		Type:     "\x1b[38;2;6;6;6m",
+		Function: "\x1b[38;2;7;7;7m",
+		Operator: "\x1b[38;2;8;8;8m",
+	}
+	h := newHybridHighlighter(theme)
+
+	h.Start("go", "")
+	goOut := h.HighlightLine("package main")
+	if !strings.Contains(goOut, theme.Keyword) {
+		t.Fatalf("Go keyword did not use syntax theme: %q", goOut)
+	}
+
+	h.Start("rust", "")
+	rustOut := h.HighlightLine("fn main() {}")
+	if !strings.Contains(rustOut, theme.Keyword) || !strings.Contains(rustOut, theme.Function) {
+		t.Fatalf("Chroma output did not use syntax theme: %q", rustOut)
+	}
+}
+
+func TestRendererNoColorThemeSuppressesSyntaxColours(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn), WithTheme(NoColorTheme()))
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockFencedCode, Info: "go"},
+		{Kind: stream.EventText, Text: "package main"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockFencedCode},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	raw := out.String()
+	for _, colour := range []string{monokaiForeground, monokaiComment, monokaiRed, monokaiYellow, monokaiBlue, monokaiPurple} {
+		if strings.Contains(raw, colour) {
+			t.Fatalf("NoColorTheme emitted syntax colour %q in %q", colour, raw)
+		}
+	}
+	if !strings.Contains(raw, "package main") {
+		t.Fatalf("missing code text: %q", raw)
+	}
+}
 
 func TestRendererUsesHybridHighlighterByDefault(t *testing.T) {
 	var out bytes.Buffer
