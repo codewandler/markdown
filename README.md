@@ -107,8 +107,9 @@ go run ./examples/demo --live=false            # disable live table redraws
 ## mdview
 
 `cmd/mdview` is a terminal viewer for local files or stdin. It supports normal
-append-only rendering, fixed-width append-only table streaming, and interactive
-live table redraws.
+append-only rendering, fixed-width append-only table streaming, interactive
+live table redraws, built-in themes, and OSC 8 links for file references such as
+`foo.go:18`.
 
 ```bash
 go run ./cmd/mdview README.md
@@ -126,8 +127,8 @@ go run ./cmd/mdview --stream --table-mode auto --table-max-width 100 README.md
 # Interactive live table rendering: redraws the active table as widths grow.
 go run ./cmd/mdview --live --stream --chunk 20 --delay 200ms README.md
 
-# Use a built-in structural theme.
-go run ./cmd/mdview --theme plain README.md
+# Use a built-in theme.
+go run ./cmd/mdview --theme nord README.md
 ```
 
 Use `--live` only for interactive terminal output. It redraws the active table

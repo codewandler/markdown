@@ -17,6 +17,16 @@ func TestParseThemeMonokai(t *testing.T) {
 	}
 }
 
+func TestParseThemeNord(t *testing.T) {
+	theme, err := parseTheme("nord")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(theme, terminal.NordTheme()) {
+		t.Fatalf("theme = %#v, want nord", theme)
+	}
+}
+
 func TestParseThemePlain(t *testing.T) {
 	theme, err := parseTheme("plain")
 	if err != nil {

@@ -1,5 +1,3 @@
 - stream delay via event extension?
 - mermaid renderer
-- link file references foo.go:18 and trigger IDE to open file
-- theming
 - bubble view component

@@ -10,6 +10,12 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+### Added
+
+- `terminal.NordTheme` and `mdview --theme nord` for a second built-in colour theme.
+- `mdview` recognizes file references like `foo.go:18` and `foo.go:18:2`
+  through an inline scanner and renders them as OSC 8 `file://` hyperlinks.
+
 ## [0.44.0] - 2026-04-30
 
 ### Changed

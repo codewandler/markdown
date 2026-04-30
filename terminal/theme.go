@@ -59,6 +59,32 @@ func MonokaiTheme() Theme {
 	}
 }
 
+// NordTheme returns a Nord-inspired terminal theme.
+func NordTheme() Theme {
+	return Theme{
+		Text:          "\x1b[38;2;216;222;233m", // nord4
+		Muted:         "\x1b[38;2;129;161;193m", // nord9
+		Heading:       "\x1b[38;2;163;190;140m", // nord14
+		Code:          "\x1b[38;2;235;203;139m", // nord13
+		Link:          "\x1b[38;2;136;192;208m", // nord8
+		TableBorder:   "\x1b[38;2;129;161;193m", // nord9
+		BlockquoteBar: "\x1b[38;2;129;161;193m", // nord9
+		ListMarker:    "\x1b[38;2;129;161;193m", // nord9
+		ThematicBreak: "\x1b[38;2;129;161;193m", // nord9
+		CodeBorder:    "\x1b[38;2;129;161;193m", // nord9
+		Syntax: SyntaxTheme{
+			Text:     "\x1b[38;2;216;222;233m", // nord4
+			Comment:  "\x1b[38;2;97;115;138m",  // nord3
+			Keyword:  "\x1b[38;2;129;161;193m", // nord9
+			String:   "\x1b[38;2;163;190;140m", // nord14
+			Number:   "\x1b[38;2;180;142;173m", // nord15
+			Type:     "\x1b[38;2;143;188;187m", // nord7
+			Function: "\x1b[38;2;136;192;208m", // nord8
+			Operator: "\x1b[38;2;129;161;193m", // nord9
+		},
+	}
+}
+
 // NoColorTheme returns a theme with all semantic colour roles disabled.
 func NoColorTheme() Theme {
 	return Theme{}
