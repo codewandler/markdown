@@ -416,9 +416,12 @@ func (r *renderer) text(ev stream.Event) {
 		return
 	}
 
-	// Code spans: emit <code> inline within the current open style.
-	// Don't close emphasis/strong — code spans can appear inside them.
+	// Code spans: transition to the wrapping style (em/strong/strike)
+	// then emit <code>text</code>.
 	if s.Code {
+		wrapStyle := s
+		wrapStyle.Code = false
+		r.transitionStyle(wrapStyle)
 		r.write("<code>")
 		r.write(escapeHTML(ev.Text))
 		r.write("</code>")

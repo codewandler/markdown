@@ -2987,7 +2987,7 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 				s := toInlineStyle(current)
 				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: s})
 			}
-			for ei, ev := range evs {
+			for _, ev := range evs {
 				if ev.open {
 					dsStack = append(dsStack, current)
 					if ev.delim == '~' {
@@ -3006,10 +3006,10 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 						dsStack = dsStack[:len(dsStack)-1]
 					}
 				}
-				// Emit zero-width boundary between consecutive events
-				// at the same token so the renderer sees intermediate
-				// depth states (e.g. em-only between em+strong).
-				if ei < len(evs)-1 {
+				// Emit zero-width boundary after each open event so the
+				// renderer sees intermediate depth states and can determine
+				// nesting order (e.g. strong-then-em vs em-then-strong).
+				if ev.open {
 					out = append(out, inlineToken{kind: inlineTokenText, text: "", style: toInlineStyle(current)})
 				}
 			}
