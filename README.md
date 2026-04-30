@@ -125,6 +125,9 @@ go run ./cmd/mdview --stream --table-mode auto --table-max-width 100 README.md
 
 # Interactive live table rendering: redraws the active table as widths grow.
 go run ./cmd/mdview --live --stream --chunk 20 --delay 200ms README.md
+
+# Use a built-in structural theme.
+go run ./cmd/mdview --theme plain README.md
 ```
 
 Use `--live` only for interactive terminal output. It redraws the active table

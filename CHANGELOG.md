@@ -10,6 +10,14 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-04-30
+
+### Added
+
+- `terminal.Theme`, `DefaultTheme`, `MonokaiTheme`, `NoColorTheme`, and
+  `WithTheme` for renderer-level structural colours.
+- `mdview --theme monokai|plain` for selecting built-in terminal themes.
+
 ## [0.42.0] - 2026-04-30
 
 ### Added

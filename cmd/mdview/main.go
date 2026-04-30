@@ -29,6 +29,7 @@ type cliOptions struct {
 	tableWidths   string
 	tableOverflow string
 	tableMaxWidth int
+	theme         string
 	streamInput   bool
 	chunk         int
 	delay         time.Duration
@@ -48,6 +49,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cfg := cliOptions{
 		tableMode:     "buffered",
 		tableOverflow: "ellipsis",
+		theme:         "monokai",
 		chunk:         16,
 		delay:         20 * time.Millisecond,
 	}
@@ -74,6 +76,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.tableWidths, "table-widths", "", "comma-separated fixed table column widths, e.g. 16,12,40")
 	cmd.Flags().StringVar(&cfg.tableOverflow, "table-overflow", cfg.tableOverflow, "fixed/auto table overflow: ellipsis or clip")
 	cmd.Flags().IntVar(&cfg.tableMaxWidth, "table-max-width", 0, "maximum table width for auto mode (0 = wrap width or terminal width)")
+	cmd.Flags().StringVar(&cfg.theme, "theme", cfg.theme, "terminal theme: monokai or plain")
 	cmd.Flags().BoolVar(&cfg.streamInput, "stream", false, "render markdown in delayed chunks for testing streaming behavior")
 	cmd.Flags().IntVar(&cfg.chunk, "chunk", cfg.chunk, "bytes per streaming chunk when --stream is set")
 	cmd.Flags().DurationVar(&cfg.delay, "delay", cfg.delay, "delay between chunks when --stream is set")
@@ -115,6 +118,11 @@ func run(cfg cliOptions, args []string, stdout, stderr io.Writer) error {
 	if cfg.streamInput && cfg.chunk <= 0 {
 		return fmt.Errorf("--chunk must be greater than zero")
 	}
+	theme, err := parseTheme(cfg.theme)
+	if err != nil {
+		return err
+	}
+	opts = append(opts, terminal.WithTheme(theme))
 	if cfg.noColor {
 		opts = append(opts, terminal.WithAnsi(terminal.AnsiOff))
 	}

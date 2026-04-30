@@ -34,6 +34,7 @@ Flags:
       --table-mode string           table rendering mode: buffered, fixed, or auto (default "buffered")
       --table-overflow string       fixed/auto table overflow: ellipsis or clip (default "ellipsis")
       --table-widths string         comma-separated fixed table column widths, e.g. 16,12,40
+      --theme string                terminal theme: monokai or plain (default "monokai")
       --version                     print version and exit
       --width int                   wrap width (0 = auto-detect terminal)
 ```
@@ -45,6 +46,7 @@ Flags:
 - OSC 8 clickable hyperlinks
 - Word wrapping with auto-detected terminal width
 - Buffered, fixed-width, auto-width, and live table rendering modes
+- Built-in structural themes: `monokai` and `plain`
 - Emoji shortcode rendering via inline scanner extensions
 - Terminal image rendering for supported terminals
 - TTY detection — ANSI stripped when piped
@@ -57,4 +59,4 @@ Flags:
 - [ ] **Scrollable viewport** — [Bubble Tea](https://github.com/charmbracelet/bubbletea)
       pager with `j`/`k`/arrows, `q` to quit, `/` to search
 - [ ] **`--pager`/`--no-pager`** — auto-detect when output exceeds terminal height
-- [ ] **`--theme`** — color theme selection (monokai, dracula, nord)
+- [x] **`--theme`** — structural color theme selection (`monokai`, `plain`)

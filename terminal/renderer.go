@@ -46,6 +46,7 @@ type Renderer struct {
 	spaced          bool
 	pending         bool
 	style           styler
+	theme           Theme
 	width           WidthFunc
 	tableLayout     TableLayout
 	inlineRenderers map[string]InlineRenderFunc
@@ -237,6 +238,7 @@ func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 		w:           w,
 		highlighter: hl,
 		codeBlock:   defaultCodeBlockStyle(),
+		theme:       DefaultTheme(),
 		wrapWidth:   detectWrapWidth(w),
 		lineStart:   true,
 		style:       st,
@@ -433,15 +435,15 @@ func (r *Renderer) enterBlock(event stream.Event) error {
 		return nil
 	}
 	if event.Block == stream.BlockHeading {
-		_, err := fmt.Fprint(r.w, r.style.code(bold), r.style.code(monokaiGreen))
+		_, err := fmt.Fprint(r.w, r.style.code(bold), r.style.code(r.theme.Heading))
 		return err
 	}
 	if event.Block == stream.BlockParagraph {
-		_, err := fmt.Fprint(r.w, r.style.code(monokaiForeground))
+		_, err := fmt.Fprint(r.w, r.style.code(r.theme.Text))
 		return err
 	}
 	if event.Block == stream.BlockThematicBreak {
-		_, err := fmt.Fprint(r.w, r.style.code(monokaiComment), strings.Repeat("─", 24), r.style.reset(), "\n")
+		_, err := fmt.Fprint(r.w, r.style.code(r.theme.ThematicBreak), strings.Repeat("─", 24), r.style.reset(), "\n")
 		r.pending = true
 		r.lineStart = true
 		r.lineWidth = 0
@@ -534,14 +536,14 @@ func (r *Renderer) writeLinePrefix() error {
 	r.lineWidth = 0
 	if r.quoteDepth > 0 {
 		for range r.quoteDepth {
-			if _, err := fmt.Fprint(r.w, r.style.code(monokaiComment), "│ ", r.style.reset()); err != nil {
+			if _, err := fmt.Fprint(r.w, r.style.code(r.theme.BlockquoteBar), "│ ", r.style.reset()); err != nil {
 				return err
 			}
 			r.lineWidth += 2
 		}
 	}
 	if r.listItem != "" {
-		if _, err := fmt.Fprint(r.w, strings.Repeat("  ", max(0, r.listDepth-1)), r.style.code(monokaiComment), r.listItem, r.style.reset()); err != nil {
+		if _, err := fmt.Fprint(r.w, strings.Repeat("  ", max(0, r.listDepth-1)), r.style.code(r.theme.ListMarker), r.listItem, r.style.reset()); err != nil {
 			return err
 		}
 		r.lineWidth += 2*max(0, r.listDepth-1) + r.width(r.listItem)
@@ -812,7 +814,7 @@ func (r *Renderer) renderTableCellLimited(events []stream.Event, limit int) rend
 		switch ev.Kind {
 		case stream.EventText:
 			part, partWidth := r.takeWidth(ev.Text, remaining)
-			out.WriteString(styledText(r.style, ev.Style, part))
+			out.WriteString(styledText(r.style, r.theme, ev.Style, part))
 			width += partWidth
 		case stream.EventInline:
 			rendered := r.renderInline(ev)
@@ -874,7 +876,7 @@ func (r *Renderer) writeTableRow(cells []renderedCell, widths []int) error {
 		return err
 	}
 	var out strings.Builder
-	out.WriteString(r.style.code(monokaiComment))
+	out.WriteString(r.style.code(r.theme.TableBorder))
 	out.WriteString("│")
 	out.WriteString(r.style.reset())
 	for i := 0; i < len(widths); i++ {
@@ -890,7 +892,7 @@ func (r *Renderer) writeTableRow(cells []renderedCell, widths []int) error {
 		}
 		out.WriteString(padTableCell(cell.text, widths[i], width, align))
 		out.WriteByte(' ')
-		out.WriteString(r.style.code(monokaiComment))
+		out.WriteString(r.style.code(r.theme.TableBorder))
 		out.WriteString("│")
 		out.WriteString(r.style.reset())
 	}
@@ -948,23 +950,23 @@ func (r *Renderer) renderInline(event stream.Event) InlineRenderResult {
 	if width < 0 {
 		width = r.width(text)
 	}
-	return InlineRenderResult{Text: styledText(r.style, event.Style, text), Width: width}
+	return InlineRenderResult{Text: styledText(r.style, r.theme, event.Style, text), Width: width}
 }
 
 func (r *Renderer) styleText(event stream.Event) string {
-	return styledText(r.style, event.Style, event.Text)
+	return styledText(r.style, r.theme, event.Style, event.Text)
 }
 
-func styledText(st styler, style stream.InlineStyle, text string) string {
+func styledText(st styler, theme Theme, style stream.InlineStyle, text string) string {
 	if text == "" {
 		return ""
 	}
 	if style.GetLink() != "" {
-		return st.link(style.GetLink(), text)
+		return styledLink(st, theme, style.GetLink(), text)
 	}
 	var out strings.Builder
 	if style.Code {
-		out.WriteString(st.code(monokaiYellow))
+		out.WriteString(st.code(theme.Code))
 	}
 	if style.Emphasis {
 		out.WriteString(st.code(italic))
@@ -978,9 +980,16 @@ func styledText(st styler, style stream.InlineStyle, text string) string {
 	out.WriteString(text)
 	out.WriteString(st.reset())
 	if style.Code || style.Emphasis || style.Strong || style.Strike {
-		out.WriteString(st.code(monokaiForeground))
+		out.WriteString(st.code(theme.Text))
 	}
 	return out.String()
+}
+
+func styledLink(st styler, theme Theme, url, text string) string {
+	if _, ok := st.(plainStyler); ok {
+		return text
+	}
+	return st.code(underline) + st.code(theme.Link) + osc8Open(url) + text + osc8Close() + st.reset() + st.code(theme.Text)
 }
 
 func (r *Renderer) writeWrappedText(event stream.Event) error {
@@ -988,7 +997,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 		return err
 	}
 	if r.wrapWidth <= 0 {
-		_, err := fmt.Fprint(r.w, styledText(r.style, event.Style, event.Text))
+		_, err := fmt.Fprint(r.w, styledText(r.style, r.theme, event.Style, event.Text))
 		r.lineWidth += r.width(event.Text)
 		return err
 	}
@@ -999,7 +1008,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 		// emit the rest on one line to avoid degenerate one-rune-
 		// per-line output in deeply nested containers.
 		if remaining <= 0 {
-			if _, err := fmt.Fprint(r.w, styledText(r.style, event.Style, text)); err != nil {
+			if _, err := fmt.Fprint(r.w, styledText(r.style, r.theme, event.Style, text)); err != nil {
 				return err
 			}
 			r.lineWidth += r.width(text)
@@ -1009,7 +1018,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 		if segment == "" {
 			segment, rest = text[:firstRuneIndex(text)], text[firstRuneIndex(text):]
 		}
-		if _, err := fmt.Fprint(r.w, styledText(r.style, event.Style, segment)); err != nil {
+		if _, err := fmt.Fprint(r.w, styledText(r.style, r.theme, event.Style, segment)); err != nil {
 			return err
 		}
 		r.lineWidth += r.width(segment)

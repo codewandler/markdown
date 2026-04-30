@@ -501,6 +501,67 @@ func TestRendererTableUsesInlineDisplayWidth(t *testing.T) {
 	}
 }
 
+func TestRendererUsesThemeForHeadingAndTableBorder(t *testing.T) {
+	var out bytes.Buffer
+	custom := Theme{
+		Text:          "\x1b[38;2;1;1;1m",
+		Heading:       "\x1b[38;2;2;2;2m",
+		Code:          "\x1b[38;2;3;3;3m",
+		TableBorder:   "\x1b[38;2;4;4;4m",
+		BlockquoteBar: "\x1b[38;2;5;5;5m",
+		ListMarker:    "\x1b[38;2;6;6;6m",
+		ThematicBreak: "\x1b[38;2;7;7;7m",
+		CodeBorder:    "\x1b[38;2;8;8;8m",
+	}
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn), WithTheme(custom))
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockHeading},
+		{Kind: stream.EventText, Text: "Heading"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockHeading},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "cell"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	raw := out.String()
+	if !strings.Contains(raw, custom.Heading) {
+		t.Fatalf("heading colour missing from output: %q", raw)
+	}
+	if !strings.Contains(raw, custom.TableBorder) {
+		t.Fatalf("table border colour missing from output: %q", raw)
+	}
+}
+
+func TestRendererNoColorThemeSuppressesStructuralColours(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out, WithAnsi(AnsiOn), WithTheme(NoColorTheme()))
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockHeading},
+		{Kind: stream.EventText, Text: "Heading"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockHeading},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockThematicBreak},
+		{Kind: stream.EventExitBlock, Block: stream.BlockThematicBreak},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	raw := out.String()
+	for _, colour := range []string{monokaiForeground, monokaiComment, monokaiGreen, monokaiYellow} {
+		if strings.Contains(raw, colour) {
+			t.Fatalf("NoColorTheme emitted colour %q in %q", colour, raw)
+		}
+	}
+	if !strings.Contains(raw, bold) {
+		t.Fatalf("NoColorTheme should not disable text attributes such as bold: %q", raw)
+	}
+}
+
 func TestRendererBufferedTablesFitWrapWidth(t *testing.T) {
 	var out bytes.Buffer
 	renderer := NewRenderer(&out, WithAnsi(AnsiOff), WithWrapWidth(24))
