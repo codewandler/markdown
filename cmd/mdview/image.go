@@ -71,12 +71,19 @@ func replaceAllImages(input string, baseDir string) string {
 }
 
 // renderImage renders a local image file to ANSI colored blocks.
+// Animated GIFs are skipped (they render poorly as static ANSI art).
 func renderImage(src string, baseDir string) string {
 	if !filepath.IsAbs(src) {
 		src = filepath.Join(baseDir, src)
 	}
 
 	if _, err := os.Stat(src); err != nil {
+		return ""
+	}
+
+	// Skip GIFs — they render poorly as static ANSI art.
+	ext := strings.ToLower(filepath.Ext(src))
+	if ext == ".gif" {
 		return ""
 	}
 
