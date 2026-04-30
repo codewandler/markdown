@@ -547,8 +547,8 @@ func styledText(st styler, style stream.InlineStyle, text string) string {
 	if text == "" {
 		return ""
 	}
-	if style.Link != "" {
-		return st.link(style.Link, text)
+	if style.GetLink() != "" {
+		return st.link(style.GetLink(), text)
 	}
 	var out strings.Builder
 	if style.Code {

@@ -291,3 +291,27 @@ Event struct: 248B → 224B (-24B per event, -10%).
 | Allocations | 4,362 | 4,362 | same |
 
 Cumulative from baseline: speed -21.6%, memory -30.7%, allocs -43.1%.
+
+### Opt 6: Split InlineStyle — move link strings behind *LinkData pointer (2026-04-30)
+
+Moved Link, LinkTitle, HasLink, ImageLink, ImageLinkTitle from InlineStyle
+into a separate LinkData struct behind a pointer. Only link/image events
+allocate it; plain text and block events carry a nil pointer.
+
+Event struct: 224B → 144B (-36%). InlineStyle: 104B → 24B (-77%).
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.60 ms | 1.22 ms | **-23.8%** |
+| Memory | 3.88 MB | 2.66 MB | **-31.4%** |
+| Allocations | 4,362 | 4,435 | +1.7% |
+
+Allocs increased slightly (+73) from LinkData pointer allocations, but
+the 1.2MB memory reduction and 24% speed gain from smaller Event copies
+and better cache locality far outweigh it.
+
+Cumulative from baseline: speed -40.2%, memory -52.5%, allocs -42.2%.
+
+**Breaking API change**: InlineStyle fields Link, LinkTitle, HasLink,
+ImageLink, ImageLinkTitle moved to LinkData. Access via GetLink(),
+GetHasLink(), etc. methods or direct LinkData pointer.

@@ -103,15 +103,54 @@ type InlineStyle struct {
 	Strong        bool
 	Strike        bool
 	Code          bool
-	Link          string
-	LinkTitle     string
-	HasLink       bool   // true when Link was explicitly set (distinguishes "" from no link)
-	Image         bool   // true for ![alt](url) and ![alt][ref]
-	ImageLink     string // wrapping link href when image is inside a link: [![img](src)](/href)
-	ImageLinkTitle string // wrapping link title
 	RawHTML       bool   // true for inline raw HTML tags
-	EmphasisDepth int    // nesting depth for emphasis (0 = not emphasized)
-	StrongDepth   int    // nesting depth for strong (0 = not strong)
+	Image         bool   // true for ![alt](url) and ![alt][ref]
+	EmphasisDepth int16  // nesting depth for emphasis (0 = not emphasized)
+	StrongDepth   int16  // nesting depth for strong (0 = not strong)
+	LinkData      *LinkData // non-nil for link/image events
+}
+
+// LinkData holds link-related strings, allocated only for link/image events.
+type LinkData struct {
+	Link           string
+	LinkTitle      string
+	HasLink        bool
+	ImageLink      string // wrapping link href when image is inside a link
+	ImageLinkTitle string // wrapping link title
+}
+
+// GetLink returns the link URL, or "" if no link data.
+func (s InlineStyle) GetLink() string {
+	if s.LinkData == nil { return "" }
+	return s.LinkData.Link
+}
+
+// GetLinkTitle returns the link title, or "" if no link data.
+func (s InlineStyle) GetLinkTitle() string {
+	if s.LinkData == nil { return "" }
+	return s.LinkData.LinkTitle
+}
+
+// GetHasLink reports whether this style carries link information.
+func (s InlineStyle) GetHasLink() bool {
+	return s.LinkData != nil && s.LinkData.HasLink
+}
+
+// GetImageLink returns the wrapping link href, or "" if none.
+func (s InlineStyle) GetImageLink() string {
+	if s.LinkData == nil { return "" }
+	return s.LinkData.ImageLink
+}
+
+// GetImageLinkTitle returns the wrapping link title, or "" if none.
+func (s InlineStyle) GetImageLinkTitle() string {
+	if s.LinkData == nil { return "" }
+	return s.LinkData.ImageLinkTitle
+}
+
+// WithLink returns a new InlineStyle with link data set.
+func WithLink(link, title string) InlineStyle {
+	return InlineStyle{LinkData: &LinkData{Link: link, LinkTitle: title, HasLink: true}}
 }
 
 // ListData describes a Markdown list represented by a list block event.
