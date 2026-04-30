@@ -11,6 +11,12 @@ const Version = "0.29"
 //go:embed testdata/gfm-0.29.json
 var corpus029 []byte
 
+//go:embed testdata/extensions.json
+var extensionsJSON []byte
+
+//go:embed testdata/regression.json
+var regressionJSON []byte
+
 // Example is one GFM specification example.
 type Example struct {
 	Markdown  string `json:"markdown"`
@@ -22,9 +28,19 @@ type Example struct {
 	Extension string `json:"extension"` // "table", "strikethrough", "autolink", "tagfilter", "disabled", or ""
 }
 
-// Load returns the pinned GFM test corpus.
+// Load returns the pinned GFM spec corpus (spec.txt, 672 examples).
 func Load() ([]Example, error) {
 	return Decode(corpus029)
+}
+
+// LoadExtensions returns the cmark-gfm extensions test corpus (extensions.txt).
+func LoadExtensions() ([]Example, error) {
+	return Decode(extensionsJSON)
+}
+
+// LoadRegression returns the cmark-gfm regression test corpus (regression.txt).
+func LoadRegression() ([]Example, error) {
+	return Decode(regressionJSON)
 }
 
 // Decode parses GFM JSON test data.

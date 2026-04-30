@@ -4,8 +4,18 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 	"strings"
 )
+
+func sortedVariantNames(m map[string]VariantResult) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 // GenerateReport writes a COMPARISON.md from a RunResult.
 // Sections with no data are omitted gracefully.
@@ -229,7 +239,8 @@ func (g *reportGen) featureComplianceRow(label string, extract func(*ComplianceR
 	for _, c := range g.r.Candidates {
 		// Find the first variant with compliance data.
 		var spec *SpecResult
-		for _, v := range c.Variants {
+		for _, vk := range sortedVariantNames(c.Variants) {
+			v := c.Variants[vk]
 			if v.Compliance != nil {
 				spec = extract(v.Compliance)
 				break
@@ -250,7 +261,8 @@ func (g *reportGen) compliance() {
 	// Check if any candidate has compliance data.
 	hasData := false
 	for _, c := range g.r.Candidates {
-		for _, v := range c.Variants {
+		for _, vk := range sortedVariantNames(c.Variants) {
+			v := c.Variants[vk]
 			if v.Compliance != nil {
 				hasData = true
 				break
@@ -273,7 +285,8 @@ func (g *reportGen) compliance() {
 	}
 	var entries []entry
 	for _, c := range g.r.Candidates {
-		for _, v := range c.Variants {
+		for _, vk := range sortedVariantNames(c.Variants) {
+			v := c.Variants[vk]
 			if v.Compliance != nil {
 				entries = append(entries, entry{
 					name: displayName(c),
@@ -435,7 +448,8 @@ func (g *reportGen) collectInputs(category string, variantOrder []string) []stri
 	seen := map[string]bool{}
 	var inputs []string
 	for _, c := range g.r.Candidates {
-		for vName, vr := range c.Variants {
+		for _, vName := range sortedVariantNames(c.Variants) {
+			vr := c.Variants[vName]
 			// Check if this variant is in the requested order.
 			found := false
 			for _, vn := range variantOrder {
@@ -447,7 +461,12 @@ func (g *reportGen) collectInputs(category string, variantOrder []string) []stri
 			if !found {
 				continue
 			}
+			bkeys := make([]string, 0, len(vr.Benchmarks))
 			for key := range vr.Benchmarks {
+				bkeys = append(bkeys, key)
+			}
+			sort.Strings(bkeys)
+			for _, key := range bkeys {
 				if strings.HasPrefix(key, prefix) {
 					inputName := strings.TrimPrefix(key, prefix)
 					if !seen[inputName] {
