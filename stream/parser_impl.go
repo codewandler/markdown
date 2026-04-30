@@ -69,6 +69,7 @@ type parser struct {
 	// repeated allocation across parseInline calls.
 	inlineTokens []inlineToken
 	emphOut      []inlineToken // scratch for resolveEmphasis output
+	tableCells   []string      // scratch for splitTableRow
 }
 
 // savedList stores the state of an outer list when entering a sublist.
@@ -988,7 +989,9 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 		return false
 	}
 	header := p.paragraph.lines[0]
-	headerCells, headerHasPipe := splitTableRow(header.text)
+	var headerHasPipe bool
+	p.tableCells, headerHasPipe = splitTableRowReuse(header.text, p.tableCells[:0])
+	headerCells := p.tableCells
 	if !headerHasPipe {
 		return false
 	}
@@ -1042,8 +1045,8 @@ func (p *parser) processActiveTableLine(line lineInfo, events *[]Event) bool {
 	if startsNewBlock(line.text) {
 		return false
 	}
-	cells, _ := splitTableRow(line.text)
-	if len(cells) == 0 {
+	p.tableCells, _ = splitTableRowReuse(line.text, p.tableCells[:0])
+	if len(p.tableCells) == 0 {
 		return false
 	}
 	p.table.span.End = line.end
@@ -1114,8 +1117,8 @@ func (p *parser) emitTableRow(text string, line lineInfo, events *[]Event, heade
 		rowData = &TableRowData{Header: true}
 	}
 	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableRow, Span: rowSpan, TableRow: rowData})
-	cells, _ := splitTableRow(text)
-	for _, cell := range cells {
+	p.tableCells, _ = splitTableRowReuse(text, p.tableCells[:0])
+	for _, cell := range p.tableCells {
 		cellSpan := Span{Start: line.start, End: line.end}
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableCell, Span: cellSpan})
 		p.parseInline(cell, cellSpan, events)
@@ -1185,6 +1188,10 @@ func parseTableAlign(cell string) (TableAlign, bool) {
 }
 
 func splitTableRow(line string) ([]string, bool) {
+	return splitTableRowReuse(line, nil)
+}
+
+func splitTableRowReuse(line string, cells []string) ([]string, bool) {
 	s := strings.TrimSpace(line)
 	if s == "" {
 		return nil, false
@@ -1198,7 +1205,6 @@ func splitTableRow(line string) ([]string, bool) {
 		hasPipe = true
 		s = s[:len(s)-1]
 	}
-	var cells []string
 	start := 0
 	escaped := false
 	codeRun := 0

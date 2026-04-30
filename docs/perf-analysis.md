@@ -259,3 +259,19 @@ Cumulative from baseline: speed -20.6%, memory -28.6%, allocs -40.3%.
 | Allocations | 4,581 | 4,362 | **-4.8%** |
 
 Cumulative from baseline: speed -19.1%, memory -28.6%, allocs -43.1%.
+
+### Opt 4: pool splitTableRow cells slice (2026-04-30)
+
+Added `tableCells []string` scratch slice to parser struct. New
+`splitTableRowReuse` reuses the backing array across table row parses.
+
+No measurable change on CommonMark corpus (few tables). Prevents
+per-row `[]string` allocation on table-heavy inputs.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.65 ms | 1.71 ms | ~same |
+| Memory | 4.0 MB | 4.0 MB | ~same |
+| Allocations | 4,362 | 4,362 | ~same |
+
+Cumulative from baseline: speed -16.2%, memory -28.6%, allocs -43.1%.
