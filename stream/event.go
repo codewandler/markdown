@@ -9,6 +9,7 @@ const (
 	EventText
 	EventSoftBreak
 	EventLineBreak
+	EventInline
 )
 
 func (k EventKind) String() string {
@@ -23,6 +24,8 @@ func (k EventKind) String() string {
 		return "soft_break"
 	case EventLineBreak:
 		return "line_break"
+	case EventInline:
+		return "inline"
 	default:
 		return "unknown"
 	}
@@ -47,7 +50,7 @@ type Span struct {
 type BlockKind uint8
 
 const (
-	BlockDocument      BlockKind = iota + 1
+	BlockDocument BlockKind = iota + 1
 	BlockParagraph
 	BlockHeading
 	BlockList
@@ -103,10 +106,10 @@ type InlineStyle struct {
 	Strong        bool
 	Strike        bool
 	Code          bool
-	RawHTML       bool   // true for inline raw HTML tags
-	Image         bool   // true for ![alt](url) and ![alt][ref]
-	EmphasisDepth int16  // nesting depth for emphasis (0 = not emphasized)
-	StrongDepth   int16  // nesting depth for strong (0 = not strong)
+	RawHTML       bool      // true for inline raw HTML tags
+	Image         bool      // true for ![alt](url) and ![alt][ref]
+	EmphasisDepth int16     // nesting depth for emphasis (0 = not emphasized)
+	StrongDepth   int16     // nesting depth for strong (0 = not strong)
 	LinkData      *LinkData // non-nil for link/image events
 }
 
@@ -121,13 +124,17 @@ type LinkData struct {
 
 // GetLink returns the link URL, or "" if no link data.
 func (s InlineStyle) GetLink() string {
-	if s.LinkData == nil { return "" }
+	if s.LinkData == nil {
+		return ""
+	}
 	return s.LinkData.Link
 }
 
 // GetLinkTitle returns the link title, or "" if no link data.
 func (s InlineStyle) GetLinkTitle() string {
-	if s.LinkData == nil { return "" }
+	if s.LinkData == nil {
+		return ""
+	}
 	return s.LinkData.LinkTitle
 }
 
@@ -138,13 +145,17 @@ func (s InlineStyle) GetHasLink() bool {
 
 // GetImageLink returns the wrapping link href, or "" if none.
 func (s InlineStyle) GetImageLink() string {
-	if s.LinkData == nil { return "" }
+	if s.LinkData == nil {
+		return ""
+	}
 	return s.LinkData.ImageLink
 }
 
 // GetImageLinkTitle returns the wrapping link title, or "" if none.
 func (s InlineStyle) GetImageLinkTitle() string {
-	if s.LinkData == nil { return "" }
+	if s.LinkData == nil {
+		return ""
+	}
 	return s.LinkData.ImageLinkTitle
 }
 
@@ -183,6 +194,39 @@ const (
 	TableAlignRight
 )
 
+// InlineData describes a custom inline atom emitted by an inline scanner.
+//
+// Source is the source-level text that produced the atom. Text is the fallback
+// plain rendering. DisplayWidth is the terminal cell width of Text; negative
+// values mean the renderer should compute the width itself. Attrs carries
+// optional extension-specific metadata without forcing map allocations.
+type InlineData struct {
+	Type         string
+	Source       string
+	Text         string
+	DisplayWidth int
+	Attrs        []Attribute
+}
+
+// Attribute is an optional key/value attached to custom inline data.
+type Attribute struct {
+	Key   string
+	Value string
+}
+
+// Attr returns the first attribute value for key.
+func (d *InlineData) Attr(key string) (string, bool) {
+	if d == nil {
+		return "", false
+	}
+	for _, attr := range d.Attrs {
+		if attr.Key == key {
+			return attr.Value, true
+		}
+	}
+	return "", false
+}
+
 // Event is one append-only parser output item.
 //
 // Block is set for block boundary events. Text and Style are set for text
@@ -199,4 +243,5 @@ type Event struct {
 	List     *ListData
 	Table    *TableData
 	TableRow *TableRowData
+	Inline   *InlineData
 }

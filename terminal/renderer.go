@@ -28,28 +28,44 @@ const (
 
 // Renderer writes terminal output for stream parser events.
 type Renderer struct {
-	w           io.Writer
-	highlighter CodeHighlighter
-	codeBlock   CodeBlockStyle
-	wrapWidth   int
-	inCode      bool
-	inIndented  bool
-	codeLang    string
-	inTable     bool
-	table       tableBuffer
-	listTight   []bool
-	lineStart   bool
-	lineWidth   int
-	quoteDepth  int
-	listDepth   int
-	listItem    string
-	spaced      bool
-	pending     bool
-	style       styler
+	w               io.Writer
+	highlighter     CodeHighlighter
+	codeBlock       CodeBlockStyle
+	wrapWidth       int
+	inCode          bool
+	inIndented      bool
+	codeLang        string
+	inTable         bool
+	table           tableBuffer
+	listTight       []bool
+	lineStart       bool
+	lineWidth       int
+	quoteDepth      int
+	listDepth       int
+	listItem        string
+	spaced          bool
+	pending         bool
+	style           styler
+	width           WidthFunc
+	inlineRenderers map[string]InlineRenderFunc
+	parserOptions   []stream.ParserOption
 }
 
 // RendererOption configures a terminal renderer.
 type RendererOption func(*Renderer)
+
+// WidthFunc returns the terminal cell width of text without ANSI escapes.
+type WidthFunc func(string) int
+
+// InlineRenderResult is the rendered terminal form of a custom inline atom.
+type InlineRenderResult struct {
+	Text  string
+	Width int
+}
+
+// InlineRenderFunc renders a custom inline atom. The bool return reports
+// whether the renderer handled the event.
+type InlineRenderFunc func(event stream.Event) (InlineRenderResult, bool)
 
 // StreamRenderer wires a parser to a terminal renderer and implements
 // io.Writer for streaming Markdown inputs.
@@ -83,6 +99,11 @@ type tableCell struct {
 	events []stream.Event
 }
 
+type renderedCell struct {
+	text  string
+	width int
+}
+
 // WithCodeBlockStyle configures fenced-code block layout.
 func WithCodeBlockStyle(style CodeBlockStyle) RendererOption {
 	return func(r *Renderer) {
@@ -113,6 +134,35 @@ func WithWrapWidth(width int) RendererOption {
 	}
 }
 
+// WithWidthFunc configures terminal display-width calculation.
+func WithWidthFunc(fn WidthFunc) RendererOption {
+	return func(r *Renderer) {
+		if fn != nil {
+			r.width = fn
+		}
+	}
+}
+
+// WithInlineRenderer registers a renderer for custom inline atoms with typeName.
+func WithInlineRenderer(typeName string, fn InlineRenderFunc) RendererOption {
+	return func(r *Renderer) {
+		if typeName == "" || fn == nil {
+			return
+		}
+		if r.inlineRenderers == nil {
+			r.inlineRenderers = make(map[string]InlineRenderFunc)
+		}
+		r.inlineRenderers[typeName] = fn
+	}
+}
+
+// WithParserOptions configures the parser used by NewStreamRenderer.
+func WithParserOptions(opts ...stream.ParserOption) RendererOption {
+	return func(r *Renderer) {
+		r.parserOptions = append(r.parserOptions, opts...)
+	}
+}
+
 // DefaultCodeBlockStyle returns the default fenced-code block layout.
 func DefaultCodeBlockStyle() CodeBlockStyle {
 	return defaultCodeBlockStyle()
@@ -136,6 +186,7 @@ func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 		wrapWidth:   detectWrapWidth(w),
 		lineStart:   true,
 		style:       st,
+		width:       visibleWidth,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -148,9 +199,10 @@ func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 // NewStreamRenderer creates a convenience wrapper that parses and renders
 // Markdown written to it.
 func NewStreamRenderer(w io.Writer, opts ...RendererOption) *StreamRenderer {
+	r := NewRenderer(w, opts...)
 	return &StreamRenderer{
-		parser: stream.NewParser(),
-		render: NewRenderer(w, opts...),
+		parser: stream.NewParser(r.parserOptions...),
+		render: r,
 	}
 }
 
@@ -235,7 +287,7 @@ func (r *Renderer) render(event stream.Event) error {
 			default:
 				return nil
 			}
-		case stream.EventText, stream.EventSoftBreak, stream.EventLineBreak:
+		case stream.EventText, stream.EventInline, stream.EventSoftBreak, stream.EventLineBreak:
 			if r.table.currentCell != nil {
 				r.table.currentCell.events = append(r.table.currentCell.events, event)
 			}
@@ -250,6 +302,8 @@ func (r *Renderer) render(event stream.Event) error {
 		return r.exitBlock(event)
 	case stream.EventText:
 		return r.text(event)
+	case stream.EventInline:
+		return r.inline(event)
 	case stream.EventSoftBreak:
 		_, err := fmt.Fprint(r.w, " ")
 		if err == nil {
@@ -429,7 +483,7 @@ func (r *Renderer) writeLinePrefix() error {
 		if _, err := fmt.Fprint(r.w, strings.Repeat("  ", max(0, r.listDepth-1)), r.style.code(monokaiComment), r.listItem, r.style.reset()); err != nil {
 			return err
 		}
-		r.lineWidth += 2*max(0, r.listDepth-1) + visibleWidth(r.listItem)
+		r.lineWidth += 2*max(0, r.listDepth-1) + r.width(r.listItem)
 		r.listItem = strings.Repeat(" ", visibleListMarkerWidth(r.listItem))
 	}
 	r.lineStart = false
@@ -452,18 +506,18 @@ func (r *Renderer) flushTable() error {
 		}
 	}
 	widths := make([]int, cols)
-	rendered := make([][]string, len(r.table.rows))
+	rendered := make([][]renderedCell, len(r.table.rows))
 	for i, row := range r.table.rows {
-		rendered[i] = make([]string, cols)
+		rendered[i] = make([]renderedCell, cols)
 		for c := 0; c < cols; c++ {
 			var cell tableCell
 			if c < len(row.cells) {
 				cell = row.cells[c]
 			}
-			text := r.renderTableCell(cell.events)
-			rendered[i][c] = text
-			if w := utf8.RuneCountInString(stripANSI(text)); w > widths[c] {
-				widths[c] = w
+			renderedCell := r.renderTableCell(cell.events)
+			rendered[i][c] = renderedCell
+			if renderedCell.width > widths[c] {
+				widths[c] = renderedCell.width
 			}
 		}
 	}
@@ -476,20 +530,27 @@ func (r *Renderer) flushTable() error {
 	return nil
 }
 
-func (r *Renderer) renderTableCell(events []stream.Event) string {
+func (r *Renderer) renderTableCell(events []stream.Event) renderedCell {
 	var out strings.Builder
+	width := 0
 	for _, ev := range events {
 		switch ev.Kind {
 		case stream.EventText:
 			out.WriteString(r.styleText(ev))
+			width += r.width(ev.Text)
+		case stream.EventInline:
+			rendered := r.renderInline(ev)
+			out.WriteString(rendered.Text)
+			width += rendered.Width
 		case stream.EventSoftBreak, stream.EventLineBreak:
 			out.WriteByte(' ')
+			width++
 		}
 	}
-	return out.String()
+	return renderedCell{text: out.String(), width: width}
 }
 
-func (r *Renderer) writeTableRow(cells []string, widths []int) error {
+func (r *Renderer) writeTableRow(cells []renderedCell, widths []int) error {
 	if err := r.writeLinePrefix(); err != nil {
 		return err
 	}
@@ -499,16 +560,16 @@ func (r *Renderer) writeTableRow(cells []string, widths []int) error {
 	out.WriteString(r.style.reset())
 	for i := 0; i < len(widths); i++ {
 		out.WriteByte(' ')
-		cell := ""
+		cell := renderedCell{}
 		if i < len(cells) {
 			cell = cells[i]
 		}
-		width := utf8.RuneCountInString(stripANSI(cell))
+		width := cell.width
 		align := stream.TableAlignNone
 		if i < len(r.table.align) {
 			align = r.table.align[i]
 		}
-		out.WriteString(padTableCell(cell, widths[i], width, align))
+		out.WriteString(padTableCell(cell.text, widths[i], width, align))
 		out.WriteByte(' ')
 		out.WriteString(r.style.code(monokaiComment))
 		out.WriteString("│")
@@ -537,6 +598,38 @@ func padTableCell(cell string, targetWidth, visibleWidth int, align stream.Table
 	default:
 		return cell + strings.Repeat(" ", pad)
 	}
+}
+
+func (r *Renderer) inline(event stream.Event) error {
+	if err := r.writeLinePrefix(); err != nil {
+		return err
+	}
+	rendered := r.renderInline(event)
+	_, err := fmt.Fprint(r.w, rendered.Text)
+	if err == nil {
+		r.lineWidth += rendered.Width
+	}
+	return err
+}
+
+func (r *Renderer) renderInline(event stream.Event) InlineRenderResult {
+	if event.Inline != nil {
+		if fn := r.inlineRenderers[event.Inline.Type]; fn != nil {
+			if rendered, ok := fn(event); ok {
+				return rendered
+			}
+		}
+	}
+	text := ""
+	width := 0
+	if event.Inline != nil {
+		text = event.Inline.Text
+		width = event.Inline.DisplayWidth
+	}
+	if width < 0 {
+		width = r.width(text)
+	}
+	return InlineRenderResult{Text: styledText(r.style, event.Style, text), Width: width}
 }
 
 func (r *Renderer) styleText(event stream.Event) string {
@@ -577,7 +670,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 	}
 	if r.wrapWidth <= 0 {
 		_, err := fmt.Fprint(r.w, styledText(r.style, event.Style, event.Text))
-		r.lineWidth += visibleWidth(event.Text)
+		r.lineWidth += r.width(event.Text)
 		return err
 	}
 	text := event.Text
@@ -590,7 +683,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 			if _, err := fmt.Fprint(r.w, styledText(r.style, event.Style, text)); err != nil {
 				return err
 			}
-			r.lineWidth += visibleWidth(text)
+			r.lineWidth += r.width(text)
 			return nil
 		}
 		segment, rest := splitWrappedText(text, remaining)
@@ -600,7 +693,7 @@ func (r *Renderer) writeWrappedText(event stream.Event) error {
 		if _, err := fmt.Fprint(r.w, styledText(r.style, event.Style, segment)); err != nil {
 			return err
 		}
-		r.lineWidth += visibleWidth(segment)
+		r.lineWidth += r.width(segment)
 		text = rest
 		if len(text) > 0 {
 			if err := r.newline(); err != nil {
@@ -789,7 +882,6 @@ func osc8Close() string {
 	return "\x1b]8;;\a"
 }
 
-
 // AnsiMode controls ANSI escape sequence emission.
 type AnsiMode int
 
@@ -811,7 +903,7 @@ func WithAnsi(mode AnsiMode) RendererOption {
 		case AnsiOff:
 			r.style = plainStyler{}
 			r.highlighter = NewPlainHighlighter()
-		// AnsiAuto: no-op, NewRenderer already set the correct pair
+			// AnsiAuto: no-op, NewRenderer already set the correct pair
 		}
 	}
 }

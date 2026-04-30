@@ -916,7 +916,7 @@ func (p *parser) closeParagraph(events *[]Event) {
 	span := Span{Start: start, End: end}
 	if !p.paragraph.hasBrackets && len(p.pendingBlocks) == 0 {
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: span})
-		if canEmitPlainParagraphLines(p.paragraph.lines, p.config.GFMAutolinks) {
+		if canEmitPlainParagraphLines(p.paragraph.lines, p.config.GFMAutolinks, p.config.InlineScanners) {
 			emitPlainParagraphLines(p.paragraph.lines, span, events)
 		} else {
 			p.parseInline(paragraphText(p.paragraph.lines), span, events)
@@ -962,9 +962,9 @@ func paragraphText(lines []paragraphLine) string {
 	return text.String()
 }
 
-func canEmitPlainParagraphLines(lines []paragraphLine, gfmAutolinks bool) bool {
+func canEmitPlainParagraphLines(lines []paragraphLine, gfmAutolinks bool, scanners []InlineScanner) bool {
 	for i, line := range lines {
-		if hasInlineSyntax(line.text, gfmAutolinks) {
+		if hasInlineSyntax(line.text, gfmAutolinks, scanners) {
 			return false
 		}
 		if i < len(lines)-1 && hasHardBreakSuffix(line.text) {
@@ -2613,11 +2613,11 @@ func (p *parser) parseInline(text string, span Span, events *[]Event) {
 		*events = append(*events, Event{Kind: EventText, Text: "", Span: span})
 		return
 	}
-	if !hasInlineSyntax(text, p.config.GFMAutolinks) {
+	if !hasInlineSyntax(text, p.config.GFMAutolinks, p.config.InlineScanners) {
 		*events = append(*events, Event{Kind: EventText, Text: text, Span: span})
 		return
 	}
-	p.inlineTokens = tokenizeInlineReuse(text, span, p.refs, p.config.GFMAutolinks, p.inlineTokens[:0])
+	p.inlineTokens = tokenizeInlineReuse(text, span, p.refs, p.config.GFMAutolinks, p.config.InlineScanners, p.inlineTokens[:0])
 	p.inlineTokens, p.emphOut = resolveEmphasisReuse(p.inlineTokens, p.emphOut[:0])
 	coalesceInlineTokensInto(p.inlineTokens, span, events)
 }
@@ -2629,16 +2629,16 @@ func parseInlineInto(text string, span Span, refs map[string]linkReference, gfmA
 		*events = append(*events, Event{Kind: EventText, Text: "", Span: span})
 		return
 	}
-	if !hasInlineSyntax(text, gfmAutolinks) {
+	if !hasInlineSyntax(text, gfmAutolinks, nil) {
 		*events = append(*events, Event{Kind: EventText, Text: text, Span: span})
 		return
 	}
-	tokens := tokenizeInline(text, span, refs, gfmAutolinks)
+	tokens := tokenizeInline(text, span, refs, gfmAutolinks, nil)
 	tokens = resolveEmphasis(tokens)
 	coalesceInlineTokensInto(tokens, span, events)
 }
 
-func hasInlineSyntax(text string, gfmAutolinks bool) bool {
+func hasInlineSyntax(text string, gfmAutolinks bool, scanners []InlineScanner) bool {
 	for i := 0; i < len(text); i++ {
 		switch text[i] {
 		case '\n', '\\', '`', '!', '[', '<', '&', '*', '_', '~':
@@ -2649,6 +2649,11 @@ func hasInlineSyntax(text string, gfmAutolinks bool) bool {
 			}
 		case 'h', 'H', 'f', 'F', 'w', 'W':
 			if gfmAutolinks {
+				return true
+			}
+		}
+		for _, scanner := range scanners {
+			if scanner != nil && strings.IndexByte(scanner.TriggerBytes(), text[i]) >= 0 {
 				return true
 			}
 		}
@@ -2665,6 +2670,7 @@ const (
 	inlineTokenDelimiter
 	inlineTokenLinkOpen  // marks the start of a link's content
 	inlineTokenLinkClose // marks the end of a link's content
+	inlineTokenEvent     // custom inline scanner event
 )
 
 type inlineToken struct {
@@ -2676,17 +2682,19 @@ type inlineToken struct {
 	origRun int // original run length, for rule-of-three checks
 	open    bool
 	close   bool
+	event   Event
 }
 
-func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAutolinks bool) []inlineToken {
-	return tokenizeInlineReuse(text, span, refs, gfmAutolinks, nil)
+func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAutolinks bool, scanners []InlineScanner) []inlineToken {
+	return tokenizeInlineReuse(text, span, refs, gfmAutolinks, scanners, nil)
 }
 
-func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, gfmAutolinks bool, tokens []inlineToken) []inlineToken {
+func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, gfmAutolinks bool, scanners []InlineScanner, tokens []inlineToken) []inlineToken {
 	var prevSource string
 	linkPossible := strings.Contains(text, "](")
 	imagePossible := linkPossible
 	autolinkPossible := strings.Contains(text, ">")
+outer:
 	for len(text) > 0 {
 		if text[0] == '\n' {
 			if trimHardBreakMarkerTokens(&tokens) {
@@ -2760,7 +2768,7 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 				// This lets outer emphasis wrap the link while keeping inner
 				// delimiters scoped to the label.
 				tokens = append(tokens, inlineToken{kind: inlineTokenLinkOpen, style: linkStyle})
-				tokens = append(tokens, tokenizeLinkContent(labelRaw, InlineStyle{}, span, refs, gfmAutolinks)...)
+				tokens = append(tokens, tokenizeLinkContent(labelRaw, InlineStyle{}, span, refs, gfmAutolinks, scanners)...)
 				tokens = append(tokens, inlineToken{kind: inlineTokenLinkClose, style: linkStyle})
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
@@ -2773,7 +2781,7 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 				_ = ev
 				linkStyle := InlineStyle{LinkData: ev.Style.LinkData}
 				tokens = append(tokens, inlineToken{kind: inlineTokenLinkOpen, style: linkStyle})
-				tokens = append(tokens, tokenizeLinkContent(labelRaw, InlineStyle{}, span, refs, gfmAutolinks)...)
+				tokens = append(tokens, tokenizeLinkContent(labelRaw, InlineStyle{}, span, refs, gfmAutolinks, scanners)...)
 				tokens = append(tokens, inlineToken{kind: inlineTokenLinkClose, style: linkStyle})
 				prevSource = text[:len(text)-len(rest)]
 				text = rest
@@ -2820,6 +2828,24 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 				continue
 			}
 		}
+		for _, scanner := range scanners {
+			if scanner == nil || strings.IndexByte(scanner.TriggerBytes(), text[0]) < 0 {
+				continue
+			}
+			if match, ok := scanner.ScanInline(text, InlineContext{Span: span}); ok && match.Consume > 0 && match.Consume <= len(text) {
+				ev := match.Event
+				if ev.Kind == 0 {
+					ev.Kind = EventInline
+				}
+				if ev.Span == (Span{}) {
+					ev.Span = span
+				}
+				tokens = append(tokens, inlineToken{kind: inlineTokenEvent, event: ev})
+				prevSource = text[:match.Consume]
+				text = text[match.Consume:]
+				continue outer
+			}
+		}
 		if isInlineDelimiterByte(text[0]) {
 			n := countRun(text, text[0])
 			// Tilde runs of 3+ are not strikethrough delimiters.
@@ -2839,6 +2865,9 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 		if start := nextAutolinkLiteralStart(text, prevSource); start >= 0 && start < next {
 			next = start
 		}
+		if start := nextInlineScannerStart(text, scanners); start >= 0 && start < next {
+			next = start
+		}
 		if next <= 0 {
 			next = 1
 		}
@@ -2847,6 +2876,23 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 		text = text[next:]
 	}
 	return tokens
+}
+
+func nextInlineScannerStart(text string, scanners []InlineScanner) int {
+	best := -1
+	for _, scanner := range scanners {
+		if scanner == nil {
+			continue
+		}
+		triggers := scanner.TriggerBytes()
+		for i := 0; i < len(triggers); i++ {
+			idx := strings.IndexByte(text, triggers[i])
+			if idx >= 0 && (best < 0 || idx < best) {
+				best = idx
+			}
+		}
+	}
+	return best
 }
 
 // resolveEmphasis implements the CommonMark "process emphasis" algorithm.
@@ -3142,6 +3188,9 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 			}
 		case inlineTokenText:
 			out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: mergeInlineStyles(s, tok.style)})
+		case inlineTokenEvent:
+			tok.event.Style = mergeInlineStyles(s, tok.event.Style)
+			out = append(out, tok)
 		case inlineTokenSoftBreak:
 			out = append(out, inlineToken{kind: inlineTokenSoftBreak})
 		case inlineTokenLineBreak:
@@ -3173,20 +3222,20 @@ func applyDelimiterStyle(style InlineStyle, count int, marker byte) InlineStyle 
 // text, then applies the link style to every resulting token.
 // tokenizeLinkLabel tokenizes a link label's raw text into inline tokens
 // WITHOUT applying the link style. The caller wraps these in linkOpen/linkClose.
-func tokenizeLinkLabel(labelRaw string, span Span, refs map[string]linkReference, gfmAutolinks bool) []inlineToken {
+func tokenizeLinkLabel(labelRaw string, span Span, refs map[string]linkReference, gfmAutolinks bool, scanners []InlineScanner) []inlineToken {
 	label := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
 	if label == "" {
 		return []inlineToken{{kind: inlineTokenText, text: ""}}
 	}
-	return tokenizeInline(label, span, refs, gfmAutolinks)
+	return tokenizeInline(label, span, refs, gfmAutolinks, scanners)
 }
 
-func tokenizeLinkContent(labelRaw string, linkStyle InlineStyle, span Span, refs map[string]linkReference, gfmAutolinks bool) []inlineToken {
+func tokenizeLinkContent(labelRaw string, linkStyle InlineStyle, span Span, refs map[string]linkReference, gfmAutolinks bool, scanners []InlineScanner) []inlineToken {
 	label := decodeCharacterReferences(unescapeBackslashPunctuation(labelRaw))
 	if label == "" {
 		return []inlineToken{{kind: inlineTokenText, text: "", style: linkStyle}}
 	}
-	inner := tokenizeInline(label, span, refs, gfmAutolinks)
+	inner := tokenizeInline(label, span, refs, gfmAutolinks, scanners)
 	inner = resolveEmphasis(inner)
 	for i := range inner {
 		if inner[i].style.Image && inner[i].style.GetHasLink() && linkStyle.GetHasLink() {
@@ -3262,6 +3311,12 @@ func coalesceInlineTokensInto(tokens []inlineToken, span Span, events *[]Event) 
 				}
 			}
 			*events = append(*events, Event{Kind: EventText, Text: tok.text, Style: s, Span: span})
+		case inlineTokenEvent:
+			ev := tok.event
+			if ls := currentLink(); ls.GetHasLink() {
+				ev.Style = mergeInlineStyles(ev.Style, ls)
+			}
+			*events = append(*events, ev)
 		case inlineTokenSoftBreak:
 			*events = append(*events, Event{Kind: EventSoftBreak, Span: span})
 		case inlineTokenLineBreak:
@@ -3312,10 +3367,10 @@ func parseInlineImageAsLink(text string, span Span) (Event, string, bool) {
 // the text content. Used for image alt text per CommonMark §6.4:
 // "The text content is the text with inline markup resolved and stripped."
 func plainTextFromInline(text string, refs map[string]linkReference) string {
-	if !hasInlineSyntax(text, false) {
+	if !hasInlineSyntax(text, false, nil) {
 		return text
 	}
-	tokens := tokenizeInline(text, Span{}, refs, false)
+	tokens := tokenizeInline(text, Span{}, refs, false, nil)
 	tokens = resolveEmphasis(tokens)
 	var b strings.Builder
 	for _, tok := range tokens {

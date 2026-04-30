@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/codewandler/markdown/stream"
 	"github.com/codewandler/markdown/terminal"
 )
 
@@ -57,6 +58,7 @@ func main() {
 	if *noColor {
 		opts = append(opts, terminal.WithAnsi(terminal.AnsiOff))
 	}
+	opts = append(opts, terminal.WithParserOptions(stream.WithInlineScanner(emojiScanner{})))
 
 	// Read all input.
 	raw, err := io.ReadAll(r)
@@ -65,9 +67,6 @@ func main() {
 		os.Exit(1)
 	}
 	input := string(raw)
-
-	// Preprocess: replace emoji shortcodes.
-	input = replaceEmoji(input)
 
 	// Preprocess: strip HTML noise (<div>, </div>, badges, etc).
 	input = stripHTML(input)

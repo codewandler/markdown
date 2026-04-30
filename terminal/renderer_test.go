@@ -474,3 +474,29 @@ func TestRenderer_NoANSIWhenNotTTY(t *testing.T) {
 		t.Fatalf("expected output to contain \"foo: bar\", got: %q", out)
 	}
 }
+
+func TestRendererTableUsesInlineDisplayWidth(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out, WithAnsi(AnsiOff))
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventInline, Inline: &stream.InlineData{Type: "wide", Text: "X", DisplayWidth: 5}},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "xx"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "xx   ") {
+		t.Fatalf("table did not pad using inline display width: %q", visible)
+	}
+}
