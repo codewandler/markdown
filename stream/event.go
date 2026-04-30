@@ -1,15 +1,32 @@
 package stream
 
 // EventKind identifies the kind of parser event.
-type EventKind string
+type EventKind uint8
 
 const (
-	EventEnterBlock EventKind = "enter_block"
-	EventExitBlock  EventKind = "exit_block"
-	EventText       EventKind = "text"
-	EventSoftBreak  EventKind = "soft_break"
-	EventLineBreak  EventKind = "line_break"
+	EventEnterBlock EventKind = iota + 1
+	EventExitBlock
+	EventText
+	EventSoftBreak
+	EventLineBreak
 )
+
+func (k EventKind) String() string {
+	switch k {
+	case EventEnterBlock:
+		return "enter_block"
+	case EventExitBlock:
+		return "exit_block"
+	case EventText:
+		return "text"
+	case EventSoftBreak:
+		return "soft_break"
+	case EventLineBreak:
+		return "line_break"
+	default:
+		return "unknown"
+	}
+}
 
 // Position identifies a byte position in the streamed Markdown source.
 //
@@ -27,23 +44,56 @@ type Span struct {
 }
 
 // BlockKind describes a Markdown block represented in the event stream.
-type BlockKind string
+type BlockKind uint8
 
 const (
-	BlockDocument      BlockKind = "document"
-	BlockParagraph     BlockKind = "paragraph"
-	BlockHeading       BlockKind = "heading"
-	BlockList          BlockKind = "list"
-	BlockListItem      BlockKind = "list_item"
-	BlockTable         BlockKind = "table"
-	BlockTableRow      BlockKind = "table_row"
-	BlockTableCell     BlockKind = "table_cell"
-	BlockBlockquote    BlockKind = "blockquote"
-	BlockFencedCode    BlockKind = "fenced_code"
-	BlockIndentedCode  BlockKind = "indented_code"
-	BlockThematicBreak BlockKind = "thematic_break"
-	BlockHTML          BlockKind = "html"
+	BlockDocument      BlockKind = iota + 1
+	BlockParagraph
+	BlockHeading
+	BlockList
+	BlockListItem
+	BlockTable
+	BlockTableRow
+	BlockTableCell
+	BlockBlockquote
+	BlockFencedCode
+	BlockIndentedCode
+	BlockThematicBreak
+	BlockHTML
 )
+
+func (k BlockKind) String() string {
+	switch k {
+	case BlockDocument:
+		return "document"
+	case BlockParagraph:
+		return "paragraph"
+	case BlockHeading:
+		return "heading"
+	case BlockList:
+		return "list"
+	case BlockListItem:
+		return "list_item"
+	case BlockTable:
+		return "table"
+	case BlockTableRow:
+		return "table_row"
+	case BlockTableCell:
+		return "table_cell"
+	case BlockBlockquote:
+		return "blockquote"
+	case BlockFencedCode:
+		return "fenced_code"
+	case BlockIndentedCode:
+		return "indented_code"
+	case BlockThematicBreak:
+		return "thematic_break"
+	case BlockHTML:
+		return "html"
+	default:
+		return "unknown"
+	}
+}
 
 // InlineStyle describes inline presentation discovered by the parser.
 //

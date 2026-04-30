@@ -1,1 +1,4 @@
 markdown.iml
+mem.out
+mem*.out
+*.test

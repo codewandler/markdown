@@ -275,3 +275,19 @@ per-row `[]string` allocation on table-heavy inputs.
 | Allocations | 4,362 | 4,362 | ~same |
 
 Cumulative from baseline: speed -16.2%, memory -28.6%, allocs -43.1%.
+
+### Opt 5: EventKind/BlockKind string → uint8 (2026-04-30)
+
+Changed `EventKind` and `BlockKind` from `string` to `uint8` with iota
+constants. Added `String()` methods for formatting compatibility.
+Source-compatible for all switch/comparison usage.
+
+Event struct: 248B → 224B (-24B per event, -10%).
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.71 ms | 1.60 ms | **-6.4%** |
+| Memory | 4.0 MB | 3.88 MB | **-3.0%** |
+| Allocations | 4,362 | 4,362 | same |
+
+Cumulative from baseline: speed -21.6%, memory -30.7%, allocs -43.1%.
