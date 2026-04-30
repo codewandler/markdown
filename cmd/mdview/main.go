@@ -69,6 +69,9 @@ func main() {
 	// Preprocess: replace emoji shortcodes.
 	input = replaceEmoji(input)
 
+	// Preprocess: strip HTML noise (<div>, </div>, badges, etc).
+	input = stripHTML(input)
+
 	// Determine base directory for resolving relative image paths.
 	var baseDir string
 	if flag.NArg() > 0 {
