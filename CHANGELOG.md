@@ -10,6 +10,22 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-04-30
+
+### Added
+
+- `terminal.LiveRenderer` for interactive terminal output that redraws the active
+  table as rows arrive, avoiding visibly misaligned streaming tables when later
+  rows widen a column.
+- Terminal table layout modes via `terminal.WithTableLayout`: default buffered
+  natural-width rendering, fixed-width append-only streaming, and auto-width
+  append-only streaming with clip/ellipsis overflow.
+- `cmd/mdview` flags for exercising streaming behavior and table modes:
+  `--stream`, `--chunk`, `--delay`, `--table-mode`, `--table-widths`,
+  `--table-overflow`, `--table-max-width`, and `--live`.
+- `examples/demo` now uses live table redraws by default; pass `--live=false`
+  to use append-only streaming.
+
 ## [0.40.0] - 2026-04-30
 
 ### Performance

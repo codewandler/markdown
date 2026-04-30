@@ -85,6 +85,11 @@ func main() {
 }
 ```
 
+For interactive terminals where tables should grow in-place as rows arrive,
+use `terminal.NewLiveRenderer`. It implements the same `Write`/`Flush` shape as
+`NewStreamRenderer`, but may emit cursor-control escape sequences while a table
+is active.
+
 ```bash
 go get github.com/codewandler/markdown
 ```
@@ -92,16 +97,44 @@ go get github.com/codewandler/markdown
 ## Demo
 
 ```bash
-go run ./examples/demo                         # stream the built-in showcase
+go run ./examples/demo                         # stream the built-in showcase with live table redraws
 go run ./examples/demo README.md               # stream any file
 go run ./examples/demo --chunk 10 --delay 30ms # tune the effect
 go run ./examples/demo --instant               # render all at once
+go run ./examples/demo --live=false            # disable live table redraws
 ```
+
+## mdview
+
+`cmd/mdview` is a terminal viewer for local files or stdin. It supports normal
+append-only rendering, fixed-width append-only table streaming, and interactive
+live table redraws.
+
+```bash
+go run ./cmd/mdview README.md
+cat README.md | go run ./cmd/mdview --width 100
+
+# Exercise chunked streaming behavior.
+go run ./cmd/mdview --stream --chunk 20 --delay 200ms README.md
+
+# Append-only table streaming: widths are fixed, overflow is clipped/ellipsized.
+go run ./cmd/mdview --stream --table-mode fixed --table-widths 16,12,40 README.md
+
+# Auto-width append-only table streaming: columns share a target table width.
+go run ./cmd/mdview --stream --table-mode auto --table-max-width 100 README.md
+
+# Interactive live table rendering: redraws the active table as widths grow.
+go run ./cmd/mdview --live --stream --chunk 20 --delay 200ms README.md
+```
+
+Use `--live` only for interactive terminal output. It redraws the active table
+region using ANSI cursor controls; for pipes, logs, or recordings that should be
+append-only, use the default buffered mode or `--table-mode fixed|auto`.
 
 ## Architecture
 
 ```text
-chunks --> stream.Parser --> events --> terminal.Renderer --> output
+chunks --> stream.Parser --> events --> terminal.Renderer/LiveRenderer --> output
 ```
 
 | Package              | Role                                        |
@@ -201,6 +234,8 @@ for inline syntax and renderer hooks for presentation.
 - **TTY detection** -- ANSI escapes stripped when piped or redirected
 - **Inline atoms** -- custom `EventInline` renderers with display-width-aware
   table layout
+- **Table modes** -- buffered final-width tables, fixed/auto append-only
+  streaming tables, or live redraws via `LiveRenderer`
 - **Configurable** -- code block borders, padding, indentation, ANSI mode
 
 ## Testing
@@ -242,5 +277,5 @@ See [`roadmap-v1.0.md`](.agents/plans/roadmap-v1.0.md) for the full plan.
 | Demo application + README | :white_check_mark: v0.37.0 |
 | Benchmarks + competition | :white_check_mark: v0.38.0 |
 | HTML renderer + 100% CommonMark | :white_check_mark: v0.39.0 |
-| `cmd/mdview` terminal viewer | planned |
+| `cmd/mdview` terminal viewer | :white_check_mark: unreleased |
 | v1.0 stable API | planned |

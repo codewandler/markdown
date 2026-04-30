@@ -48,6 +48,11 @@ Repository guidance for Codex and other agents working in this workspace.
 - Inline extension support includes `stream.InlineScanner`, `EventInline`,
   `InlineData`, and terminal `WithInlineRenderer`/`WithWidthFunc`. `cmd/mdview`
   uses this path for emoji shortcodes so table widths can use `DisplayWidth`.
+- Terminal table rendering has three layout modes: buffered final-width tables
+  (`TableModeBuffered`, default), fixed-width append-only streaming
+  (`TableModeFixedWidth`), and auto-width append-only streaming
+  (`TableModeAutoWidth`). Interactive redraws use `LiveRenderer`, which forces
+  buffered table layout internally and emits ANSI cursor controls.
 
 ## CommonMark Compliance Process
 
@@ -95,6 +100,11 @@ When working on CommonMark compliance:
 - **Terminal inline rendering** — table rendering buffers cell events and tracks
   rendered text plus display width. Do not reintroduce width calculation from
   rendered ANSI strings for custom inline atoms.
+- **Table layout modes** — fixed/auto table modes stream rows append-only by
+  clipping or ellipsizing cells to known widths. Buffered mode waits until table
+  exit to compute natural widths. `LiveRenderer` is different: it redraws the
+  active table region after each completed row using `ESC[nA`/`ESC[J`, so keep it
+  for interactive TTY output rather than logs or pipes.
 
 ## File Inventory
 
@@ -103,10 +113,12 @@ Key files by size (lines), for planning read strategies:
 | File | Lines | Role |
 | --- | ---: | --- |
 | `stream/parser_impl.go` | 4,916 | Entire parser: block + inline + scanner hooks |
-| `terminal/renderer.go` | 909 | Terminal ANSI renderer |
+| `terminal/renderer.go` | 1,163 | Terminal ANSI renderer, table layout modes |
 | `html/renderer.go` | 769 | HTML renderer |
+| `terminal/live_renderer.go` | 144 | Interactive renderer that redraws active tables |
 | `stream/event.go` | 247 | Event/Block/Style/LinkData/InlineData types (public API) |
 | `stream/parser.go` | 83 | Parser interface + config + InlineScanner API |
+| `cmd/mdview/main.go` | 165 | Terminal viewer CLI and streaming/live flags |
 | `stream/bench_test.go` | 121 | Parser-only benchmarks |
 | `competition/benchmarks/bench_test.go` | 286 | Cross-library comparison benchmarks |
 
@@ -216,6 +228,7 @@ For the example module:
 
 ```bash
 cd examples/stream-readme && go test ./...
+cd examples/demo && go test ./...
 ```
 
 If a command needs network access or hits sandbox limits, stop and request the
