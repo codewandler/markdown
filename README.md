@@ -177,7 +177,7 @@ intended for normal documentation and generated reports, not multi-gigabyte file
 ┌──────────────────────┐   ┌──────────────────────┐
 │ bubbleview module    │   │ cmd/mdview module    │
 │ Bubble Tea viewport  │   │ terminal CLI         │
-│ Stream + Pager views  │   │ --pager, --live,     │
+│ Stream + Pager views │   │ --pager, --live,     │
 │ nested TUI deps only │   │ themes, file links   │
 └──────────────────────┘   └──────────────────────┘
 ```
