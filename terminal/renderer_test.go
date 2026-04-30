@@ -500,3 +500,176 @@ func TestRendererTableUsesInlineDisplayWidth(t *testing.T) {
 		t.Fatalf("table did not pad using inline display width: %q", visible)
 	}
 }
+
+func TestRendererFixedWidthTablesStreamRows(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out,
+		WithAnsi(AnsiOff),
+		WithTableLayout(TableLayout{Mode: TableModeFixedWidth, ColumnWidths: []int{4, 6}, Overflow: TableOverflowEllipsis}),
+	)
+
+	firstRow := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone, stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "name"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "status"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+	}
+	if err := renderer.Render(firstRow); err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "│ name │ status │") {
+		t.Fatalf("first fixed-width row was not streamed: %q", visible)
+	}
+
+	if err := renderer.Render([]stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "verylong"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "ok"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	visible = stripANSI(out.String())
+	if !strings.Contains(visible, "│ v... │ ok     │") {
+		t.Fatalf("fixed-width row did not ellipsize/pad: %q", visible)
+	}
+}
+
+func TestRendererFixedWidthTablesClipOverflow(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out,
+		WithAnsi(AnsiOff),
+		WithTableLayout(TableLayout{Mode: TableModeFixedWidth, ColumnWidths: []int{4}, Overflow: TableOverflowClip}),
+	)
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "abcdef"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "│ abcd │") {
+		t.Fatalf("fixed-width table did not clip: %q", visible)
+	}
+}
+
+func TestRendererFixedWidthTablesUseLastConfiguredWidth(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out,
+		WithAnsi(AnsiOff),
+		WithTableLayout(TableLayout{Mode: TableModeFixedWidth, ColumnWidths: []int{3}, Overflow: TableOverflowEllipsis}),
+	)
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "a"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "bcdef"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "│ a   │ ... │") {
+		t.Fatalf("fixed-width table did not reuse last configured width: %q", visible)
+	}
+}
+
+func TestRendererFixedWidthTablesUseInlineDisplayWidth(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out,
+		WithAnsi(AnsiOff),
+		WithTableLayout(TableLayout{Mode: TableModeFixedWidth, ColumnWidths: []int{4}, Overflow: TableOverflowEllipsis}),
+	)
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventInline, Inline: &stream.InlineData{Type: "wide", Text: "X", DisplayWidth: 2}},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "│ X   │") {
+		t.Fatalf("fixed-width table did not use inline display width: %q", visible)
+	}
+}
+
+func TestRendererAutoWidthTablesStreamRows(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out,
+		WithAnsi(AnsiOff),
+		WithTableLayout(TableLayout{Mode: TableModeAutoWidth, MaxWidth: 20, Overflow: TableOverflowEllipsis}),
+	)
+	firstRow := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone, stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "alpha"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "beta"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+	}
+	if err := renderer.Render(firstRow); err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "│ alpha   │ beta   │") {
+		t.Fatalf("auto-width row was not streamed with expected widths: %q", visible)
+	}
+}
+
+func TestRendererAutoWidthTablesUseMaxWidth(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out,
+		WithAnsi(AnsiOff),
+		WithTableLayout(TableLayout{Mode: TableModeAutoWidth, MaxWidth: 16, Overflow: TableOverflowEllipsis}),
+	)
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone, stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "abcdef"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "ghijkl"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out.String())
+	if !strings.Contains(visible, "│ ab... │ g... │") {
+		t.Fatalf("auto-width table did not honor max width: %q", visible)
+	}
+}

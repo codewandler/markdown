@@ -47,6 +47,7 @@ type Renderer struct {
 	pending         bool
 	style           styler
 	width           WidthFunc
+	tableLayout     TableLayout
 	inlineRenderers map[string]InlineRenderFunc
 	parserOptions   []stream.ParserOption
 }
@@ -66,6 +67,49 @@ type InlineRenderResult struct {
 // InlineRenderFunc renders a custom inline atom. The bool return reports
 // whether the renderer handled the event.
 type InlineRenderFunc func(event stream.Event) (InlineRenderResult, bool)
+
+// TableMode controls how terminal tables are laid out.
+type TableMode int
+
+const (
+	// TableModeBuffered buffers a table until its end, computes final column
+	// widths, and renders it once. This is the default and produces aligned
+	// append-only output for arbitrary Markdown tables.
+	TableModeBuffered TableMode = iota
+
+	// TableModeFixedWidth renders each row as soon as it closes using configured
+	// column widths. This streams tables in append-only output, but overflowing
+	// cell content is clipped or ellipsized.
+	TableModeFixedWidth
+
+	// TableModeAutoWidth renders each row as soon as it closes using widths
+	// derived from MaxWidth, renderer wrap width, or an 80-column fallback.
+	TableModeAutoWidth
+)
+
+// TableOverflow controls fixed-width table cell overflow behavior.
+type TableOverflow int
+
+const (
+	TableOverflowClip TableOverflow = iota
+	TableOverflowEllipsis
+)
+
+// TableLayout configures terminal table rendering.
+type TableLayout struct {
+	Mode TableMode
+
+	// ColumnWidths are terminal display cell widths, excluding padding and
+	// borders. In fixed-width mode, columns beyond this slice use the last width.
+	ColumnWidths []int
+
+	// MaxWidth is the total table width for auto-width mode, including borders
+	// and padding. Zero means use the renderer wrap width, then an 80-column
+	// fallback if no wrap width is configured.
+	MaxWidth int
+
+	Overflow TableOverflow
+}
 
 // StreamRenderer wires a parser to a terminal renderer and implements
 // io.Writer for streaming Markdown inputs.
@@ -89,6 +133,7 @@ type tableBuffer struct {
 	rows        []tableRow
 	currentRow  *tableRow
 	currentCell *tableCell
+	fixedWidths []int
 }
 
 type tableRow struct {
@@ -163,6 +208,13 @@ func WithParserOptions(opts ...stream.ParserOption) RendererOption {
 	}
 }
 
+// WithTableLayout configures terminal table layout.
+func WithTableLayout(layout TableLayout) RendererOption {
+	return func(r *Renderer) {
+		r.tableLayout = normalizeTableLayout(layout)
+	}
+}
+
 // DefaultCodeBlockStyle returns the default fenced-code block layout.
 func DefaultCodeBlockStyle() CodeBlockStyle {
 	return defaultCodeBlockStyle()
@@ -187,6 +239,7 @@ func NewRenderer(w io.Writer, opts ...RendererOption) *Renderer {
 		lineStart:   true,
 		style:       st,
 		width:       visibleWidth,
+		tableLayout: TableLayout{Mode: TableModeBuffered},
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -278,7 +331,13 @@ func (r *Renderer) render(event stream.Event) error {
 				return nil
 			case stream.BlockTableRow:
 				if r.table.currentRow != nil {
-					r.table.rows = append(r.table.rows, *r.table.currentRow)
+					if r.streamingTableMode() {
+						if err := r.writeStreamingTableRow(*r.table.currentRow); err != nil {
+							return err
+						}
+					} else {
+						r.table.rows = append(r.table.rows, *r.table.currentRow)
+					}
 				}
 				r.table.currentRow = nil
 				return nil
@@ -494,6 +553,41 @@ func (r *Renderer) tightListActive() bool {
 	return len(r.listTight) > 0 && r.listTight[len(r.listTight)-1]
 }
 
+func normalizeTableLayout(layout TableLayout) TableLayout {
+	layout.Overflow = normalizeTableOverflow(layout.Overflow)
+	switch layout.Mode {
+	case TableModeFixedWidth:
+		if len(layout.ColumnWidths) == 0 {
+			return TableLayout{Mode: TableModeBuffered}
+		}
+		widths := append([]int(nil), layout.ColumnWidths...)
+		for i := range widths {
+			if widths[i] < 1 {
+				widths[i] = 1
+			}
+		}
+		layout.ColumnWidths = widths
+		return layout
+	case TableModeAutoWidth:
+		if layout.MaxWidth < 0 {
+			layout.MaxWidth = 0
+		}
+		layout.ColumnWidths = nil
+		return layout
+	default:
+		return TableLayout{Mode: TableModeBuffered}
+	}
+}
+
+func normalizeTableOverflow(overflow TableOverflow) TableOverflow {
+	switch overflow {
+	case TableOverflowClip, TableOverflowEllipsis:
+		return overflow
+	default:
+		return TableOverflowEllipsis
+	}
+}
+
 func (r *Renderer) flushTable() error {
 	if len(r.table.rows) == 0 {
 		r.table = tableBuffer{}
@@ -528,6 +622,166 @@ func (r *Renderer) flushTable() error {
 	}
 	r.table = tableBuffer{}
 	return nil
+}
+func (r *Renderer) streamingTableMode() bool {
+	return r.tableLayout.Mode == TableModeFixedWidth || r.tableLayout.Mode == TableModeAutoWidth
+}
+
+func (r *Renderer) writeStreamingTableRow(row tableRow) error {
+	cols := len(r.table.align)
+	if len(row.cells) > cols {
+		cols = len(row.cells)
+	}
+	if cols == 0 {
+		return nil
+	}
+	cells := make([]renderedCell, cols)
+	widths := make([]int, cols)
+	for c := 0; c < cols; c++ {
+		var cell tableCell
+		if c < len(row.cells) {
+			cell = row.cells[c]
+		}
+		width := r.streamingTableColumnWidth(c, cols)
+		cells[c] = r.renderFixedWidthTableCell(cell.events, width)
+		widths[c] = width
+	}
+	return r.writeTableRow(cells, widths)
+}
+
+func (r *Renderer) streamingTableColumnWidth(col, cols int) int {
+	if len(r.table.fixedWidths) == 0 {
+		switch r.tableLayout.Mode {
+		case TableModeFixedWidth:
+			r.table.fixedWidths = append([]int(nil), r.tableLayout.ColumnWidths...)
+		case TableModeAutoWidth:
+			r.table.fixedWidths = r.autoTableColumnWidths(cols)
+		}
+	}
+	widths := r.table.fixedWidths
+	if len(widths) == 0 {
+		return 1
+	}
+	if col < len(widths) {
+		return widths[col]
+	}
+	return widths[len(widths)-1]
+}
+
+func (r *Renderer) autoTableColumnWidths(cols int) []int {
+	if cols <= 0 {
+		cols = 1
+	}
+	total := r.tableLayout.MaxWidth
+	if total <= 0 {
+		total = r.wrapWidth
+	}
+	if total <= 0 {
+		total = 80
+	}
+	overhead := 3*cols + 1 // borders plus one space of padding on each side.
+	content := total - overhead
+	if content < cols {
+		content = cols
+	}
+	base := content / cols
+	if base < 1 {
+		base = 1
+	}
+	widths := make([]int, cols)
+	for i := range widths {
+		widths[i] = base
+	}
+	for extra := content - base*cols; extra > 0; extra-- {
+		widths[(content-base*cols)-extra]++
+	}
+	return widths
+}
+
+func (r *Renderer) renderFixedWidthTableCell(events []stream.Event, width int) renderedCell {
+	if width <= 0 {
+		return renderedCell{}
+	}
+	full := r.renderTableCell(events)
+	if full.width <= width {
+		return full
+	}
+	if r.tableLayout.Overflow == TableOverflowClip {
+		return r.renderTableCellLimited(events, width)
+	}
+	suffix := tableOverflowSuffix(width)
+	suffixWidth := r.width(suffix)
+	if suffixWidth >= width {
+		return renderedCell{text: suffix, width: suffixWidth}
+	}
+	cell := r.renderTableCellLimited(events, width-suffixWidth)
+	cell.text += suffix
+	cell.width += suffixWidth
+	return cell
+}
+
+func tableOverflowSuffix(width int) string {
+	switch {
+	case width >= 3:
+		return "..."
+	case width == 2:
+		return ".."
+	case width == 1:
+		return "."
+	default:
+		return ""
+	}
+}
+
+func (r *Renderer) renderTableCellLimited(events []stream.Event, limit int) renderedCell {
+	if limit <= 0 {
+		return renderedCell{}
+	}
+	var out strings.Builder
+	width := 0
+	for _, ev := range events {
+		remaining := limit - width
+		if remaining <= 0 {
+			break
+		}
+		switch ev.Kind {
+		case stream.EventText:
+			part, partWidth := r.takeWidth(ev.Text, remaining)
+			out.WriteString(styledText(r.style, ev.Style, part))
+			width += partWidth
+		case stream.EventInline:
+			rendered := r.renderInline(ev)
+			if rendered.Width <= remaining {
+				out.WriteString(rendered.Text)
+				width += rendered.Width
+			}
+		case stream.EventSoftBreak, stream.EventLineBreak:
+			out.WriteByte(' ')
+			width++
+		}
+	}
+	return renderedCell{text: out.String(), width: width}
+}
+
+func (r *Renderer) takeWidth(text string, maxWidth int) (string, int) {
+	if maxWidth <= 0 || text == "" {
+		return "", 0
+	}
+	width := 0
+	end := 0
+	for i, rn := range text {
+		runeText := string(rn)
+		runeWidth := r.width(runeText)
+		if runeWidth < 0 {
+			runeWidth = 0
+		}
+		if width+runeWidth > maxWidth {
+			break
+		}
+		width += runeWidth
+		end = i + utf8.RuneLen(rn)
+	}
+	return text[:end], width
 }
 
 func (r *Renderer) renderTableCell(events []stream.Event) renderedCell {
