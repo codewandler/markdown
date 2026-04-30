@@ -622,3 +622,37 @@ cd competition && go test -run='^$' -bench='BenchmarkParse/ours/Spec$' -benchmem
 
 This is kept as a small allocation-only cleanup; speed measurements were within
 local benchmark noise.
+
+### Opt 19: Replace ASCII byte membership checks with switches (2026-04-30)
+
+Replaced several `strings.ContainsRune(..., rune(c))` calls used as ASCII byte
+membership tests with direct byte switches/range checks. These checks are hit in
+backslash escape handling, email autolink scanning, and list marker detection.
+
+Implementation details:
+
+- `isEscapablePunctuation` now uses a `switch` over ASCII punctuation bytes.
+- `isEmailLocalAutolinkByte` now uses ASCII alnum plus a `switch` for allowed
+  local-part punctuation.
+- `isEmailAutolink` reuses `isEmailLocalAutolinkByte` for local-part validation.
+- Bullet marker detection checks `-`, `+`, and `*` directly.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | 0.99 ms | 0.97 ms | noisy / small win |
+| CommonMark corpus allocations | 3,225 | 3,225 | same |
+| Tiny chunks allocations | 22,937 | 22,916 | **-21 allocs** |
+| Malformed inline delimiters allocations | 27,614 | 22,613 | **-18.1%** |
+| Malformed inline delimiters speed | 27-28 ms | 27-29 ms | ~same |
+| Competition Spec allocations | 8,835 | 8,835 | same |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus|BenchmarkParserMalformedInlineDelimiters$' -benchmem -count=5 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/ours/Spec$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+This is kept primarily as a robustness/adversarial-input allocation win; main
+corpus speed remains within local benchmark noise.
+

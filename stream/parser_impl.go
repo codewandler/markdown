@@ -2361,7 +2361,7 @@ func listItem(line string) (listItemData, bool) {
 	trimmed := line[indentBytes:]
 
 	// Bullet list marker: -, +, or *
-	if len(trimmed) >= 1 && strings.ContainsRune("-+*", rune(trimmed[0])) {
+	if len(trimmed) >= 1 && (trimmed[0] == '-' || trimmed[0] == '+' || trimmed[0] == '*') {
 		markerWidth := 1 // the bullet character
 		if len(trimmed) == 1 {
 			// Marker at end of line — content starts at marker + 1 space.
@@ -4660,7 +4660,14 @@ func autolinkLiteralBoundaryAt(text string, start int, prevSource string) bool {
 }
 
 func isEmailLocalAutolinkByte(c byte) bool {
-	return isASCIIAlphaNumeric(c) || strings.ContainsRune(".!#$%&'*+/=?^_`{|}~-", rune(c))
+	if isASCIIAlphaNumeric(c) {
+		return true
+	}
+	switch c {
+	case '.', '!', '#', '$', '%', '&', '\'', '*', '+', '/', '=', '?', '^', '_', '`', '{', '|', '}', '~', '-':
+		return true
+	}
+	return false
 }
 
 func isWWWAutolink(target string) bool {
@@ -4719,8 +4726,7 @@ func isEmailAutolink(target string) bool {
 		return false
 	}
 	for i := 0; i < len(local); i++ {
-		c := local[i]
-		if !isASCIIAlphaNumeric(c) && !strings.ContainsRune(".!#$%&'*+/=?^_`{|}~-", rune(c)) {
+		if !isEmailLocalAutolinkByte(local[i]) {
 			return false
 		}
 	}
@@ -4810,7 +4816,11 @@ func sameCoalesceStyle(a, b InlineStyle) bool {
 }
 
 func isEscapablePunctuation(c byte) bool {
-	return strings.ContainsRune("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", rune(c))
+	switch c {
+	case '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~':
+		return true
+	}
+	return false
 }
 
 func unescapeBackslashPunctuation(text string) string {
