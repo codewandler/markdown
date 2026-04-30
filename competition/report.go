@@ -128,6 +128,13 @@ func (g *reportGen) featureMatrix() {
 		if cr == nil {
 			return nil
 		}
+		// Show total across all GFM corpora if available.
+		tp := cr.GFM.Pass + cr.GFMExtensions.Pass + cr.GFMRegression.Pass
+		tt := cr.GFM.Total + cr.GFMExtensions.Total + cr.GFMRegression.Total
+		if tt > cr.GFM.Total {
+			pct := float64(tp) / float64(tt) * 100
+			return &SpecResult{Pass: tp, Total: tt, Percentage: pct}
+		}
 		return &cr.GFM
 	})
 
@@ -279,9 +286,11 @@ func (g *reportGen) compliance() {
 
 	// Collect variants with compliance data.
 	type entry struct {
-		name string
-		cm   SpecResult
-		gfm  SpecResult
+		name   string
+		cm     SpecResult
+		gfm    SpecResult
+		gfmExt SpecResult
+		gfmReg SpecResult
 	}
 	var entries []entry
 	for _, c := range g.r.Candidates {
@@ -289,9 +298,11 @@ func (g *reportGen) compliance() {
 			v := c.Variants[vk]
 			if v.Compliance != nil {
 				entries = append(entries, entry{
-					name: displayName(c),
-					cm:   v.Compliance.CommonMark,
-					gfm:  v.Compliance.GFM,
+					name:   displayName(c),
+					cm:     v.Compliance.CommonMark,
+					gfm:    v.Compliance.GFM,
+					gfmExt: v.Compliance.GFMExtensions,
+					gfmReg: v.Compliance.GFMRegression,
 				})
 				break // one per candidate
 			}
@@ -317,19 +328,66 @@ func (g *reportGen) compliance() {
 	}
 	g.nl()
 
-	// GFM row.
-	g.writef("| GFM 0.29 |")
+	// GFM spec.txt row.
+	g.writef("| GFM spec.txt |")
 	for _, e := range entries {
 		g.writef(" %d/%d (%s) |", e.gfm.Pass, e.gfm.Total, FormatPct(e.gfm.Percentage))
 	}
 	g.nl()
+
+	// GFM extensions.txt row.
+	hasExt := false
+	for _, e := range entries {
+		if e.gfmExt.Total > 0 { hasExt = true; break }
+	}
+	if hasExt {
+		g.writef("| GFM extensions.txt |")
+		for _, e := range entries {
+			if e.gfmExt.Total > 0 {
+				g.writef(" %d/%d |", e.gfmExt.Pass, e.gfmExt.Total)
+			} else {
+				g.writef(" - |")
+			}
+		}
+		g.nl()
+	}
+
+	// GFM regression.txt row.
+	hasReg := false
+	for _, e := range entries {
+		if e.gfmReg.Total > 0 { hasReg = true; break }
+	}
+	if hasReg {
+		g.writef("| GFM regression.txt |")
+		for _, e := range entries {
+			if e.gfmReg.Total > 0 {
+				g.writef(" %d/%d |", e.gfmReg.Pass, e.gfmReg.Total)
+			} else {
+				g.writef(" - |")
+			}
+		}
+		g.nl()
+	}
+
+	// GFM total row.
+	if hasExt || hasReg {
+		g.writef("| **GFM total** |")
+		for _, e := range entries {
+			tp := e.gfm.Pass + e.gfmExt.Pass + e.gfmReg.Pass
+			tt := e.gfm.Total + e.gfmExt.Total + e.gfmReg.Total
+			if tt > 0 {
+				g.writef(" **%d/%d (%s)** |", tp, tt, FormatPct(float64(tp)/float64(tt)*100))
+			} else {
+				g.writef(" - |")
+			}
+		}
+		g.nl()
+	}
 	g.nl()
 
-	g.writef("Note: All parsers are measured by comparing HTML output against the\n")
-	g.writef("spec expected HTML. GFM compliance uses per-example extension\n")
-	g.writef("dispatch matching the official spec_tests.py behavior. The 9\n")
-	g.writef("remaining GFM failures are emphasis Rule 13 cases where CommonMark\n")
-	g.writef("0.31.2 and GFM 0.29 disagree; we follow the newer CommonMark spec.\n\n")
+	g.writef("GFM compliance uses per-example extension dispatch matching the official\n")
+	g.writef("spec_tests.py behavior. See [docs/compliance.md](docs/compliance.md) for\n")
+	g.writef("details on remaining gaps.\n\n")
 }
 
 // --- Benchmark sections -----------------------------------------------------

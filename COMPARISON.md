@@ -1,6 +1,6 @@
 # Comparison with Other Go Markdown Libraries
 
-Benchmarks run on Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz, go1.26.1-X:nodwarf5, Linux. Git SHA: `b01ccad`.
+Benchmarks run on Intel(R) Core(TM) i9-10900K CPU @ 3.70GHz, go1.26.1-X:nodwarf5, Linux. Git SHA: `ad5c7e4`.
 
 See [docs/competitors.md](docs/competitors.md) for detailed library profiles.
 
@@ -12,7 +12,7 @@ See [docs/competitors.md](docs/competitors.md) for detailed library profiles.
 | Terminal render | **✅** | ❌ | **✅** | ❌ | ❌ | **✅** |
 | **Streaming** | **✅** | ❌ | ❌ | ❌ | ❌ | ❌ |
 | CommonMark 0.31.2 | 100.0% | 99.2% | - | 37.4% | 40.3% | - |
-| GFM 0.29 | 98.7% | 97.5% | - | 36.8% | 39.1% | - |
+| GFM 0.29 | 97.1% | 94.8% | - | 34.6% | 36.8% | - |
 | Syntax highlighting | Go fast path + Chroma | — | Chroma | — | — | Chroma v1 |
 | Clickable hyperlinks | OSC 8 | — | ❌ | — | — | ❌ |
 | Word wrapping | auto-detect | — | fixed width | — | — | fixed width |
@@ -30,13 +30,14 @@ and comparing HTML output.
 | Spec | ours | goldmark | blackfriday | gomarkdown |
 | --- | ---: | ---: | ---: | ---: |
 | CommonMark 0.31.2 | 652/652 (100.0%) | 647/652 (99.2%) | 244/652 (37.4%) | 263/652 (40.3%) |
-| GFM 0.29 | 663/672 (98.7%) | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
+| GFM spec.txt | 663/672 (98.7%) | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
+| GFM extensions.txt | 22/30 | 21/30 | 1/30 | 1/30 |
+| GFM regression.txt | 22/26 | 14/26 | 4/26 | 4/26 |
+| **GFM total** | **707/728 (97.1%)** | **690/728 (94.8%)** | **252/728 (34.6%)** | **268/728 (36.8%)** |
 
-Note: All parsers are measured by comparing HTML output against the
-spec expected HTML. GFM compliance uses per-example extension
-dispatch matching the official spec_tests.py behavior. The 9
-remaining GFM failures are emphasis Rule 13 cases where CommonMark
-0.31.2 and GFM 0.29 disagree; we follow the newer CommonMark spec.
+GFM compliance uses per-example extension dispatch matching the official
+spec_tests.py behavior. See [docs/compliance.md](docs/compliance.md) for
+details on remaining gaps.
 
 ## Terminal Rendering (parse + render to ANSI string)
 

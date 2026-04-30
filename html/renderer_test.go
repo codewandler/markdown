@@ -304,14 +304,14 @@ func TestInlineCode(t *testing.T) {
 	}
 }
 
-func TestInlineCodeIgnoresOtherStyles(t *testing.T) {
+func TestInlineCodeWrappedInEmphasis(t *testing.T) {
 	events := []stream.Event{
 		enterDoc(), enterPara(),
-		styledText("code", stream.InlineStyle{Code: true, Strong: true, Emphasis: true}),
+		styledText("code", stream.InlineStyle{Code: true, Strong: true, Emphasis: true, EmphasisDepth: 1, StrongDepth: 1}),
 		exitPara(), exitDoc(),
 	}
 	got, _ := RenderString(events)
-	want := "<p><code>code</code></p>\n"
+	want := "<p><em><strong><code>code</code></strong></em></p>\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -394,7 +394,7 @@ func TestCombinedStyles(t *testing.T) {
 		exitPara(), exitDoc(),
 	}
 	got, _ := RenderString(events)
-	want := "<p><strong><em>text</em></strong></p>\n"
+	want := "<p><em><strong>text</strong></em></p>\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

@@ -994,14 +994,16 @@ func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) 
 }
 
 func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
-	if p.table.active || len(p.paragraph.lines) != 1 {
+	if p.table.active || len(p.paragraph.lines) == 0 {
 		return false
 	}
 	align, ok := parseTableSeparator(line.text)
 	if !ok {
 		return false
 	}
-	header := p.paragraph.lines[0]
+	// The table header is the last paragraph line. If there are
+	// earlier lines, emit them as a paragraph first.
+	header := p.paragraph.lines[len(p.paragraph.lines)-1]
 	var headerHasPipe bool
 	p.tableCells, headerHasPipe = splitTableRowReuse(header.text, p.tableCells[:0])
 	headerCells := p.tableCells
@@ -1026,9 +1028,11 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 
 	p.ensureDocument(events)
 	p.closeIndentedCode(events)
-	clear(p.paragraph.lines)
-	if cap(p.paragraph.lines) > 1024 {
-		p.paragraph.lines = nil
+	// If the paragraph had lines before the header, emit them as a paragraph.
+	if len(p.paragraph.lines) > 1 {
+		prevLines := p.paragraph.lines[:len(p.paragraph.lines)-1]
+		p.paragraph.lines = prevLines
+		p.closeParagraph(events)
 	} else {
 		p.paragraph.lines = p.paragraph.lines[:0]
 	}
@@ -2654,6 +2658,17 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 				}
 			}
 		}
+		// Footnote references [^...] — not supported, emit as literal text.
+		if text[0] == '[' && len(text) > 1 && text[1] == '^' {
+			close := strings.IndexByte(text[2:], ']')
+			if close >= 0 {
+				end := 2 + close + 1
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:end]})
+				prevSource = text[:end]
+				text = text[end:]
+				continue
+			}
+		}
 		if text[0] == '[' && linkPossible {
 			if ev, rest, labelRaw, ok := parseInlineLink(text, span); ok {
 				linkStyle := InlineStyle{LinkData: ev.Style.LinkData}
@@ -2723,6 +2738,13 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 		}
 		if isInlineDelimiterByte(text[0]) {
 			n := countRun(text, text[0])
+			// Tilde runs of 3+ are not strikethrough delimiters.
+			if text[0] == '~' && n > 2 {
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:n]})
+				prevSource = text[:n]
+				text = text[n:]
+				continue
+			}
 			open, close := emphasisDelimRun(prevSource, text[n:], text[0], n)
 			tokens = append(tokens, inlineToken{kind: inlineTokenDelimiter, text: text[:n], delim: text[0], run: n, origRun: n, open: open, close: close})
 			prevSource = text[:n]
@@ -2994,7 +3016,7 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 				s := toInlineStyle(current)
 				out = append(out, inlineToken{kind: inlineTokenText, text: tok.text, style: s})
 			}
-			for ei, ev := range evs {
+			for _, ev := range evs {
 				if ev.open {
 					dsStack = append(dsStack, current)
 					if ev.delim == '~' {
@@ -3013,10 +3035,10 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 						dsStack = dsStack[:len(dsStack)-1]
 					}
 				}
-				// Emit zero-width boundary between consecutive events
-				// at the same token so the renderer sees intermediate
-				// depth states (e.g. em-only between em+strong).
-				if ei < len(evs)-1 {
+				// Emit zero-width boundary after each open event so the
+				// renderer sees intermediate depth states and can determine
+				// nesting order (e.g. strong-then-em vs em-then-strong).
+				if ev.open {
 					out = append(out, inlineToken{kind: inlineTokenText, text: "", style: toInlineStyle(current)})
 				}
 			}
@@ -3815,14 +3837,19 @@ func detectHTMLBlockStart(line string) (int, string) {
 	if tag, ok := parseRawHTMLTag(s); ok {
 		rest := strings.TrimSpace(s[len(tag):])
 		if rest == "" {
-			// Must not be a type-1 tag (pre, script, style, textarea)
 			tagName := extractTagName(s)
-			switch strings.ToLower(tagName) {
-			case "pre", "script", "style", "textarea":
-				// Already handled as type 1
-			default:
-				return 7, ""
+			tn := strings.ToLower(tagName)
+			// Opening tags for type-1 elements are already handled above.
+			// Closing tags (</script>, </style>, </pre>) are allowed as type 7.
+			isClosing := len(s) >= 2 && s[1] == '/'
+			if !isClosing {
+				switch tn {
+				case "pre", "script", "style", "textarea":
+					// Opening tag — already handled as type 1
+					return 0, ""
+				}
 			}
+			return 7, ""
 		}
 	}
 
@@ -3991,6 +4018,9 @@ func parseInlineLinkDestination(text string, start int) (string, int, bool) {
 				escaped = true
 				continue
 			}
+			if c == '<' {
+				return "", start, false
+			}
 			if c == '>' {
 				dest := decodeCharacterReferences(unescapeBackslashPunctuation(text[start+1 : i]))
 				return dest, i + 1, true
@@ -4009,7 +4039,7 @@ func parseInlineLinkDestination(text string, start int) (string, int, bool) {
 			escaped = false
 			continue
 		}
-		if c == '\\' {
+		if c == '\\' && i+1 < len(text) && isEscapablePunctuation(text[i+1]) {
 			escaped = true
 			continue
 		}
@@ -4421,7 +4451,7 @@ func scanAutolinkLiteralCandidate(text string) (string, string) {
 	end := 0
 	for end < len(text) {
 		c := text[end]
-		if c <= ' ' || c == '<' || c == '>' {
+		if c <= ' ' || c == '<' || c == '>' || c == '"' || c == '\'' {
 			break
 		}
 		end++
@@ -4558,7 +4588,17 @@ func isWWWAutolink(target string) bool {
 		}
 		host = hostPort[:colon]
 	}
-	return isDomainAutolink(host)
+	if !isDomainAutolink(host) {
+		return false
+	}
+	// GFM: no underscores in the last two segments of the domain.
+	labels := strings.Split(host, ".")
+	for i := len(labels) - 1; i >= 0 && i >= len(labels)-2; i-- {
+		if strings.ContainsRune(labels[i], '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func isEmailAutolink(target string) bool {

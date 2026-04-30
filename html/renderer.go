@@ -416,9 +416,12 @@ func (r *renderer) text(ev stream.Event) {
 		return
 	}
 
-	// Code spans: emit <code> inline within the current open style.
-	// Don't close emphasis/strong — code spans can appear inside them.
+	// Code spans: transition to the wrapping style (em/strong/strike)
+	// then emit <code>text</code>.
 	if s.Code {
+		wrapStyle := s
+		wrapStyle.Code = false
+		r.transitionStyle(wrapStyle)
 		r.write("<code>")
 		r.write(escapeHTML(ev.Text))
 		r.write("</code>")
@@ -555,18 +558,14 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 		r.tagStack = append(r.tagStack, t)
 	}
 
-	// Open new tags.
-	if s.GetHasLink() && !sameLink {
-		tag := inlineTag{kind: tagLink, link: s.GetLink(), linkTitle: s.GetLinkTitle()}
+	// Open new tags. Order per Rule 14: del → link → em → strong (innermost).
+	if s.Strike && !r.hasTag(tagDel) {
+		tag := inlineTag{kind: tagDel}
 		r.writeOpenTag(tag)
 		r.tagStack = append(r.tagStack, tag)
 	}
-	newSt := 0
-	for _, t := range r.tagStack {
-		if t.kind == tagStrong { newSt++ }
-	}
-	for i := newSt; i < sSt; i++ {
-		tag := inlineTag{kind: tagStrong}
+	if s.GetHasLink() && !sameLink {
+		tag := inlineTag{kind: tagLink, link: s.GetLink(), linkTitle: s.GetLinkTitle()}
 		r.writeOpenTag(tag)
 		r.tagStack = append(r.tagStack, tag)
 	}
@@ -579,8 +578,12 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 		r.writeOpenTag(tag)
 		r.tagStack = append(r.tagStack, tag)
 	}
-	if s.Strike && !r.hasTag(tagDel) {
-		tag := inlineTag{kind: tagDel}
+	newSt := 0
+	for _, t := range r.tagStack {
+		if t.kind == tagStrong { newSt++ }
+	}
+	for i := newSt; i < sSt; i++ {
+		tag := inlineTag{kind: tagStrong}
 		r.writeOpenTag(tag)
 		r.tagStack = append(r.tagStack, tag)
 	}
