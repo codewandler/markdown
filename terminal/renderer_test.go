@@ -501,6 +501,35 @@ func TestRendererTableUsesInlineDisplayWidth(t *testing.T) {
 	}
 }
 
+func TestRendererBufferedTablesFitWrapWidth(t *testing.T) {
+	var out bytes.Buffer
+	renderer := NewRenderer(&out, WithAnsi(AnsiOff), WithWrapWidth(24))
+	events := []stream.Event{
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTable, Table: &stream.TableData{Align: []stream.TableAlign{stream.TableAlignNone, stream.TableAlignNone}}},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "short"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventEnterBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventText, Text: "very long table cell"},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableCell},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTableRow},
+		{Kind: stream.EventExitBlock, Block: stream.BlockTable},
+	}
+	if err := renderer.Render(events); err != nil {
+		t.Fatal(err)
+	}
+	visible := stripANSI(out.String())
+	for _, line := range strings.Split(strings.TrimRight(visible, "\n"), "\n") {
+		if width := visibleWidth(line); width > 24 {
+			t.Fatalf("table line exceeds wrap width: width=%d line=%q full=%q", width, line, visible)
+		}
+	}
+	if !strings.Contains(visible, "...") {
+		t.Fatalf("wide buffered table cell was not ellipsized: %q", visible)
+	}
+}
+
 func TestRendererFixedWidthTablesStreamRows(t *testing.T) {
 	var out bytes.Buffer
 	renderer := NewRenderer(&out,

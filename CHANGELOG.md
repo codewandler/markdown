@@ -10,6 +10,27 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-04-30
+
+### Added
+
+- `mdview --version` with linker-populated version, commit, and build date
+  metadata.
+- `mdview --live` now falls back to append-only rendering when stdout is not a
+  terminal, with an explicit warning on stderr.
+
+### Changed
+
+- `cmd/mdview` now uses Cobra for CLI flag parsing while preserving the existing
+  command-line flags.
+- Buffered terminal tables now shrink columns and ellipsize overflowing cells to
+  fit the renderer wrap width.
+
+### Fixed
+
+- Improved delayed streaming output for `mdview --stream --chunk ... --table-mode
+  buffered` by keeping buffered table rows within the configured wrap width.
+
 ## [0.41.0] - 2026-04-30
 
 ### Added

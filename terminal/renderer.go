@@ -74,7 +74,9 @@ type TableMode int
 const (
 	// TableModeBuffered buffers a table until its end, computes final column
 	// widths, and renders it once. This is the default and produces aligned
-	// append-only output for arbitrary Markdown tables.
+	// append-only output for arbitrary Markdown tables. If wrapping is enabled,
+	// columns are shrunk and overflowing cells are ellipsized to fit the wrap
+	// width.
 	TableModeBuffered TableMode = iota
 
 	// TableModeFixedWidth renders each row as soon as it closes using configured
@@ -615,6 +617,19 @@ func (r *Renderer) flushTable() error {
 			}
 		}
 	}
+	widths = fitTableWidths(widths, r.wrapWidth)
+	for i, row := range r.table.rows {
+		for c := 0; c < cols; c++ {
+			if rendered[i][c].width <= widths[c] {
+				continue
+			}
+			var cell tableCell
+			if c < len(row.cells) {
+				cell = row.cells[c]
+			}
+			rendered[i][c] = r.renderEllipsizedTableCell(cell.events, widths[c])
+		}
+	}
 	for _, row := range rendered {
 		if err := r.writeTableRow(row, widths); err != nil {
 			return err
@@ -696,6 +711,56 @@ func (r *Renderer) autoTableColumnWidths(cols int) []int {
 		widths[(content-base*cols)-extra]++
 	}
 	return widths
+}
+
+func fitTableWidths(widths []int, maxTotal int) []int {
+	if maxTotal <= 0 || len(widths) == 0 {
+		return widths
+	}
+	total := 3*len(widths) + 1
+	for _, width := range widths {
+		total += width
+	}
+	if total <= maxTotal {
+		return widths
+	}
+	fit := append([]int(nil), widths...)
+	for total > maxTotal {
+		largest := -1
+		for i, width := range fit {
+			if width <= 1 {
+				continue
+			}
+			if largest < 0 || width > fit[largest] {
+				largest = i
+			}
+		}
+		if largest < 0 {
+			break
+		}
+		fit[largest]--
+		total--
+	}
+	return fit
+}
+
+func (r *Renderer) renderEllipsizedTableCell(events []stream.Event, width int) renderedCell {
+	if width <= 0 {
+		return renderedCell{}
+	}
+	full := r.renderTableCell(events)
+	if full.width <= width {
+		return full
+	}
+	suffix := tableOverflowSuffix(width)
+	suffixWidth := r.width(suffix)
+	if suffixWidth >= width {
+		return renderedCell{text: suffix, width: suffixWidth}
+	}
+	cell := r.renderTableCellLimited(events, width-suffixWidth)
+	cell.text += suffix
+	cell.width += suffixWidth
+	return cell
 }
 
 func (r *Renderer) renderFixedWidthTableCell(events []stream.Event, width int) renderedCell {

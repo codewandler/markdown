@@ -277,5 +277,5 @@ See [`roadmap-v1.0.md`](.agents/plans/roadmap-v1.0.md) for the full plan.
 | Demo application + README | :white_check_mark: v0.37.0 |
 | Benchmarks + competition | :white_check_mark: v0.38.0 |
 | HTML renderer + 100% CommonMark | :white_check_mark: v0.39.0 |
-| `cmd/mdview` terminal viewer | :white_check_mark: unreleased |
+| `cmd/mdview` terminal viewer | :white_check_mark: v0.42.0 |
 | v1.0 stable API | planned |
