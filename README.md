@@ -25,8 +25,8 @@ Parse incrementally. Render immediately. Keep memory bounded.
   goldmark (94.8%), blackfriday (34.6%), and gomarkdown (36.8%)
   ([measured](competition/benchmarks/gfmext_test.go),
   [details](docs/compliance.md))
-- **2 dependencies** -- parser is pure stdlib; only Chroma for
-  non-Go syntax highlighting
+- **2 core dependencies** -- parser is pure stdlib; the root module only uses
+  Chroma for terminal syntax highlighting
 - **18x faster Go highlighting** than Chroma via built-in stdlib
   AST fast path
 
@@ -66,7 +66,7 @@ See [docs/compliance.md](docs/compliance.md) for details on remaining gaps.
 | OSC 8 hyperlinks | yes | no | no | n/a | n/a |
 | Inline extension events | yes | no | no | parser only | no |
 | TTY auto-detect | yes | no | no | n/a | n/a |
-| Dependencies | **2** | ~20 | ~15 | 0 | 0 |
+| Core dependencies | **2** | ~20 | ~15 | 0 | 0 |
 
 ## Quick Start
 
@@ -108,8 +108,8 @@ go run ./examples/demo --live=false            # disable live table redraws
 
 `cmd/mdview` is a terminal viewer for local files or stdin. It supports normal
 append-only rendering, fixed-width append-only table streaming, interactive
-live table redraws, built-in themes, and OSC 8 links for file references such as
-`foo.go:18`.
+live table redraws, built-in themes, OSC 8 links for file references such as
+`foo.go:18`, and a Bubble Tea pager.
 
 ```bash
 go run ./cmd/mdview README.md
@@ -129,11 +129,19 @@ go run ./cmd/mdview --live --stream --chunk 20 --delay 200ms README.md
 
 # Use a built-in theme.
 go run ./cmd/mdview --theme nord README.md
+
+# Browse rendered Markdown in an interactive pager.
+go run ./cmd/mdview --pager README.md
 ```
 
 Use `--live` only for interactive terminal output. It redraws the active table
-region using ANSI cursor controls; for pipes, logs, or recordings that should be
-append-only, use the default buffered mode or `--table-mode fixed|auto`.
+region using ANSI cursor controls; for pipes, logs, recordings, or Bubble Tea
+viewports that should be append-only, use the default buffered mode or
+`--table-mode fixed|auto`.
+
+Use `--pager` for full-input browsing in an alternate-screen viewport. The first
+pager implementation keeps source Markdown and rendered output in memory; it is
+intended for normal documentation and generated reports, not multi-gigabyte files.
 
 ## Architecture
 
@@ -146,6 +154,8 @@ chunks --> stream.Parser --> events --> terminal.Renderer/LiveRenderer --> outpu
 | `stream`             | Incremental parser, append-only event model |
 | `terminal`           | Terminal renderer over `stream.Event`       |
 | `html`               | HTML renderer over `stream.Event`           |
+| `bubbleview`         | Nested Bubble Tea module for Markdown viewports |
+| `cmd/mdview`         | Nested terminal viewer CLI module           |
 | `competition`        | Comparative benchmarks against 5 libraries  |
 | `examples/demo`      | Streaming showcase with recording support   |
 
@@ -157,14 +167,15 @@ inline atoms to the stream without preprocessing the source document.
 
 The core parser (`stream`) has **zero dependencies** -- pure Go stdlib.
 
-The terminal renderer has one dependency:
+The terminal renderer has one root-module dependency:
 
 | Dependency | Why |
 | --- | --- |
 | [`chroma`](https://github.com/alecthomas/chroma) | Syntax highlighting for non-Go code (24-bit truecolor). Go uses a built-in stdlib AST fast path that is 18x faster. |
 
-No framework, no goldmark, no blackfriday. Written from scratch for
-streaming.
+No framework, no goldmark, no blackfriday in the root library. Bubble Tea/Bubbles
+are isolated in the nested `bubbleview` and `cmd/mdview` modules so applications
+that only need parsing/rendering do not inherit TUI dependencies.
 
 ## Inline Extensions
 
@@ -229,6 +240,22 @@ Source preprocessors are intentionally not the main extension mechanism: they
 can break source spans, CommonMark precedence, and chunk-safety. Prefer scanners
 for inline syntax and renderer hooks for presentation.
 
+## Bubble Tea Views
+
+The nested `bubbleview` module provides reusable Bubble Tea components without
+adding Bubble Tea dependencies to the root module:
+
+```bash
+go get github.com/codewandler/markdown/bubbleview
+```
+
+- `bubbleview.PagerModel` renders complete Markdown into a scrollable viewport.
+- `bubbleview.StreamModel` accepts `MarkdownChunkMsg` and `MarkdownFlushMsg` for
+  apps that receive Markdown incrementally, such as agent consoles or LLM UIs.
+- Both models reuse `terminal.StreamRenderer`, parser options, themes, and custom
+  inline renderers. They currently keep source and rendered output in memory so
+  resize reflow can replay the source correctly.
+
 ## Terminal Renderer
 
 - **Syntax highlighting** -- Go via stdlib AST (18x faster than Chroma),
@@ -282,4 +309,6 @@ See [`roadmap-v1.0.md`](.agents/plans/roadmap-v1.0.md) for the full plan.
 | Benchmarks + competition | :white_check_mark: v0.38.0 |
 | HTML renderer + 100% CommonMark | :white_check_mark: v0.39.0 |
 | `cmd/mdview` terminal viewer | :white_check_mark: v0.42.0 |
+| Terminal themes and file-reference links | :white_check_mark: v0.45.0 |
+| Bubble Tea `bubbleview` module and `mdview --pager` | :white_check_mark: v0.46.0 |
 | v1.0 stable API | planned |

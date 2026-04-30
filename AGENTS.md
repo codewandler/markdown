@@ -5,8 +5,8 @@ Repository guidance for Codex and other agents working in this workspace.
 ## Scope
 
 - Repository: `github.com/codewandler/markdown`
-- Goal: production-ready streaming Markdown parsing and terminal rendering
-- Main packages: `stream`, `terminal`, `examples/stream-readme`
+- Goal: production-ready streaming Markdown parsing, terminal rendering, and terminal Markdown viewing
+- Main packages/modules: root `stream`, `terminal`, `html`; nested `cmd/mdview` and `bubbleview`
 
 ## Working Rules
 
@@ -23,9 +23,13 @@ Repository guidance for Codex and other agents working in this workspace.
 - Custom inline syntax should use `stream.InlineScanner` and `EventInline`, not
   source preprocessing. Scanners must preserve CommonMark precedence: escapes,
   code spans, autolinks, and raw HTML bind before custom atoms.
-- Memory usage should stay bounded by unresolved state, not by replaying the
-  whole document.
+- Core parser/renderer memory usage should stay bounded by unresolved state, not
+  by replaying the whole document. Interactive viewport components may keep
+  source/rendered buffers when required for resize reflow, but must document the
+  trade-off.
 - Terminal rendering is the first-class output path.
+- Bubble Tea dependencies stay out of the root module. Put Bubble Tea/Bubbles/Lip
+  Gloss code in nested modules such as `bubbleview` or `cmd/mdview`.
 - HTML rendering output is out of scope unless explicitly added as a real
   incremental renderer. However, inline raw HTML *parsing* (recognizing HTML
   tags inside Markdown) is in scope — it is required for correct CommonMark
@@ -38,21 +42,28 @@ Repository guidance for Codex and other agents working in this workspace.
   counts — every parser change must update these counts.
 - GFM support includes tables, task lists, strikethrough, and autolink
   literals.
-- Code blocks use Monokai-themed terminal styling.
-- The terminal package includes the built-in Go fast path and a small generic
-  fallback for non-Go fenced code.
+- Terminal themes include default/Monokai, Nord, and no-color/plain variants;
+  syntax highlighting uses theme-provided `SyntaxTheme` colors.
+- The terminal package includes the built-in Go fast path and Chroma-backed
+  highlighting for non-Go fenced code.
 - List items support continuation after blank lines, sublists (via push/pop
   list stack), fenced/indented code, blockquotes, and headings inside items.
 - Forward link reference definitions are supported via the `pendingBlocks`
   mechanism — paragraphs defer inline parsing until ref defs are collected.
 - Inline extension support includes `stream.InlineScanner`, `EventInline`,
   `InlineData`, and terminal `WithInlineRenderer`/`WithWidthFunc`. `cmd/mdview`
-  uses this path for emoji shortcodes so table widths can use `DisplayWidth`.
+  uses this path for emoji shortcodes and file references so table widths can use
+  `DisplayWidth` and file refs can render as OSC 8 links.
 - Terminal table rendering has three layout modes: buffered final-width tables
   (`TableModeBuffered`, default), fixed-width append-only streaming
   (`TableModeFixedWidth`), and auto-width append-only streaming
   (`TableModeAutoWidth`). Interactive redraws use `LiveRenderer`, which forces
   buffered table layout internally and emits ANSI cursor controls.
+- `cmd/mdview` is a Cobra CLI with `--version`, themes, file-reference links,
+  live rendering, and `--pager`.
+- `bubbleview` is a nested reusable Bubble Tea module with `PagerModel` for
+  full-input browsing and `StreamModel` for append-oriented Markdown streams.
+  It currently stores source and rendered output in memory for resize reflow.
 
 ## CommonMark Compliance Process
 
@@ -113,12 +124,17 @@ Key files by size (lines), for planning read strategies:
 | File | Lines | Role |
 | --- | ---: | --- |
 | `stream/parser_impl.go` | 4,916 | Entire parser: block + inline + scanner hooks |
-| `terminal/renderer.go` | 1,163 | Terminal ANSI renderer, table layout modes |
+| `terminal/renderer.go` | 1,238 | Terminal ANSI renderer, themes, table layout modes |
 | `html/renderer.go` | 769 | HTML renderer |
-| `terminal/live_renderer.go` | 144 | Interactive renderer that redraws active tables |
+| `cmd/mdview/main.go` | 275 | Terminal viewer CLI, streaming/live/pager flags |
 | `stream/event.go` | 247 | Event/Block/Style/LinkData/InlineData types (public API) |
+| `terminal/live_renderer.go` | 144 | Interactive renderer that redraws active tables |
+| `bubbleview/model.go` | 108 | Shared Bubble Tea viewport model plumbing |
+| `bubbleview/options.go` | 106 | Bubble Tea view options and renderer integration |
+| `bubbleview/stream.go` | 99 | Append-oriented Bubble Tea Markdown stream component |
 | `stream/parser.go` | 83 | Parser interface + config + InlineScanner API |
-| `cmd/mdview/main.go` | 165 | Terminal viewer CLI and streaming/live flags |
+| `bubbleview/renderer.go` | 80 | Bubble view renderer state/replay helper |
+| `bubbleview/pager.go` | 52 | Full-input Bubble Tea Markdown pager |
 | `stream/bench_test.go` | 121 | Parser-only benchmarks |
 | `competition/benchmarks/bench_test.go` | 286 | Cross-library comparison benchmarks |
 
@@ -224,12 +240,34 @@ go test ./terminal
 go test .
 ```
 
-For the example module:
+For nested modules and examples:
 
 ```bash
-cd examples/stream-readme && go test ./...
+cd bubbleview && go test ./...
+cd cmd/mdview && go test ./...
 cd examples/demo && go test ./...
 ```
 
 If a command needs network access or hits sandbox limits, stop and request the
 appropriate escalation instead of working around it.
+
+## Release Notes
+
+- Current release line: `v0.46.0` for the root module, `cmd/mdview/v0.46.0` for
+  the nested CLI module, and `bubbleview/v0.46.0` for the nested Bubble Tea module.
+- When cutting releases that touch nested modules, tag all affected module paths,
+  for example:
+
+  ```bash
+  git tag -a v0.47.0 -m 'v0.47.0'
+  git tag -a cmd/mdview/v0.47.0 -m 'cmd/mdview/v0.47.0'
+  git tag -a bubbleview/v0.47.0 -m 'bubbleview/v0.47.0'
+  ```
+
+- Verify module resolution from a temporary module after pushing tags:
+
+  ```bash
+  go list -m github.com/codewandler/markdown@vX.Y.Z
+  go list -m github.com/codewandler/markdown/cmd/mdview@cmd/mdview/vX.Y.Z
+  go list -m github.com/codewandler/markdown/bubbleview@bubbleview/vX.Y.Z
+  ```
