@@ -16,6 +16,7 @@ built in Go. Parse incrementally, render immediately, keep memory bounded.
 | Paragraphs           | supported   | soft wraps, hard breaks        |
 | Fenced code          | supported   | Go fast path + Chroma fallback |
 | Tables               | supported   | alignment, pipe-less rows      |
+| Live tables          | supported   | redraw as later rows widen the columns during streaming |
 | Task lists           | supported   | checked and unchecked items    |
 | Blockquotes          | supported   | nested, with lazy continuation |
 | Inline styles        | supported   | *emphasis*, **strong**, `code` |

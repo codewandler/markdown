@@ -8,6 +8,7 @@
 //	go run ./examples/demo --delay 25ms --chunk 10
 //	go run ./examples/demo --record
 //	go run ./examples/demo --instant
+//	go run ./examples/demo --live=false
 //	go run ./examples/demo path/to/file.md
 package main
 
@@ -30,6 +31,7 @@ func main() {
 	record := flag.Bool("record", false, "use recording-optimized settings (chunk=10, delay=25ms)")
 	instant := flag.Bool("instant", false, "render all at once (no streaming)")
 	width := flag.Int("width", 0, "wrap width (0 = auto-detect)")
+	live := flag.Bool("live", true, "use experimental live renderer with redrawable tables")
 	clear := flag.Bool("clear", true, "clear screen before rendering")
 	flag.Parse()
 
@@ -68,28 +70,46 @@ func main() {
 		fmt.Print("\033[2J\033[H")
 	}
 
-	renderer := terminal.NewStreamRenderer(os.Stdout, opts...)
-
-	// Stream content in chunks.
-	input := content
-	for len(input) > 0 {
-		n := *chunk
-		if n > len(input) {
-			n = len(input)
-		}
-		if _, err := renderer.Write(input[:n]); err != nil {
+	if *live {
+		renderer := terminal.NewLiveRenderer(os.Stdout, opts...)
+		if err := streamContent(content, *chunk, *delay, renderer.Write); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		input = input[n:]
-		if *delay > 0 && len(input) > 0 {
-			time.Sleep(*delay)
+		if err := renderer.Flush(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	} else {
+		renderer := terminal.NewStreamRenderer(os.Stdout, opts...)
+		if err := streamContent(content, *chunk, *delay, renderer.Write); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := renderer.Flush(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 	}
-
-	if err := renderer.Flush(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
 	fmt.Println()
+}
+
+type writeFunc func([]byte) (int, error)
+
+func streamContent(content []byte, chunk int, delay time.Duration, write writeFunc) error {
+	input := content
+	for len(input) > 0 {
+		n := chunk
+		if n > len(input) {
+			n = len(input)
+		}
+		if _, err := write(input[:n]); err != nil {
+			return err
+		}
+		input = input[n:]
+		if delay > 0 && len(input) > 0 {
+			time.Sleep(delay)
+		}
+	}
+	return nil
 }

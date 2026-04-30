@@ -31,6 +31,7 @@ func main() {
 	streamInput := flag.Bool("stream", false, "render markdown in delayed chunks for testing streaming behavior")
 	chunk := flag.Int("chunk", 16, "bytes per streaming chunk when -stream is set")
 	delay := flag.Duration("delay", 20*time.Millisecond, "delay between chunks when -stream is set")
+	live := flag.Bool("live", false, "use experimental live renderer with redrawable tables")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: mdview [flags] [file]\n\n")
 		fmt.Fprintf(os.Stderr, "Render Markdown to the terminal.\n\n")
@@ -102,7 +103,12 @@ func main() {
 	// Split input into segments: markdown text and image placeholders.
 	// Images are rendered directly to stdout, bypassing the Markdown parser.
 	segments := splitImages(input, baseDir)
-	sr := terminal.NewStreamRenderer(os.Stdout, opts...)
+	var sr markdownRenderer
+	if *live {
+		sr = terminal.NewLiveRenderer(os.Stdout, opts...)
+	} else {
+		sr = terminal.NewStreamRenderer(os.Stdout, opts...)
+	}
 	for _, seg := range segments {
 		if seg.isImage {
 			// Flush any pending Markdown before the image.
@@ -110,8 +116,12 @@ func main() {
 				fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
 				os.Exit(1)
 			}
-			// Reset the stream renderer for the next segment.
-			sr = terminal.NewStreamRenderer(os.Stdout, opts...)
+			// Reset the renderer for the next segment.
+			if *live {
+				sr = terminal.NewLiveRenderer(os.Stdout, opts...)
+			} else {
+				sr = terminal.NewStreamRenderer(os.Stdout, opts...)
+			}
 			// Write image directly to stdout.
 			fmt.Fprint(os.Stdout, seg.content)
 		} else {
@@ -127,7 +137,12 @@ func main() {
 	}
 }
 
-func writeMarkdownSegment(sr *terminal.StreamRenderer, content string, stream bool, chunk int, delay time.Duration) error {
+type markdownRenderer interface {
+	Write([]byte) (int, error)
+	Flush() error
+}
+
+func writeMarkdownSegment(sr markdownRenderer, content string, stream bool, chunk int, delay time.Duration) error {
 	if !stream {
 		_, err := sr.Write([]byte(content))
 		return err
