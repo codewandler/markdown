@@ -227,3 +227,20 @@ mark and is reused for every subsequent paragraph/heading.
 | Allocations | 6,522 | 5,229 | **-19.8%** |
 
 Cumulative from baseline: **-13.2% speed, -21.4% memory, -31.8% allocs**
+
+### Opt 2: resolveEmphasis output slice pooling (2026-04-30)
+
+Added `emphOut []inlineToken` scratch slice to the parser struct. New
+`resolveEmphasisReuse` accepts and returns the output buffer, avoiding
+allocation of the output `[]inlineToken` on every paragraph.
+
+The original `resolveEmphasis` delegates to `resolveEmphasisReuse(tokens, nil)`
+for non-method call paths (recursive link content parsing).
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.83 ms | 1.62 ms | **-11.5%** |
+| Memory | 4.9 MB | 4.0 MB | **-18.4%** |
+| Allocations | 6,522 | 4,581 | **-29.8%** |
+
+Cumulative from baseline: speed -20.6%, memory -28.6%, allocs -40.3%.

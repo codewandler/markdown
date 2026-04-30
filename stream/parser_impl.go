@@ -64,6 +64,11 @@ type parser struct {
 	inHTMLBlock        bool
 	htmlBlockType      int    // 1-7 per CommonMark spec
 	htmlBlockEnd       string // end condition string for types 1-5
+
+	// Reusable scratch slices for the inline pipeline, avoiding
+	// repeated allocation across parseInline calls.
+	inlineTokens []inlineToken
+	emphOut      []inlineToken // scratch for resolveEmphasis output
 }
 
 // savedList stores the state of an outer list when entering a sublist.
@@ -144,17 +149,19 @@ func (p *parser) Write(chunk []byte) ([]Event, error) {
 
 	var events []Event
 	for {
-		i := bytes.IndexByte(p.partial, '\n')
+		// Find the next line ending: \n, \r\n, or bare \r.
+		i := bytes.IndexAny(p.partial, "\r\n")
 		if i < 0 {
 			break
 		}
 		raw := p.partial[:i]
-		if len(raw) > 0 && raw[len(raw)-1] == '\r' {
-			raw = raw[:len(raw)-1]
+		advance := i + 1
+		if p.partial[i] == '\r' && i+1 < len(p.partial) && p.partial[i+1] == '\n' {
+			advance = i + 2 // \r\n
 		}
 		info := p.nextLineInfo(string(raw), true)
 		p.processLine(info, &events)
-		p.partial = p.partial[i+1:]
+		p.partial = p.partial[advance:]
 		if cap(p.partial) > releaseBufferCap && len(p.partial) == 0 {
 			p.partial = nil
 		}
@@ -983,6 +990,17 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 	header := p.paragraph.lines[0]
 	headerCells, headerHasPipe := splitTableRow(header.text)
 	if !headerHasPipe {
+		return false
+	}
+	// Reject degenerate headers where all cells are empty (e.g. just "|").
+	allEmpty := true
+	for _, c := range headerCells {
+		if c != "" {
+			allEmpty = false
+			break
+		}
+	}
+	if allEmpty {
 		return false
 	}
 	// GFM spec: delimiter column count must match header column count.
@@ -2510,9 +2528,17 @@ func stripIndentColumns(line string, columns int) string {
 }
 
 func (p *parser) parseInline(text string, span Span, events *[]Event) {
-	parseInlineInto(text, span, p.refs, p.config.GFMAutolinks, events)
+	if text == "" {
+		*events = append(*events, Event{Kind: EventText, Text: "", Span: span})
+		return
+	}
+	p.inlineTokens = tokenizeInlineReuse(text, span, p.refs, p.config.GFMAutolinks, p.inlineTokens[:0])
+	p.inlineTokens, p.emphOut = resolveEmphasisReuse(p.inlineTokens, p.emphOut[:0])
+	coalesceInlineTokensInto(p.inlineTokens, span, events)
 }
 
+// parseInlineInto is the non-method variant used by tokenizeLinkContent
+// (which may be called recursively and cannot share the parser's scratch slice).
 func parseInlineInto(text string, span Span, refs map[string]linkReference, gfmAutolinks bool, events *[]Event) {
 	if text == "" {
 		*events = append(*events, Event{Kind: EventText, Text: "", Span: span})
@@ -2546,7 +2572,10 @@ type inlineToken struct {
 }
 
 func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAutolinks bool) []inlineToken {
-	var tokens []inlineToken
+	return tokenizeInlineReuse(text, span, refs, gfmAutolinks, nil)
+}
+
+func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, gfmAutolinks bool, tokens []inlineToken) []inlineToken {
 	var prevSource string
 	imagePossible := strings.Contains(text, "](")
 	linkPossible := strings.Contains(text, "](")
@@ -2675,16 +2704,6 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAu
 		}
 		if isInlineDelimiterByte(text[0]) {
 			n := countRun(text, text[0])
-			if text[0] == '~' && n < 2 {
-				next := nextInlineDelimiter(text)
-				if next <= 0 {
-					next = 1
-				}
-				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:next]})
-				prevSource = text[:next]
-				text = text[next:]
-				continue
-			}
 			open, close := emphasisDelimRun(prevSource, text[n:], text[0], n)
 			tokens = append(tokens, inlineToken{kind: inlineTokenDelimiter, text: text[:n], delim: text[0], run: n, origRun: n, open: open, close: close})
 			prevSource = text[:n]
@@ -2710,8 +2729,16 @@ func tokenizeInline(text string, span Span, refs map[string]linkReference, gfmAu
 // Phase 1: match openers to closers, recording (opener, closer, use) triples.
 // Phase 2: walk tokens and use the recorded matches to build nested styled output.
 func resolveEmphasis(tokens []inlineToken) []inlineToken {
+	result, _ := resolveEmphasisReuse(tokens, nil)
+	return result
+}
+
+// resolveEmphasisReuse is like resolveEmphasis but accepts a reusable output
+// slice to avoid allocation. It returns (result, scratch) where scratch is the
+// backing array of the output for the caller to retain.
+func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToken, []inlineToken) {
 	if len(tokens) == 0 {
-		return tokens
+		return tokens, out
 	}
 
 	// Collect delimiter indices.
@@ -2722,7 +2749,7 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 		}
 	}
 	if len(dstack) == 0 {
-		return tokens
+		return tokens, out
 	}
 
 	// emphPair records a matched opener-closer pair.
@@ -2784,10 +2811,13 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 
 			var use int
 			if closer.delim == '~' {
-				if opener.run < 2 || closer.run < 2 {
+				if opener.run >= 2 && closer.run >= 2 {
+					use = 2
+				} else if opener.run == 1 && closer.run == 1 {
+					use = 1
+				} else {
 					continue
 				}
-				use = 2
 			} else if opener.run >= 2 && closer.run >= 2 {
 				use = 2
 			} else {
@@ -2835,7 +2865,6 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 
 	if len(pairs) == 0 {
 		// No matches — emit all delimiters as literal text.
-		var out []inlineToken
 		for _, tok := range tokens {
 			switch tok.kind {
 			case inlineTokenDelimiter:
@@ -2846,7 +2875,7 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 				out = append(out, tok)
 			}
 		}
-		return out
+		return out, out
 	}
 
 	// Phase 2: emit output.
@@ -2913,7 +2942,6 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 		return s
 	}
 
-	var out []inlineToken
 	var dsStack []depthStyle
 	current := depthStyle{}
 
@@ -2987,7 +3015,7 @@ func resolveEmphasis(tokens []inlineToken) []inlineToken {
 			out = append(out, tok)
 		}
 	}
-	return out
+	return out, out
 }
 
 func applyDelimiterStyle(style InlineStyle, count int, marker byte) InlineStyle {
