@@ -912,14 +912,17 @@ func (p *parser) closeParagraph(events *[]Event) {
 	start := p.paragraph.lines[0].span.Start
 	end := p.paragraph.lines[len(p.paragraph.lines)-1].span.End
 	span := Span{Start: start, End: end}
-	text := paragraphText(p.paragraph.lines)
 	if !p.paragraph.hasBrackets && len(p.pendingBlocks) == 0 {
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: span})
-		p.parseInline(text, span, events)
+		if canEmitPlainParagraphLines(p.paragraph.lines, p.config.GFMAutolinks) {
+			emitPlainParagraphLines(p.paragraph.lines, span, events)
+		} else {
+			p.parseInline(paragraphText(p.paragraph.lines), span, events)
+		}
 		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: span})
 	} else {
 		p.pendingBlocks = append(p.pendingBlocks, pendingBlock{
-			text:  text,
+			text:  paragraphText(p.paragraph.lines),
 			span:  span,
 			block: BlockParagraph,
 		})
@@ -954,6 +957,41 @@ func paragraphText(lines []paragraphLine) string {
 		text.WriteString(line.text)
 	}
 	return text.String()
+}
+
+func canEmitPlainParagraphLines(lines []paragraphLine, gfmAutolinks bool) bool {
+	for i, line := range lines {
+		if hasInlineSyntax(line.text, gfmAutolinks) {
+			return false
+		}
+		if i < len(lines)-1 && hasHardBreakSuffix(line.text) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasHardBreakSuffix(text string) bool {
+	if strings.HasSuffix(text, "\\") {
+		return true
+	}
+	spaces := 0
+	for i := len(text) - 1; i >= 0 && text[i] == ' '; i-- {
+		spaces++
+		if spaces >= 2 {
+			return true
+		}
+	}
+	return false
+}
+
+func emitPlainParagraphLines(lines []paragraphLine, span Span, events *[]Event) {
+	for i, line := range lines {
+		if i > 0 {
+			*events = append(*events, Event{Kind: EventSoftBreak, Span: span})
+		}
+		*events = append(*events, Event{Kind: EventText, Text: line.text, Span: span})
+	}
 }
 
 // drainPendingBlocks inline-parses and emits all buffered paragraph/heading

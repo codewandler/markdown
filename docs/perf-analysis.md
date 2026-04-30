@@ -512,3 +512,45 @@ This is primarily an allocation/GC-pressure win. The initial implementation
 rescanned paragraph text for brackets at close and regressed speed; bracket
 state is now tracked incrementally in `addParagraphLine`, which keeps the
 allocation reduction without the extra close-time scan.
+
+### Opt 16: Emit plain paragraph lines without joining (2026-04-30)
+
+After Opt 15, `paragraphText` became visible in allocation profiles because
+immediate no-bracket paragraphs still joined all paragraph lines into a single
+string before the plain-inline fast path could emit text. For paragraphs whose
+individual lines have no inline syntax and whose line endings cannot represent a
+hard break, the parser now emits `EventText`/`EventSoftBreak` directly from the
+stored paragraph lines.
+
+Implementation details:
+
+- Added `canEmitPlainParagraphLines` to conservatively check each line with
+  `hasInlineSyntax`.
+- Added `hasHardBreakSuffix` so lines ending in `\\` or two spaces still use the
+  normal inline pipeline and preserve hard-break behavior.
+- Added `emitPlainParagraphLines` to emit line text and soft breaks without
+  allocating a joined paragraph string.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | 0.97 ms | 0.98 ms | ~same |
+| CommonMark corpus memory | 1.46 MB | 1.46 MB | ~same |
+| CommonMark corpus allocations | 3,381 | 3,358 | **-23 allocs** |
+| Long paragraph speed | 0.68 ms | 0.59 ms | **-13%** |
+| Long paragraph allocations | 8 | 8 | same |
+| Tiny chunks allocations | 23,072 | 23,049 | **-23 allocs** |
+| Competition Spec speed | 2.74 ms | 2.63 ms | **-4%** |
+| Competition Spec allocations | 8,835 | 8,835 | same |
+| Competition README speed | 0.30 ms | 0.30 ms | ~same |
+| Competition README allocations | 811 | 811 | same |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus|BenchmarkParserLongParagraph$' -benchmem -count=5 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec|README)$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+This is a small corpus win but a meaningful long-plain-paragraph win, and it
+removes a known `paragraphText` allocation path without changing Markdown
+semantics.
