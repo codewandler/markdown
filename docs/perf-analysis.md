@@ -187,3 +187,24 @@ After all optimizations:
 
 Memory parity with goldmark (1.7 MB) is not achievable without abandoning
 the streaming Event-slice architecture, which is a non-goal.
+
+## Optimization Log
+
+### Opt 1: parseInline direct append (2026-04-30)
+
+Eliminated intermediate `[]Event` allocation in the inline pipeline.
+
+- `parseInline` → `parseInlineInto`: takes `*[]Event`, appends directly
+- `coalesceInlineTokens` → `coalesceInlineTokensInto`: same pattern
+- `coalesceText` → `coalesceTextInPlace`: compacts in-place instead of returning new slice
+- All 6 call sites updated (drainPendingBlocks, drainPendingBlocksEager, closeSetextHeading, emitTableRow, processNonContainerLine heading, processListItemFirstLine heading)
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 2.04 ms | 1.83 ms | **-10.3%** |
+| Memory | 5.6 MB | 4.9 MB | **-12.5%** |
+| Allocations | 7,668 | 6,522 | **-14.9%** |
+
+This was root cause #3 from the analysis. The `append(*events, parseInline(...)...)`
+pattern created a temporary `[]Event` per paragraph that was immediately garbage.
+Direct append eliminates that allocation entirely.

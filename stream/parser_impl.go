@@ -823,7 +823,7 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 		} else {
 			p.drainPendingBlocks(events)
 			*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: span})
-			*events = append(*events, p.parseInline(text, span)...)
+			p.parseInline(text, span, events)
 			*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: span})
 		}
 		return
@@ -912,7 +912,7 @@ func (p *parser) closeParagraph(events *[]Event) {
 func (p *parser) drainPendingBlocks(events *[]Event) {
 	for _, pb := range p.pendingBlocks {
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: pb.block, Level: pb.level, Span: pb.span})
-		*events = append(*events, p.parseInline(pb.text, pb.span)...)
+		p.parseInline(pb.text, pb.span, events)
 		*events = append(*events, Event{Kind: EventExitBlock, Block: pb.block, Level: pb.level, Span: pb.span})
 	}
 	p.pendingBlocks = p.pendingBlocks[:0]
@@ -932,7 +932,7 @@ func (p *parser) drainPendingBlocksEager(events *[]Event) {
 			continue
 		}
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: pb.block, Level: pb.level, Span: pb.span})
-		*events = append(*events, p.parseInline(pb.text, pb.span)...)
+		p.parseInline(pb.text, pb.span, events)
 		*events = append(*events, Event{Kind: EventExitBlock, Block: pb.block, Level: pb.level, Span: pb.span})
 	}
 	p.pendingBlocks = kept
@@ -962,7 +962,7 @@ func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) 
 		}
 		text.WriteString(line.text)
 	}
-	*events = append(*events, p.parseInline(text.String(), Span{Start: start, End: end})...)
+	p.parseInline(text.String(), Span{Start: start, End: end}, events)
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: Span{Start: start, End: end}})
 	clear(p.paragraph.lines)
 	if cap(p.paragraph.lines) > 1024 {
@@ -1100,7 +1100,7 @@ func (p *parser) emitTableRow(text string, line lineInfo, events *[]Event, heade
 	for _, cell := range cells {
 		cellSpan := Span{Start: line.start, End: line.end}
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableCell, Span: cellSpan})
-		*events = append(*events, p.parseInline(cell, cellSpan)...)
+		p.parseInline(cell, cellSpan, events)
 		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockTableCell, Span: cellSpan})
 	}
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockTableRow, Span: rowSpan})
@@ -1827,7 +1827,7 @@ func (p *parser) processListItemFirstLine(line lineInfo, events *[]Event) {
 	if level, text, ok := heading(line.text); ok {
 		span := Span{Start: line.start, End: line.end}
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockHeading, Level: level, Span: span})
-		*events = append(*events, p.parseInline(text, span)...)
+		p.parseInline(text, span, events)
 		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Span: span})
 		return
 	}
@@ -2509,17 +2509,18 @@ func stripIndentColumns(line string, columns int) string {
 	return ""
 }
 
-func (p *parser) parseInline(text string, span Span) []Event {
-	return parseInline(text, span, p.refs, p.config.GFMAutolinks)
+func (p *parser) parseInline(text string, span Span, events *[]Event) {
+	parseInlineInto(text, span, p.refs, p.config.GFMAutolinks, events)
 }
 
-func parseInline(text string, span Span, refs map[string]linkReference, gfmAutolinks bool) []Event {
+func parseInlineInto(text string, span Span, refs map[string]linkReference, gfmAutolinks bool, events *[]Event) {
 	if text == "" {
-		return []Event{{Kind: EventText, Text: "", Span: span}}
+		*events = append(*events, Event{Kind: EventText, Text: "", Span: span})
+		return
 	}
 	tokens := tokenizeInline(text, span, refs, gfmAutolinks)
 	tokens = resolveEmphasis(tokens)
-	return coalesceInlineTokens(tokens, span)
+	coalesceInlineTokensInto(tokens, span, events)
 }
 
 type inlineTokenKind int
@@ -3058,11 +3059,11 @@ func mergeInlineStyles(base, add InlineStyle) InlineStyle {
 	return out
 }
 
-func coalesceInlineTokens(tokens []inlineToken, span Span) []Event {
+func coalesceInlineTokensInto(tokens []inlineToken, span Span, events *[]Event) {
 	if len(tokens) == 0 {
-		return nil
+		return
 	}
-	var events []Event
+	start := len(*events)
 	var linkStack []InlineStyle
 	currentLink := func() InlineStyle {
 		if len(linkStack) > 0 {
@@ -3089,14 +3090,14 @@ func coalesceInlineTokens(tokens []inlineToken, span Span) []Event {
 					s = mergeInlineStyles(s, ls)
 				}
 			}
-			events = append(events, Event{Kind: EventText, Text: tok.text, Style: s, Span: span})
+			*events = append(*events, Event{Kind: EventText, Text: tok.text, Style: s, Span: span})
 		case inlineTokenSoftBreak:
-			events = append(events, Event{Kind: EventSoftBreak, Span: span})
+			*events = append(*events, Event{Kind: EventSoftBreak, Span: span})
 		case inlineTokenLineBreak:
-			events = append(events, Event{Kind: EventLineBreak, Span: span})
+			*events = append(*events, Event{Kind: EventLineBreak, Span: span})
 		}
 	}
-	return coalesceText(events)
+	coalesceTextInPlace(events, start)
 }
 
 func parseInlineImage(text string, span Span) (Event, string, bool) {
@@ -4478,12 +4479,15 @@ func isInlineDelimiterByte(c byte) bool {
 	return c == '\n' || c == '\\' || c == '*' || c == '~' || c == '_' || c == '`' || c == '!' || c == '[' || c == '<' || c == '&'
 }
 
-func coalesceText(events []Event) []Event {
-	if len(events) < 2 {
-		return events
+// coalesceTextInPlace merges adjacent text events with the same style
+// in (*events)[start:]. It compacts the tail in-place and trims the slice.
+func coalesceTextInPlace(events *[]Event, start int) {
+	tail := (*events)[start:]
+	if len(tail) < 2 {
+		return
 	}
-	out := events[:0]
-	current := events[0]
+	write := start
+	current := tail[0]
 	var builder strings.Builder
 	merging := false
 	flush := func() {
@@ -4492,9 +4496,10 @@ func coalesceText(events []Event) []Event {
 			builder.Reset()
 			merging = false
 		}
-		out = append(out, current)
+		(*events)[write] = current
+		write++
 	}
-	for _, ev := range events[1:] {
+	for _, ev := range tail[1:] {
 		if current.Kind == EventText && ev.Kind == EventText && sameCoalesceStyle(current.Style, ev.Style) {
 			if !merging {
 				builder.WriteString(current.Text)
@@ -4508,7 +4513,7 @@ func coalesceText(events []Event) []Event {
 		current = ev
 	}
 	flush()
-	return out
+	*events = (*events)[:write]
 }
 
 func sameStyle(a, b InlineStyle) bool {
