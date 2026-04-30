@@ -2704,6 +2704,13 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 		}
 		if isInlineDelimiterByte(text[0]) {
 			n := countRun(text, text[0])
+			// Tilde runs of 3+ are not strikethrough delimiters.
+			if text[0] == '~' && n > 2 {
+				tokens = append(tokens, inlineToken{kind: inlineTokenText, text: text[:n]})
+				prevSource = text[:n]
+				text = text[n:]
+				continue
+			}
 			open, close := emphasisDelimRun(prevSource, text[n:], text[0], n)
 			tokens = append(tokens, inlineToken{kind: inlineTokenDelimiter, text: text[:n], delim: text[0], run: n, origRun: n, open: open, close: close})
 			prevSource = text[:n]
