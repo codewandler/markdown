@@ -69,20 +69,35 @@ func main() {
 	// Preprocess: replace emoji shortcodes.
 	input = replaceEmoji(input)
 
-	// Preprocess: render local images inline.
+	// Determine base directory for resolving relative image paths.
 	var baseDir string
 	if flag.NArg() > 0 {
 		baseDir = filepath.Dir(flag.Arg(0))
 	} else {
 		baseDir, _ = os.Getwd()
 	}
-	input = replaceAllImages(input, baseDir)
 
-	// Render Markdown.
+	// Split input into segments: markdown text and image placeholders.
+	// Images are rendered directly to stdout, bypassing the Markdown parser.
+	segments := splitImages(input, baseDir)
 	sr := terminal.NewStreamRenderer(os.Stdout, opts...)
-	if _, err := sr.Write([]byte(input)); err != nil {
-		fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
-		os.Exit(1)
+	for _, seg := range segments {
+		if seg.isImage {
+			// Flush any pending Markdown before the image.
+			if err := sr.Flush(); err != nil {
+				fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
+				os.Exit(1)
+			}
+			// Reset the stream renderer for the next segment.
+			sr = terminal.NewStreamRenderer(os.Stdout, opts...)
+			// Write image directly to stdout.
+			fmt.Fprint(os.Stdout, seg.content)
+		} else {
+			if _, err := sr.Write([]byte(seg.content)); err != nil {
+				fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
+				os.Exit(1)
+			}
+		}
 	}
 	if err := sr.Flush(); err != nil {
 		fmt.Fprintf(os.Stderr, "mdview: %v\n", err)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -16,103 +15,71 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-// replaceAllImages finds ![alt](src) and <img src="..."> patterns in the
-// input and replaces local image references with kitty terminal graphics.
-func replaceAllImages(input string, baseDir string) string {
-	input = replaceHTMLImages(input, baseDir)
-
-	if !strings.Contains(input, "![") {
-		return input
-	}
-
-	var b strings.Builder
-	b.Grow(len(input))
-	i := 0
-	for i < len(input) {
-		idx := strings.Index(input[i:], "![")
-		if idx < 0 {
-			b.WriteString(input[i:])
-			break
-		}
-		b.WriteString(input[i : i+idx])
-		pos := i + idx
-
-		altEnd := strings.Index(input[pos+2:], "](")
-		if altEnd < 0 {
-			b.WriteString("![")
-			i = pos + 2
-			continue
-		}
-		altEnd += pos + 2
-		srcEnd := strings.IndexByte(input[altEnd+2:], ')')
-		if srcEnd < 0 {
-			b.WriteString("![")
-			i = pos + 2
-			continue
-		}
-		srcEnd += altEnd + 2
-
-		alt := input[pos+2 : altEnd]
-		src := input[altEnd+2 : srcEnd]
-
-		if !isURL(src) {
-			rendered := renderImage(src, baseDir)
-			if rendered != "" {
-				b.WriteString(rendered)
-			} else {
-				b.WriteString(fmt.Sprintf("[image: %s]", alt))
-			}
-		} else {
-			b.WriteString(input[pos : srcEnd+1])
-		}
-		i = srcEnd + 1
-	}
-	return b.String()
+type segment struct {
+	content string
+	isImage bool
 }
 
-// replaceHTMLImages finds <img src="..."> tags and replaces local
-// image references with rendered output.
-func replaceHTMLImages(input string, baseDir string) string {
-	if !strings.Contains(input, "<img") {
-		return input
+// splitImages splits input into segments of markdown text and rendered images.
+// Images are rendered separately so they bypass the Markdown parser.
+func splitImages(input string, baseDir string) []segment {
+	var segs []segment
+	var cur strings.Builder
+
+	flushText := func() {
+		if cur.Len() > 0 {
+			segs = append(segs, segment{content: cur.String()})
+			cur.Reset()
+		}
 	}
-	var b strings.Builder
-	b.Grow(len(input))
+
 	i := 0
 	for i < len(input) {
-		idx := strings.Index(input[i:], "<img")
-		if idx < 0 {
-			b.WriteString(input[i:])
-			break
-		}
-		b.WriteString(input[i : i+idx])
-		pos := i + idx
-
-		end := strings.IndexByte(input[pos:], '>')
-		if end < 0 {
-			b.WriteString(input[pos:])
-			break
-		}
-		tag := input[pos : pos+end+1]
-
-		src := extractAttr(tag, "src")
-		if src != "" && !isURL(src) {
-			rendered := renderImage(src, baseDir)
-			if rendered != "" {
-				b.WriteString(rendered)
-			} else {
-				alt := extractAttr(tag, "alt")
-				if alt == "" {
-					alt = src
+		// Check for <img> tag.
+		if strings.HasPrefix(input[i:], "<img") {
+			end := strings.IndexByte(input[i:], '>')
+			if end >= 0 {
+				tag := input[i : i+end+1]
+				src := extractAttr(tag, "src")
+				if src != "" && !isURL(src) {
+					rendered := renderImage(src, baseDir)
+					if rendered != "" {
+						flushText()
+						segs = append(segs, segment{content: rendered + "\n", isImage: true})
+						i += end + 1
+						continue
+					}
 				}
-				b.WriteString(fmt.Sprintf("[image: %s]", alt))
 			}
-		} else {
-			b.WriteString(tag)
 		}
-		i = pos + end + 1
+
+		// Check for ![alt](src).
+		if strings.HasPrefix(input[i:], "![") {
+			altEnd := strings.Index(input[i+2:], "](")
+			if altEnd >= 0 {
+				altEnd += i + 2
+				srcEnd := strings.IndexByte(input[altEnd+2:], ')')
+				if srcEnd >= 0 {
+					srcEnd += altEnd + 2
+					src := input[altEnd+2 : srcEnd]
+					if !isURL(src) {
+						rendered := renderImage(src, baseDir)
+						if rendered != "" {
+							flushText()
+							segs = append(segs, segment{content: rendered + "\n", isImage: true})
+							i = srcEnd + 1
+							continue
+						}
+					}
+				}
+			}
+		}
+
+		cur.WriteByte(input[i])
+		i++
 	}
-	return b.String()
+	flushText()
+	return segs
 }
 
 // renderImage renders a local image file using the kitty terminal
