@@ -146,7 +146,40 @@ intended for normal documentation and generated reports, not multi-gigabyte file
 ## Architecture
 
 ```text
-chunks --> stream.Parser --> events --> terminal.Renderer/LiveRenderer --> output
+                         github.com/codewandler/markdown
+
+  Markdown bytes
+  from file/stdin/socket
+          │
+          ▼
+┌──────────────────────┐       custom inline scanners       ┌─────────────────────┐
+│ stream.Parser        │◄────────────────────────────────────│ app extensions      │
+│                      │                                     │ emoji, file refs,   │
+│ append-only chunks   │                                     │ mentions, issues    │
+│ block-boundary emits │                                     └─────────────────────┘
+│ CommonMark + GFM     │
+└──────────┬───────────┘
+           │ []stream.Event
+           │ enter/exit blocks, text, links, EventInline
+           ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ Renderers consume events; they do not parse Markdown syntax                   │
+└──────────┬──────────────────────────┬──────────────────────────┬─────────────┘
+           │                          │                          │
+           ▼                          ▼                          ▼
+┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
+│ terminal.Renderer    │   │ terminal.LiveRenderer│   │ html.Renderer        │
+│ append-only ANSI     │   │ interactive TTY      │   │ event-driven HTML    │
+│ themes + OSC 8 links │   │ table redraws        │   │ output               │
+└──────────┬───────────┘   └──────────┬───────────┘   └──────────────────────┘
+           │                          │
+           ▼                          ▼
+┌──────────────────────┐   ┌──────────────────────┐
+│ bubbleview module    │   │ cmd/mdview module    │
+│ Bubble Tea viewport  │   │ terminal CLI         │
+│ Stream + Pager views  │   │ --pager, --live,     │
+│ nested TUI deps only │   │ themes, file links   │
+└──────────────────────┘   └──────────────────────┘
 ```
 
 | Package              | Role                                        |
