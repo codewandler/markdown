@@ -3711,14 +3711,19 @@ func detectHTMLBlockStart(line string) (int, string) {
 	if tag, ok := parseRawHTMLTag(s); ok {
 		rest := strings.TrimSpace(s[len(tag):])
 		if rest == "" {
-			// Must not be a type-1 tag (pre, script, style, textarea)
 			tagName := extractTagName(s)
-			switch strings.ToLower(tagName) {
-			case "pre", "script", "style", "textarea":
-				// Already handled as type 1
-			default:
-				return 7, ""
+			tn := strings.ToLower(tagName)
+			// Opening tags for type-1 elements are already handled above.
+			// Closing tags (</script>, </style>, </pre>) are allowed as type 7.
+			isClosing := len(s) >= 2 && s[1] == '/'
+			if !isClosing {
+				switch tn {
+				case "pre", "script", "style", "textarea":
+					// Opening tag — already handled as type 1
+					return 0, ""
+				}
 			}
+			return 7, ""
 		}
 	}
 

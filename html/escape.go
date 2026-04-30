@@ -132,12 +132,16 @@ func isType1HTMLBlock(text string) bool {
 	if len(text) < 2 || text[0] != '<' {
 		return false
 	}
+	rest := text[1:]
+	if len(rest) > 0 && rest[0] == '/' {
+		rest = rest[1:]
+	}
 	for _, tag := range []string{"script", "pre", "style"} {
-		if len(text) >= 1+len(tag) && strings.EqualFold(text[1:1+len(tag)], tag) {
-			if len(text) == 1+len(tag) {
+		if len(rest) >= len(tag) && strings.EqualFold(rest[:len(tag)], tag) {
+			if len(rest) == len(tag) {
 				return true
 			}
-			next := text[1+len(tag)]
+			next := rest[len(tag)]
 			if next == '>' || next == ' ' || next == '\t' || next == '\n' {
 				return true
 			}
