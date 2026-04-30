@@ -87,10 +87,10 @@ Key files by size (lines), for planning read strategies:
 
 | File | Lines | Role |
 | --- | ---: | --- |
-| `stream/parser_impl.go` | 4,579 | Entire parser: block + inline |
-| `terminal/renderer.go` | ~750 | Terminal ANSI renderer |
-| `html/renderer.go` | ~750 | HTML renderer |
-| `stream/event.go` | 113 | Event/Block/Style types (public API) |
+| `stream/parser_impl.go` | 4,737 | Entire parser: block + inline |
+| `terminal/renderer.go` | 817 | Terminal ANSI renderer |
+| `html/renderer.go` | 769 | HTML renderer |
+| `stream/event.go` | 202 | Event/Block/Style/LinkData types (public API) |
 | `stream/parser.go` | 47 | Parser interface + config |
 | `stream/bench_test.go` | 121 | Parser-only benchmarks |
 | `competition/benchmarks/bench_test.go` | 286 | Cross-library comparison benchmarks |
@@ -104,42 +104,57 @@ it linearly.
 
 | Metric | ours | goldmark | ratio |
 | --- | ---: | ---: | ---: |
-| Speed | 7.8ms | 1.7ms | 4.6x slower |
-| Allocations | 22.3K | 11.4K | 2.0x more |
-| Memory | 25.8 MB | 1.7 MB | 15.5x more |
+| Speed | 3.7ms | 1.9ms | 1.9x slower |
+| Allocations | 14.0K | 11.4K | 1.2x more |
+| Memory | 8.6 MB | 1.7 MB | 5.1x more |
 
-Internal benchmark baseline (this machine, `BenchmarkParserCommonMarkCorpus`):
+Internal benchmark (this machine, `BenchmarkParserCommonMarkCorpus`):
 
 ```
-~2.04ms    5.6MB    7,668 allocs
+~1.12ms    1.47MB    3,893 allocs
 ```
 
-### Hot Paths (CPU profile, CommonMark corpus)
+### Completed Optimizations (2026-04-30)
 
-1. **`drainPendingBlocks`** — 21% cum. Calls `parseInline` per paragraph,
-   uses `append(*events, slice...)` pattern that creates temporary slices.
-2. **`tokenizeInline`** — 17% cum. Allocates `[]inlineToken` (160B each).
-3. **`resolveEmphasis`** — 4% flat. Allocates new `[]inlineToken` + maps.
-4. **`coalesceInlineTokens`** — 5% cum. Allocates `[]Event` (248B each).
-5. **GC** — 34% of total CPU. Driven by allocation volume.
-6. **`strings.ToLower`** — 4% flat. Called in `normalizeReferenceLabel`.
+10 optimizations applied. See `docs/perf-analysis.md` for the full log
+with before/after numbers for each change.
 
-### Top Allocation Sites (alloc_space)
+Key changes that future work should be aware of:
 
-1. `drainPendingBlocks` — 37% (2,214 MB)
-2. `tokenizeInline` — 13% (767 MB)
-3. `coalesceInlineTokens` — 13% (767 MB)
-4. `processFenceLine` — 10% (599 MB)
-5. `processHTMLBlockLine` — 7% (427 MB)
-6. `resolveEmphasis` — 5% (321 MB)
+- **`parseInline` appends directly** into `*[]Event` instead of returning
+  `[]Event`. Same for `coalesceInlineTokensInto` and `coalesceTextInPlace`.
+- **Scratch slices on parser struct**: `inlineTokens`, `emphOut`, `tableCells`
+  are reused across calls. Don't allocate new slices in the inline pipeline
+  without checking if a scratch slice exists.
+- **`EventKind`/`BlockKind` are `uint8`**, not `string`. Use `.String()`
+  for formatting. Switch/comparison works unchanged.
+- **`InlineStyle.LinkData`** is a `*LinkData` pointer, nil for non-link
+  events. Use `GetLink()`, `GetHasLink()` etc. accessor methods, or check
+  `LinkData != nil` before accessing fields directly.
+- **Event struct is 144 bytes** (down from 248). InlineStyle is 24 bytes
+  (down from 104). Don't add fields to these structs without measuring impact.
+- **No `sort` import** in parser_impl.go. Emphasis style events use
+  hand-written insertion sort (slices are 1-4 elements).
+- **`containsFold`/`indexFold`** are zero-alloc case-insensitive helpers.
+  Use these instead of `strings.ToLower` + `strings.Contains`/`strings.Index`.
+
+### Remaining Hot Paths (CPU profile, post-optimization)
+
+1. **`tokenizeInlineReuse`** — 26% cum. Core inline tokenizer.
+2. **`processLine`** — 53% cum. Main dispatch loop.
+3. **GC** — 15% cum. Reduced from 34% but still significant.
+4. **`nextAutolinkLiteralStart`** — 11% cum. Autolink candidate scanning.
+5. **`strings.ToLower`** — 5% flat. Remaining in `unicodeCaseFold`,
+   `detectHTMLBlockStart` tag matching.
 
 ### Struct Sizes
 
-- `Event`: 248 bytes (InlineStyle 104B + 3 pointers + 2 strings + Span 48B)
-- `inlineToken`: ~160 bytes (InlineStyle copy + delimiter fields)
-- `InlineStyle`: 104 bytes (5 strings, 6 bools, 2 ints)
+- `Event`: 144 bytes (InlineStyle 24B + *LinkData + 3 pointers + Span 48B)
+- `inlineToken`: ~80 bytes (InlineStyle 24B + delimiter fields)
+- `InlineStyle`: 24 bytes (6 bools + 2 int16 + *LinkData pointer)
+- `LinkData`: 72 bytes (4 strings + 1 bool)
 
-See `docs/perf-analysis.md` for the full optimization plan.
+See `docs/perf-analysis.md` for the full optimization log.
 
 ### Benchmark Commands
 
