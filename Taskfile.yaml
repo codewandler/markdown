@@ -44,6 +44,10 @@ tasks:
     desc: Render a Markdown file in the terminal
     cmd: go run ./cmd/mdview {{.CLI_ARGS}}
 
+  install:
+    desc: Install mdview to $GOPATH/bin
+    cmd: go install ./cmd/mdview
+
   # --- Competition pipeline ---
 
   competition:metadata:
