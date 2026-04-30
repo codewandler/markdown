@@ -6,13 +6,13 @@ Benchmark: `BenchmarkParserCommonMarkCorpus` (CommonMark spec, ~15.6KB input)
 
 ## Current Gap vs Goldmark (Parse-Only)
 
-From COMPARISON.md (Spec input):
+From competition benchmark (Spec input, 2026-04-30 post-optimization):
 
-| Metric       | ours     | goldmark  | ratio         |
-| ------------ | -------: | --------: | ------------: |
-| Speed        | 7.8ms    | 1.7ms     | **4.6x slower** |
-| Allocations  | 22.3K    | 11.4K     | **2.0x more** |
-| Memory       | 25.8 MB  | 1.7 MB    | **15.5x more** |
+| Metric       | ours     | goldmark  | ratio           | was             |
+| ------------ | -------: | --------: | --------------: | --------------: |
+| Speed        | 3.7ms    | 1.9ms     | **1.9x slower** | was 4.6x slower |
+| Allocations  | 14.0K    | 11.4K     | **1.2x more**   | was 2.0x more   |
+| Memory       | 8.6 MB   | 1.7 MB    | **5.1x more**   | was 15.5x more  |
 
 Target: match or beat goldmark on speed and allocations. Memory will remain
 higher due to the streaming Event-slice architecture (vs goldmark's compact
@@ -244,3 +244,130 @@ for non-method call paths (recursive link content parsing).
 | Allocations | 6,522 | 4,581 | **-29.8%** |
 
 Cumulative from baseline: speed -20.6%, memory -28.6%, allocs -40.3%.
+
+### Opt 3: eliminate string allocations in HTML block check + ref label normalization (2026-04-30)
+
+- Replace `strings.Contains(strings.ToLower(...), strings.ToLower(...))` in
+  HTML block end detection with zero-alloc `containsFold` helper.
+- Add fast path in `normalizeReferenceLabel`: skip `Fields`/`Join`/`ToLower`
+  when label is already trimmed, single-spaced, lowercase ASCII.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.62 ms | 1.65 ms | ~same |
+| Memory | 4.0 MB | 4.0 MB | ~same |
+| Allocations | 4,581 | 4,362 | **-4.8%** |
+
+Cumulative from baseline: speed -19.1%, memory -28.6%, allocs -43.1%.
+
+### Opt 4: pool splitTableRow cells slice (2026-04-30)
+
+Added `tableCells []string` scratch slice to parser struct. New
+`splitTableRowReuse` reuses the backing array across table row parses.
+
+No measurable change on CommonMark corpus (few tables). Prevents
+per-row `[]string` allocation on table-heavy inputs.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.65 ms | 1.71 ms | ~same |
+| Memory | 4.0 MB | 4.0 MB | ~same |
+| Allocations | 4,362 | 4,362 | ~same |
+
+Cumulative from baseline: speed -16.2%, memory -28.6%, allocs -43.1%.
+
+### Opt 5: EventKind/BlockKind string → uint8 (2026-04-30)
+
+Changed `EventKind` and `BlockKind` from `string` to `uint8` with iota
+constants. Added `String()` methods for formatting compatibility.
+Source-compatible for all switch/comparison usage.
+
+Event struct: 248B → 224B (-24B per event, -10%).
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.71 ms | 1.60 ms | **-6.4%** |
+| Memory | 4.0 MB | 3.88 MB | **-3.0%** |
+| Allocations | 4,362 | 4,362 | same |
+
+Cumulative from baseline: speed -21.6%, memory -30.7%, allocs -43.1%.
+
+### Opt 6: Split InlineStyle — move link strings behind *LinkData pointer (2026-04-30)
+
+Moved Link, LinkTitle, HasLink, ImageLink, ImageLinkTitle from InlineStyle
+into a separate LinkData struct behind a pointer. Only link/image events
+allocate it; plain text and block events carry a nil pointer.
+
+Event struct: 224B → 144B (-36%). InlineStyle: 104B → 24B (-77%).
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.60 ms | 1.22 ms | **-23.8%** |
+| Memory | 3.88 MB | 2.66 MB | **-31.4%** |
+| Allocations | 4,362 | 4,435 | +1.7% |
+
+Allocs increased slightly (+73) from LinkData pointer allocations, but
+the 1.2MB memory reduction and 24% speed gain from smaller Event copies
+and better cache locality far outweigh it.
+
+Cumulative from baseline: speed -40.2%, memory -52.5%, allocs -42.2%.
+
+**Breaking API change**: InlineStyle fields Link, LinkTitle, HasLink,
+ImageLink, ImageLinkTitle moved to LinkData. Access via GetLink(),
+GetHasLink(), etc. methods or direct LinkData pointer.
+
+### Opt 7: Pre-size events slice in Write by counting newlines (2026-04-30)
+
+Count newlines in partial buffer before processing to pre-allocate the
+events slice with capacity = lines × 4. Eliminates all growslice
+reallocation during event emission.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.22 ms | 1.24 ms | ~same |
+| Memory | 2.66 MB | 1.48 MB | **-44.4%** |
+| Allocations | 4,435 | 4,420 | -0.3% |
+
+Cumulative from baseline: speed -39.2%, memory -73.6%, allocs -42.3%.
+
+### Opt 8: Replace sort.SliceStable with insertion sort in resolveEmphasis (2026-04-30)
+
+Replace `sort.SliceStable` (which uses `reflectlite.Swapper`, allocating
+per call) with a hand-written insertion sort. The style event slices are
+typically 1-4 elements. Removed `sort` import entirely.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.24 ms | 1.19 ms | **-4.0%** |
+| Memory | 1.48 MB | 1.47 MB | ~same |
+| Allocations | 4,420 | 4,079 | **-7.7%** |
+
+Cumulative from baseline: speed -41.7%, memory -73.8%, allocs -46.8%.
+
+### Opt 9: Eliminate strings.ToLower in autolink detection (2026-04-30)
+
+Replace `strings.ToLower(text)` called 4x per invocation in
+`nextAutolinkLiteralStart` with zero-alloc `indexFold` helper.
+Replace `strings.ToLower(candidate)` in `parseAutolinkLiteral` with
+direct `strings.EqualFold` prefix checks.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.19 ms | 1.13 ms | **-5.0%** |
+| Memory | 1.47 MB | 1.46 MB | ~same |
+| Allocations | 4,079 | 3,735 | **-8.4%** |
+
+Cumulative from baseline: speed -44.6%, memory -73.9%, allocs -51.3%.
+
+### Opt 10: Use bytes.IndexByte instead of bytes.IndexAny in Write loop (2026-04-30)
+
+Check once for \r presence, then use `bytes.IndexByte(_, '\n')` (SIMD)
+on the common path instead of `bytes.IndexAny(_, "\r\n")` (generic).
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.13 ms | 1.08 ms | **-4.4%** |
+| Memory | 1.46 MB | 1.46 MB | same |
+| Allocations | 3,735 | 3,735 | same |
+
+Cumulative from baseline: speed -47.1%, memory -73.9%, allocs -51.3%.

@@ -333,7 +333,7 @@ func TestInlineStrike(t *testing.T) {
 func TestInlineLink(t *testing.T) {
 	events := []stream.Event{
 		enterDoc(), enterPara(),
-		styledText("click", stream.InlineStyle{HasLink: true, Link: "https://example.com"}),
+		styledText("click", stream.InlineStyle{LinkData: &stream.LinkData{HasLink: true, Link: "https://example.com"}}),
 		exitPara(), exitDoc(),
 	}
 	got, _ := RenderString(events)
@@ -346,7 +346,7 @@ func TestInlineLink(t *testing.T) {
 func TestInlineLinkWithTitle(t *testing.T) {
 	events := []stream.Event{
 		enterDoc(), enterPara(),
-		styledText("click", stream.InlineStyle{HasLink: true, Link: "/url", LinkTitle: "a title"}),
+		styledText("click", stream.InlineStyle{LinkData: &stream.LinkData{HasLink: true, Link: "/url", LinkTitle: "a title"}}),
 		exitPara(), exitDoc(),
 	}
 	got, _ := RenderString(events)
@@ -359,7 +359,7 @@ func TestInlineLinkWithTitle(t *testing.T) {
 func TestInlineImage(t *testing.T) {
 	events := []stream.Event{
 		enterDoc(), enterPara(),
-		styledText("alt text", stream.InlineStyle{HasLink: true, Link: "/img.png", Image: true}),
+		styledText("alt text", stream.InlineStyle{Image: true, LinkData: &stream.LinkData{HasLink: true, Link: "/img.png"}}),
 		exitPara(), exitDoc(),
 	}
 	got, _ := RenderString(events)
@@ -377,7 +377,7 @@ func TestInlineImage(t *testing.T) {
 func TestInlineImageWithTitle(t *testing.T) {
 	events := []stream.Event{
 		enterDoc(), enterPara(),
-		styledText("alt", stream.InlineStyle{HasLink: true, Link: "/img.png", LinkTitle: "my title", Image: true}),
+		styledText("alt", stream.InlineStyle{Image: true, LinkData: &stream.LinkData{HasLink: true, Link: "/img.png", LinkTitle: "my title"}}),
 		exitPara(), exitDoc(),
 	}
 	got, _ := RenderString(events)

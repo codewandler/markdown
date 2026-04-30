@@ -260,11 +260,11 @@ func TestRendererEmitsClickableLinks(t *testing.T) {
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
-		{Kind: stream.EventText, Text: "inline", Style: stream.InlineStyle{Link: "https://example.com"}},
+		{Kind: stream.EventText, Text: "inline", Style: stream.InlineStyle{LinkData: &stream.LinkData{HasLink: true, Link: "https://example.com"}}},
 		{Kind: stream.EventSoftBreak},
-		{Kind: stream.EventText, Text: "reference", Style: stream.InlineStyle{Link: "https://example.org/docs", LinkTitle: "docs"}},
+		{Kind: stream.EventText, Text: "reference", Style: stream.InlineStyle{LinkData: &stream.LinkData{HasLink: true, Link: "https://example.org/docs", LinkTitle: "docs"}}},
 		{Kind: stream.EventSoftBreak},
-		{Kind: stream.EventText, Text: "autolink", Style: stream.InlineStyle{Link: "mailto:team@example.org"}},
+		{Kind: stream.EventText, Text: "autolink", Style: stream.InlineStyle{LinkData: &stream.LinkData{HasLink: true, Link: "mailto:team@example.org"}}},
 		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
 	}
 	if err := renderer.Render(events); err != nil {
@@ -321,7 +321,7 @@ func TestRendererWrapsClickableLinks(t *testing.T) {
 
 	events := []stream.Event{
 		{Kind: stream.EventEnterBlock, Block: stream.BlockParagraph},
-		{Kind: stream.EventText, Text: "https://example.com/very/long/path", Style: stream.InlineStyle{Link: "https://example.com/very/long/path"}},
+		{Kind: stream.EventText, Text: "https://example.com/very/long/path", Style: stream.InlineStyle{LinkData: &stream.LinkData{HasLink: true, Link: "https://example.com/very/long/path"}}},
 		{Kind: stream.EventExitBlock, Block: stream.BlockParagraph},
 	}
 	if err := renderer.Render(events); err != nil {

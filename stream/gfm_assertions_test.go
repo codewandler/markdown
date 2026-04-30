@@ -180,7 +180,7 @@ func expectAutolink(text, link string) func(*testing.T, []eventView) {
 	return func(t *testing.T, events []eventView) {
 		t.Helper()
 		for _, ev := range events {
-			if ev.Kind == EventText && ev.Text == text && ev.Style.Link == link {
+			if ev.Kind == EventText && ev.Text == text && ev.Style.GetLink() == link {
 				return
 			}
 		}
@@ -194,8 +194,8 @@ func expectNoAutolink(text string) func(*testing.T, []eventView) {
 	return func(t *testing.T, events []eventView) {
 		t.Helper()
 		for _, ev := range events {
-			if ev.Kind == EventText && ev.Text == text && ev.Style.Link != "" {
-				t.Fatalf("unexpected autolink for text %q (link=%q) in %#v", text, ev.Style.Link, events)
+			if ev.Kind == EventText && ev.Text == text && ev.Style.GetLink() != "" {
+				t.Fatalf("unexpected autolink for text %q (link=%q) in %#v", text, ev.Style.GetLink(), events)
 			}
 		}
 	}

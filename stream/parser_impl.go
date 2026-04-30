@@ -3,7 +3,6 @@ package stream
 import (
 	"bytes"
 	"html"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -69,6 +68,7 @@ type parser struct {
 	// repeated allocation across parseInline calls.
 	inlineTokens []inlineToken
 	emphOut      []inlineToken // scratch for resolveEmphasis output
+	tableCells   []string      // scratch for splitTableRow
 }
 
 // savedList stores the state of an outer list when entering a sublist.
@@ -147,16 +147,30 @@ func (p *parser) Write(chunk []byte) ([]Event, error) {
 	}
 	p.partial = append(p.partial, chunk...)
 
+	// Count lines to pre-size events slice.
+	newlines := bytes.Count(p.partial, []byte("\n"))
+	if cr := bytes.Count(p.partial, []byte("\r")); cr > newlines {
+		newlines = cr
+	}
 	var events []Event
+	if newlines > 0 {
+		events = make([]Event, 0, newlines*4)
+	}
+	hasCR := bytes.IndexByte(p.partial, '\r') >= 0
 	for {
-		// Find the next line ending: \n, \r\n, or bare \r.
-		i := bytes.IndexAny(p.partial, "\r\n")
+		// Find the next line ending.
+		var i int
+		if hasCR {
+			i = bytes.IndexAny(p.partial, "\r\n")
+		} else {
+			i = bytes.IndexByte(p.partial, '\n')
+		}
 		if i < 0 {
 			break
 		}
 		raw := p.partial[:i]
 		advance := i + 1
-		if p.partial[i] == '\r' && i+1 < len(p.partial) && p.partial[i+1] == '\n' {
+		if hasCR && p.partial[i] == '\r' && i+1 < len(p.partial) && p.partial[i+1] == '\n' {
 			advance = i + 2 // \r\n
 		}
 		info := p.nextLineInfo(string(raw), true)
@@ -173,7 +187,7 @@ func (p *parser) Flush() ([]Event, error) {
 	if p.flushed {
 		return nil, nil
 	}
-	var events []Event
+	events := make([]Event, 0, 32)
 	if len(p.partial) > 0 {
 		raw := p.partial
 		if len(raw) > 0 && raw[len(raw)-1] == '\r' {
@@ -990,7 +1004,9 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 	// The table header is the last paragraph line. If there are
 	// earlier lines, emit them as a paragraph first.
 	header := p.paragraph.lines[len(p.paragraph.lines)-1]
-	headerCells, headerHasPipe := splitTableRow(header.text)
+	var headerHasPipe bool
+	p.tableCells, headerHasPipe = splitTableRowReuse(header.text, p.tableCells[:0])
+	headerCells := p.tableCells
 	if !headerHasPipe {
 		return false
 	}
@@ -1046,8 +1062,8 @@ func (p *parser) processActiveTableLine(line lineInfo, events *[]Event) bool {
 	if startsNewBlock(line.text) {
 		return false
 	}
-	cells, _ := splitTableRow(line.text)
-	if len(cells) == 0 {
+	p.tableCells, _ = splitTableRowReuse(line.text, p.tableCells[:0])
+	if len(p.tableCells) == 0 {
 		return false
 	}
 	p.table.span.End = line.end
@@ -1118,8 +1134,8 @@ func (p *parser) emitTableRow(text string, line lineInfo, events *[]Event, heade
 		rowData = &TableRowData{Header: true}
 	}
 	*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableRow, Span: rowSpan, TableRow: rowData})
-	cells, _ := splitTableRow(text)
-	for _, cell := range cells {
+	p.tableCells, _ = splitTableRowReuse(text, p.tableCells[:0])
+	for _, cell := range p.tableCells {
 		cellSpan := Span{Start: line.start, End: line.end}
 		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockTableCell, Span: cellSpan})
 		p.parseInline(cell, cellSpan, events)
@@ -1189,6 +1205,10 @@ func parseTableAlign(cell string) (TableAlign, bool) {
 }
 
 func splitTableRow(line string) ([]string, bool) {
+	return splitTableRowReuse(line, nil)
+}
+
+func splitTableRowReuse(line string, cells []string) ([]string, bool) {
 	s := strings.TrimSpace(line)
 	if s == "" {
 		return nil, false
@@ -1202,7 +1222,6 @@ func splitTableRow(line string) ([]string, bool) {
 		hasPipe = true
 		s = s[:len(s)-1]
 	}
-	var cells []string
 	start := 0
 	escaped := false
 	codeRun := 0
@@ -1635,7 +1654,7 @@ func (p *parser) processHTMLBlockLine(line lineInfo, events *[]Event) {
 
 	// Check end condition for types 1-5.
 	if p.htmlBlockType >= 1 && p.htmlBlockType <= 5 {
-		if strings.Contains(strings.ToLower(line.text), strings.ToLower(p.htmlBlockEnd)) {
+		if containsFold(line.text, p.htmlBlockEnd) {
 			p.closeHTMLBlock(events)
 		}
 	}
@@ -2652,7 +2671,7 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 		}
 		if text[0] == '[' && linkPossible {
 			if ev, rest, labelRaw, ok := parseInlineLink(text, span); ok {
-				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
+				linkStyle := InlineStyle{LinkData: ev.Style.LinkData}
 				// Resolve emphasis within the label, then wrap in link boundaries.
 				// This lets outer emphasis wrap the link while keeping inner
 				// delimiters scoped to the label.
@@ -2668,7 +2687,7 @@ func tokenizeInlineReuse(text string, span Span, refs map[string]linkReference, 
 		if text[0] == '[' && len(refs) > 0 {
 			if ev, rest, labelRaw, ok := parseReferenceLink(text, span, refs); ok {
 				_ = ev
-				linkStyle := InlineStyle{Link: ev.Style.Link, LinkTitle: ev.Style.LinkTitle, HasLink: true}
+				linkStyle := InlineStyle{LinkData: ev.Style.LinkData}
 				tokens = append(tokens, inlineToken{kind: inlineTokenLinkOpen, style: linkStyle})
 				tokens = append(tokens, tokenizeLinkContent(labelRaw, InlineStyle{}, span, refs, gfmAutolinks)...)
 				tokens = append(tokens, inlineToken{kind: inlineTokenLinkClose, style: linkStyle})
@@ -2931,18 +2950,28 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 	// The first-matched pair is the innermost (closest opener-closer),
 	// so opens sort by seq descending (outer first = last matched)
 	// and closes sort by seq ascending (inner first = first matched).
+	// Sort events at each position: opens before closes,
+	// opens by seq descending, closes by seq ascending.
+	// Insertion sort — slices are typically 1-4 elements.
 	for idx := range events {
 		ev := events[idx]
-		sort.SliceStable(ev, func(i, j int) bool {
-			if ev[i].open != ev[j].open {
-				return ev[i].open // opens before closes
+		for i := 1; i < len(ev); i++ {
+			for j := i; j > 0; j-- {
+				a, b := ev[j], ev[j-1]
+				swap := false
+				if a.open != b.open {
+					swap = a.open // opens before closes
+				} else if a.open {
+					swap = a.seq > b.seq // opens: outer first
+				} else {
+					swap = a.seq < b.seq // closes: inner first
+				}
+				if !swap {
+					break
+				}
+				ev[j], ev[j-1] = ev[j-1], ev[j]
 			}
-			if ev[i].open {
-				return ev[i].seq > ev[j].seq // opens: outer first (last matched)
-			}
-			return ev[i].seq < ev[j].seq // closes: inner first (first matched)
-		})
-		events[idx] = ev
+		}
 	}
 
 	// Track emphasis/strong depth so nested emphasis produces
@@ -2959,8 +2988,8 @@ func resolveEmphasisReuse(tokens []inlineToken, out []inlineToken) ([]inlineToke
 		s.Emphasis = ds.emDepth > 0
 		s.Strong = ds.strongDepth > 0
 		s.Strike = ds.strike
-		s.EmphasisDepth = ds.emDepth
-		s.StrongDepth = ds.strongDepth
+		s.EmphasisDepth = int16(ds.emDepth)
+		s.StrongDepth = int16(ds.strongDepth)
 		return s
 	}
 
@@ -3076,11 +3105,14 @@ func tokenizeLinkContent(labelRaw string, linkStyle InlineStyle, span Span, refs
 	inner := tokenizeInline(label, span, refs, gfmAutolinks)
 	inner = resolveEmphasis(inner)
 	for i := range inner {
-		if inner[i].style.Image && inner[i].style.HasLink && linkStyle.HasLink {
+		if inner[i].style.Image && inner[i].style.GetHasLink() && linkStyle.GetHasLink() {
 			// Image inside a link: keep the image's own Link (src),
 			// store the outer link in ImageLink for the renderer.
-			inner[i].style.ImageLink = linkStyle.Link
-			inner[i].style.ImageLinkTitle = linkStyle.LinkTitle
+			if inner[i].style.LinkData == nil {
+				inner[i].style.LinkData = &LinkData{}
+			}
+			inner[i].style.LinkData.ImageLink = linkStyle.LinkData.Link
+			inner[i].style.LinkData.ImageLinkTitle = linkStyle.LinkData.LinkTitle
 		} else {
 			inner[i].style = mergeInlineStyles(inner[i].style, linkStyle)
 		}
@@ -3101,10 +3133,8 @@ func mergeInlineStyles(base, add InlineStyle) InlineStyle {
 	out.StrongDepth += add.StrongDepth
 	if out.EmphasisDepth > 0 { out.Emphasis = true }
 	if out.StrongDepth > 0 { out.Strong = true }
-	if add.HasLink {
-		out.Link = add.Link
-		out.LinkTitle = add.LinkTitle
-		out.HasLink = true
+	if add.LinkData != nil && add.LinkData.HasLink {
+		out.LinkData = add.LinkData
 	}
 	return out
 }
@@ -3131,11 +3161,14 @@ func coalesceInlineTokensInto(tokens []inlineToken, span Span, events *[]Event) 
 			}
 		case inlineTokenText:
 			s := tok.style
-			if ls := currentLink(); ls.HasLink {
-				if s.Image && s.HasLink {
+			if ls := currentLink(); ls.GetHasLink() {
+				if s.Image && s.GetHasLink() {
 					// Image inside link: keep image's own Link, set ImageLink.
-					s.ImageLink = ls.Link
-					s.ImageLinkTitle = ls.LinkTitle
+					if s.LinkData == nil {
+						s.LinkData = &LinkData{}
+					}
+					s.LinkData.ImageLink = ls.LinkData.Link
+					s.LinkData.ImageLinkTitle = ls.LinkData.LinkTitle
 				} else {
 					s = mergeInlineStyles(s, ls)
 				}
@@ -3201,7 +3234,7 @@ func plainTextFromInline(text string, refs map[string]linkReference) string {
 			if tok.style.Image {
 				// Already stripped by parseInlineImage.
 				b.WriteString(tok.text)
-			} else if tok.style.HasLink {
+			} else if tok.style.GetHasLink() {
 				b.WriteString(tok.text)
 			} else {
 				b.WriteString(tok.text)
@@ -3242,7 +3275,7 @@ func parseInlineLinkInner(text string, span Span, rejectNestedLinks bool) (Event
 	if !ok {
 		return Event{}, text, "", false
 	}
-	return Event{Kind: EventText, Text: label, Style: InlineStyle{Link: dest, LinkTitle: title, HasLink: true}, Span: span}, text[closeText+2+end:], labelRaw, true
+	return Event{Kind: EventText, Text: label, Style: InlineStyle{LinkData: &LinkData{Link: dest, LinkTitle: title, HasLink: true}}, Span: span}, text[closeText+2+end:], labelRaw, true
 }
 
 // containsInlineLinkOrRef reports whether text contains a valid inline link
@@ -3346,7 +3379,7 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 				refLabelRaw := text[end+1 : end+closeRef]
 				ref, ok := refs[normalizeReferenceLabel(refLabelRaw)]
 				if ok {
-					return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title, HasLink: true}, Span: span}, text[end+closeRef+1:], labelRaw, true
+					return Event{Kind: EventText, Text: labelText, Style: InlineStyle{LinkData: &LinkData{Link: ref.dest, LinkTitle: ref.title, HasLink: true}}, Span: span}, text[end+closeRef+1:], labelRaw, true
 				}
 				// Full reference label not found — don't fall through to shortcut.
 				return Event{}, text, "", false
@@ -3355,7 +3388,7 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 			// Use raw first label for lookup.
 			ref, ok := refs[normalizeReferenceLabel(labelRaw)]
 			if ok {
-				return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title, HasLink: true}, Span: span}, text[end+closeRef+1:], labelRaw, true
+				return Event{Kind: EventText, Text: labelText, Style: InlineStyle{LinkData: &LinkData{Link: ref.dest, LinkTitle: ref.title, HasLink: true}}, Span: span}, text[end+closeRef+1:], labelRaw, true
 			}
 			return Event{}, text, "", false
 		}
@@ -3368,7 +3401,7 @@ func parseReferenceLink(text string, span Span, refs map[string]linkReference) (
 	if !ok {
 		return Event{}, text, "", false
 	}
-	return Event{Kind: EventText, Text: labelText, Style: InlineStyle{Link: ref.dest, LinkTitle: ref.title, HasLink: true}, Span: span}, text[end:], labelRaw, true
+	return Event{Kind: EventText, Text: labelText, Style: InlineStyle{LinkData: &LinkData{Link: ref.dest, LinkTitle: ref.title, HasLink: true}}, Span: span}, text[end:], labelRaw, true
 }
 
 func parseLinkReferenceDefinition(line string) (string, linkReference, bool) {
@@ -3473,11 +3506,48 @@ func detectPendingTitle(text string, start int) (opener byte, content string, ok
 }
 
 func normalizeReferenceLabel(label string) string {
+	// Fast path: if the label has no leading/trailing whitespace,
+	// no consecutive whitespace, and is already lowercase ASCII,
+	// we can return it without allocation.
+	if isNormalized(label) {
+		return label
+	}
 	fields := strings.Fields(label)
 	if len(fields) == 0 {
 		return ""
 	}
 	return unicodeCaseFold(strings.Join(fields, " "))
+}
+
+// isNormalized reports whether label is already in normalized form:
+// trimmed, single-spaced, and lowercase.
+func isNormalized(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	if s[0] == ' ' || s[0] == '\t' || s[len(s)-1] == ' ' || s[len(s)-1] == '\t' {
+		return false
+	}
+	prevSpace := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			if prevSpace {
+				return false
+			}
+			prevSpace = true
+			continue
+		}
+		prevSpace = false
+		if c >= 'A' && c <= 'Z' {
+			return false
+		}
+		if c >= 0x80 {
+			// Non-ASCII: might need case folding, bail to slow path.
+			return false
+		}
+	}
+	return true
 }
 
 // unicodeCaseFold performs a simple Unicode case fold. It handles
@@ -3496,6 +3566,40 @@ func unicodeCaseFold(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// indexFold returns the index of the first case-insensitive match of
+// substr (assumed lowercase ASCII) in s, or -1. Zero allocations.
+func indexFold(s, substr string) int {
+	if len(substr) == 0 {
+		return 0
+	}
+	if len(substr) > len(s) {
+		return -1
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if strings.EqualFold(s[i:i+len(substr)], substr) {
+			return i
+		}
+	}
+	return -1
+}
+
+// containsFold reports whether substr (assumed lowercase ASCII) is
+// contained in s, using case-insensitive comparison. Zero allocations.
+func containsFold(s, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if strings.EqualFold(s[i:i+len(substr)], substr) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseRawHTMLTag tries to parse a raw HTML tag at the start of text.
@@ -4254,10 +4358,10 @@ func parseAutolink(text string, span Span) (Event, string, bool) {
 	}
 	target := text[1:end]
 	if isURIAutolink(target) {
-		return Event{Kind: EventText, Text: target, Style: InlineStyle{HasLink: true, Link: target}, Span: span}, text[end+1:], true
+		return Event{Kind: EventText, Text: target, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: target}}, Span: span}, text[end+1:], true
 	}
 	if isEmailAutolink(target) {
-		return Event{Kind: EventText, Text: target, Style: InlineStyle{HasLink: true, Link: "mailto:" + target}, Span: span}, text[end+1:], true
+		return Event{Kind: EventText, Text: target, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: "mailto:" + target}}, Span: span}, text[end+1:], true
 	}
 	return Event{}, text, false
 }
@@ -4275,18 +4379,22 @@ func parseAutolinkLiteral(text string, span Span, prevSource string) (Event, str
 	if candidate == "" {
 		return Event{}, text, false
 	}
-	lower := strings.ToLower(candidate)
 	switch {
-	case strings.HasPrefix(lower, "http://"),
-		strings.HasPrefix(lower, "https://"),
-		strings.HasPrefix(lower, "ftp://"):
-		scheme := lower[:strings.Index(lower, "://")+3]
-		if len(candidate) > len(scheme) && isURIAutolink(candidate) {
-			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: candidate}, Span: span}, text[len(candidate):], true
+	case len(candidate) > 7 && strings.EqualFold(candidate[:7], "http://"):
+		if isURIAutolink(candidate) {
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: candidate}}, Span: span}, text[len(candidate):], true
 		}
-	case strings.HasPrefix(lower, "www."):
+	case len(candidate) > 8 && strings.EqualFold(candidate[:8], "https://"):
+		if isURIAutolink(candidate) {
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: candidate}}, Span: span}, text[len(candidate):], true
+		}
+	case len(candidate) > 6 && strings.EqualFold(candidate[:6], "ftp://"):
+		if isURIAutolink(candidate) {
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: candidate}}, Span: span}, text[len(candidate):], true
+		}
+	case len(candidate) > 4 && strings.EqualFold(candidate[:4], "www."):
 		if isWWWAutolink(candidate) {
-			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: "http://" + candidate}, Span: span}, text[len(candidate):], true
+			return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: "http://" + candidate}}, Span: span}, text[len(candidate):], true
 		}
 	}
 	// For email autolinks: if the untrimmed candidate looks like an
@@ -4299,11 +4407,11 @@ func parseAutolinkLiteral(text string, span Span, prevSource string) (Event, str
 			if last == '-' || last == '_' {
 				// Domain ends with disallowed char — not an email autolink.
 			} else if isEmailAutolink(candidate) {
-				return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: "mailto:" + candidate}, Span: span}, text[len(candidate):], true
+				return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: "mailto:" + candidate}}, Span: span}, text[len(candidate):], true
 			}
 		}
 	} else if isEmailAutolink(candidate) {
-		return Event{Kind: EventText, Text: candidate, Style: InlineStyle{HasLink: true, Link: "mailto:" + candidate}, Span: span}, text[len(candidate):], true
+		return Event{Kind: EventText, Text: candidate, Style: InlineStyle{LinkData: &LinkData{HasLink: true, Link: "mailto:" + candidate}}, Span: span}, text[len(candidate):], true
 	}
 	return Event{}, text, false
 }
@@ -4398,10 +4506,9 @@ func trimAutolinkLiteralSuffix(candidate string) string {
 func nextAutolinkLiteralStart(text string, prevSource string) int {
 	best := -1
 	for _, prefix := range []string{"http://", "https://", "ftp://", "www."} {
-		lower := strings.ToLower(text)
 		search := 0
 		for {
-			i := strings.Index(lower[search:], prefix)
+			i := indexFold(text[search:], prefix)
 			if i < 0 {
 				break
 			}
@@ -4585,7 +4692,7 @@ func coalesceTextInPlace(events *[]Event, start int) {
 }
 
 func sameStyle(a, b InlineStyle) bool {
-	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.Link == b.Link && a.LinkTitle == b.LinkTitle && a.HasLink == b.HasLink && a.Image == b.Image && a.ImageLink == b.ImageLink && a.ImageLinkTitle == b.ImageLinkTitle && a.RawHTML == b.RawHTML
+	return a.Emphasis == b.Emphasis && a.Strong == b.Strong && a.Strike == b.Strike && a.Code == b.Code && a.GetHasLink() == b.GetHasLink() && a.GetLink() == b.GetLink() && a.GetLinkTitle() == b.GetLinkTitle() && a.Image == b.Image && a.GetImageLink() == b.GetImageLink() && a.GetImageLinkTitle() == b.GetImageLinkTitle() && a.RawHTML == b.RawHTML
 }
 
 // sameCoalesceStyle is like sameStyle but also compares emphasis/strong

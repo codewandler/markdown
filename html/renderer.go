@@ -135,7 +135,7 @@ func (r *renderer) render(events []stream.Event) error {
 			if ns, ok := r.nextTextStyle(events, i); ok {
 				cs := r.closingStyle(ns)
 				r.transitionStyle(cs)
-			} else if r.openStyle.HasLink {
+			} else if r.openStyle.GetHasLink() {
 				r.closeStyle()
 			}
 			r.write("\n")
@@ -429,26 +429,26 @@ func (r *renderer) text(ev stream.Event) {
 	}
 
 	// Image: void element, self-contained.
-	if s.Image && s.Link != "" {
+	if s.Image && s.GetLink() != "" {
 		r.closeStyle()
 		// Image inside a link: wrap in <a>.
-		if s.ImageLink != "" {
-			r.write("<a href=\"" + escapeAttrURL(s.ImageLink) + "\"")
-			if s.ImageLinkTitle != "" {
-				r.write(" title=\"" + escapeHTML(s.ImageLinkTitle) + "\"")
+		if s.GetImageLink() != "" {
+			r.write("<a href=\"" + escapeAttrURL(s.GetImageLink()) + "\"")
+			if s.GetImageLinkTitle() != "" {
+				r.write(" title=\"" + escapeHTML(s.GetImageLinkTitle()) + "\"")
 			}
 			r.write(">")
 		}
-		r.write("<img src=\"" + escapeAttrURL(s.Link) + "\" alt=\"" + escapeHTML(ev.Text) + "\"")
-		if s.LinkTitle != "" {
-			r.write(" title=\"" + escapeHTML(s.LinkTitle) + "\"")
+		r.write("<img src=\"" + escapeAttrURL(s.GetLink()) + "\" alt=\"" + escapeHTML(ev.Text) + "\"")
+		if s.GetLinkTitle() != "" {
+			r.write(" title=\"" + escapeHTML(s.GetLinkTitle()) + "\"")
 		}
 		if r.html5 {
 			r.write(">")
 		} else {
 			r.write(" />")
 		}
-		if s.ImageLink != "" {
+		if s.GetImageLink() != "" {
 			r.write("</a>")
 		}
 		return
@@ -474,11 +474,11 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 		return
 	}
 
-	sEm := s.EmphasisDepth
+	sEm := int(s.EmphasisDepth)
 	if sEm == 0 && s.Emphasis { sEm = 1 }
-	sSt := s.StrongDepth
+	sSt := int(s.StrongDepth)
 	if sSt == 0 && s.Strong { sSt = 1 }
-	sameLink := s.HasLink && r.openStyle.HasLink && s.Link == r.openStyle.Link && s.LinkTitle == r.openStyle.LinkTitle
+	sameLink := s.GetHasLink() && r.openStyle.GetHasLink() && s.GetLink() == r.openStyle.GetLink() && s.GetLinkTitle() == r.openStyle.GetLinkTitle()
 
 	// Determine which tags need to be removed.
 	needRemove := func(t inlineTag) bool {
@@ -490,7 +490,7 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 		case tagStrong:
 			return false // handled by count
 		case tagLink:
-			return !s.HasLink || !sameLink
+			return !s.GetHasLink() || !sameLink
 		}
 		return false
 	}
@@ -544,7 +544,7 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 			remSt++
 			keep = remSt > extraSt
 		case tagLink:
-			keep = s.HasLink && sameLink
+			keep = s.GetHasLink() && sameLink
 		case tagDel:
 			keep = s.Strike
 		}
@@ -564,8 +564,8 @@ func (r *renderer) transitionStyle(s stream.InlineStyle) {
 		r.writeOpenTag(tag)
 		r.tagStack = append(r.tagStack, tag)
 	}
-	if s.HasLink && !sameLink {
-		tag := inlineTag{kind: tagLink, link: s.Link, linkTitle: s.LinkTitle}
+	if s.GetHasLink() && !sameLink {
+		tag := inlineTag{kind: tagLink, link: s.GetLink(), linkTitle: s.GetLinkTitle()}
 		r.writeOpenTag(tag)
 		r.tagStack = append(r.tagStack, tag)
 	}
@@ -641,7 +641,7 @@ func sameVisualStyle(a, b stream.InlineStyle) bool {
 	if bSt == 0 && b.Strong { bSt = 1 }
 	return aEm == bEm && aSt == bSt &&
 		a.Strike == b.Strike && a.Code == b.Code &&
-		a.HasLink == b.HasLink && a.Link == b.Link && a.LinkTitle == b.LinkTitle &&
+		a.GetHasLink() == b.GetHasLink() && a.GetLink() == b.GetLink() && a.GetLinkTitle() == b.GetLinkTitle() &&
 		a.Image == b.Image && a.RawHTML == b.RawHTML
 }
 
@@ -697,7 +697,7 @@ func (r *renderer) nextTextChangesLink(events []stream.Event, i int) bool {
 		case stream.EventText:
 			next := events[j].Style
 			cur := r.openStyle
-			return cur.HasLink != next.HasLink || cur.Link != next.Link || cur.LinkTitle != next.LinkTitle
+			return cur.GetHasLink() != next.GetHasLink() || cur.GetLink() != next.GetLink() || cur.GetLinkTitle() != next.GetLinkTitle()
 		case stream.EventExitBlock:
 			return true
 		default:
