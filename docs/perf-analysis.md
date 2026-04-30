@@ -439,3 +439,36 @@ Benchmark command: `GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommon
 The improvement is CPU-only and benchmark noise is still visible, but the code
 now does one autolink candidate pass instead of up to five passes over the same
 text segment.
+
+### Opt 14: Plain inline fast path (2026-04-30)
+
+Added a conservative `hasInlineSyntax` pre-scan before running the full inline
+pipeline. Paragraphs and inline fragments that contain no possible inline
+syntax now emit one `EventText` directly instead of going through
+`tokenizeInlineReuse` -> `resolveEmphasisReuse` -> `coalesceInlineTokensInto`.
+
+The predicate intentionally has false positives but no known false negatives:
+it treats newline, escapes, code spans, links/images, raw HTML/autolinks,
+character references, emphasis/strong/strike delimiters, and GFM autolink
+starter bytes as inline syntax.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | 1.02 ms | 1.01 ms | ~same / **-1%** |
+| CommonMark corpus memory | 1.47 MB | 1.47 MB | same |
+| CommonMark corpus allocations | 3,893 | 3,888 | **-5 allocs** |
+| Competition Spec speed | 2.91 ms | 2.72 ms | **-6.5%** |
+| Competition Spec allocations | 9,836 | 9,836 | same |
+| Competition README speed | not captured post-Opt-13 | 0.29-0.32 ms | measured after |
+| Competition README allocations | not captured post-Opt-13 | 922 | measured after |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus|BenchmarkParserLongParagraph$' -benchmem -count=5 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec|README)$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+The CommonMark corpus contains many syntax-heavy examples, so the internal
+corpus benchmark only moves slightly. The competition Spec parse benchmark shows
+a clearer ~6-7% speedup from skipping the inline pipeline for plain text blocks.

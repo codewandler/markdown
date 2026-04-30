@@ -2554,6 +2554,10 @@ func (p *parser) parseInline(text string, span Span, events *[]Event) {
 		*events = append(*events, Event{Kind: EventText, Text: "", Span: span})
 		return
 	}
+	if !hasInlineSyntax(text, p.config.GFMAutolinks) {
+		*events = append(*events, Event{Kind: EventText, Text: text, Span: span})
+		return
+	}
 	p.inlineTokens = tokenizeInlineReuse(text, span, p.refs, p.config.GFMAutolinks, p.inlineTokens[:0])
 	p.inlineTokens, p.emphOut = resolveEmphasisReuse(p.inlineTokens, p.emphOut[:0])
 	coalesceInlineTokensInto(p.inlineTokens, span, events)
@@ -2566,9 +2570,31 @@ func parseInlineInto(text string, span Span, refs map[string]linkReference, gfmA
 		*events = append(*events, Event{Kind: EventText, Text: "", Span: span})
 		return
 	}
+	if !hasInlineSyntax(text, gfmAutolinks) {
+		*events = append(*events, Event{Kind: EventText, Text: text, Span: span})
+		return
+	}
 	tokens := tokenizeInline(text, span, refs, gfmAutolinks)
 	tokens = resolveEmphasis(tokens)
 	coalesceInlineTokensInto(tokens, span, events)
+}
+
+func hasInlineSyntax(text string, gfmAutolinks bool) bool {
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '\n', '\\', '`', '!', '[', '<', '&', '*', '_', '~':
+			return true
+		case '@':
+			if gfmAutolinks {
+				return true
+			}
+		case 'h', 'H', 'f', 'F', 'w', 'W':
+			if gfmAutolinks {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type inlineTokenKind int

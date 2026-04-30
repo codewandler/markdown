@@ -3,4 +3,5 @@ mem.out
 mem*.out
 *.test
 cpu.out
-mdview
+/mdview
+cmd/mdview/mdview
