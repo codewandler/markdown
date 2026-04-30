@@ -23,6 +23,8 @@ func oursRender(r io.Reader, w io.Writer, extensions []string) error {
 			parseOpts = append(parseOpts, markdown.WithGFM())
 		case "tagfilter":
 			renderOpts = append(renderOpts, html.WithTagFilter())
+		case "table", "strikethrough":
+			// always on
 		}
 	}
 	events, err := markdown.Parse(r, parseOpts...)
@@ -32,19 +34,22 @@ func oursRender(r io.Reader, w io.Writer, extensions []string) error {
 	return html.Render(w, events, renderOpts...)
 }
 
+var allGFMExtensions = []string{"autolink", "tagfilter", "table", "strikethrough"}
+
 func runAllCorpora(t *testing.T, name string, render func(io.Reader, io.Writer, []string) error) {
 	spec, _ := gfmtests.Load()
 	ext, _ := gfmtests.LoadExtensions()
 	reg, _ := gfmtests.LoadRegression()
 
 	type corpus struct {
-		name     string
-		examples []gfmtests.Example
+		name      string
+		examples  []gfmtests.Example
+		allExtsOn bool
 	}
 	corpora := []corpus{
-		{"spec.txt", spec},
-		{"extensions.txt", ext},
-		{"regression.txt", reg},
+		{"spec.txt", spec, false},
+		{"extensions.txt", ext, true},
+		{"regression.txt", reg, true},
 	}
 
 	totalPass, totalCount := 0, 0
@@ -56,7 +61,9 @@ func runAllCorpora(t *testing.T, name string, render func(io.Reader, io.Writer, 
 				continue
 			}
 			var exts []string
-			if ex.Extension != "" {
+			if c.allExtsOn {
+				exts = allGFMExtensions
+			} else if ex.Extension != "" {
 				exts = []string{ex.Extension}
 			}
 			var buf bytes.Buffer

@@ -208,3 +208,22 @@ Eliminated intermediate `[]Event` allocation in the inline pipeline.
 This was root cause #3 from the analysis. The `append(*events, parseInline(...)...)`
 pattern created a temporary `[]Event` per paragraph that was immediately garbage.
 Direct append eliminates that allocation entirely.
+
+### Opt 2: tokenizeInline slice reuse (2026-04-30)
+
+Pool the `[]inlineToken` scratch slice on the parser struct so it survives
+across `parseInline` calls. The backing array grows once to the high-water
+mark and is reused for every subsequent paragraph/heading.
+
+- Added `inlineTokens []inlineToken` field to `parser` struct
+- `parser.parseInline` resets the slice (`[:0]`) and passes it to `tokenizeInlineReuse`
+- `tokenizeInline` (package-level, used by recursive link label parsing) still allocates fresh
+- Capacity-hint approach was tried first but regressed speed due to upfront `make` cost for 160-byte elements
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.83 ms | 1.77 ms | **-3.3%** |
+| Memory | 4.9 MB | 4.4 MB | **-10.2%** |
+| Allocations | 6,522 | 5,229 | **-19.8%** |
+
+Cumulative from baseline: **-13.2% speed, -21.4% memory, -31.8% allocs**
