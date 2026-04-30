@@ -60,6 +60,14 @@ func RunCompliance(candidates []Candidate, opts ComplianceOptions) (*RunResult, 
 	if err != nil {
 		return nil, fmt.Errorf("load GFM corpus: %w", err)
 	}
+	gfmExtExamples, err := gfmtests.LoadExtensions()
+	if err != nil {
+		return nil, fmt.Errorf("load GFM extensions corpus: %w", err)
+	}
+	gfmRegExamples, err := gfmtests.LoadRegression()
+	if err != nil {
+		return nil, fmt.Errorf("load GFM regression corpus: %w", err)
+	}
 
 	for _, c := range candidates {
 		for _, v := range c.Variants {
@@ -75,17 +83,26 @@ func RunCompliance(candidates []Candidate, opts ComplianceOptions) (*RunResult, 
 			gfm := runGFMSuite(v.Adapters, gfmExamples)
 			gfm.Version = "0.29"
 
+			// Extensions and regression corpora assume all extensions active.
+			allExtsRender := allExtsRenderer(v.Adapters)
+			gfmExt := runGFMSuiteAllExts(allExtsRender, gfmExtExamples)
+			gfmReg := runGFMSuiteAllExts(allExtsRender, gfmRegExamples)
+
 			cr := &ComplianceResult{
-				CommonMark: cm,
-				GFM:        gfm,
+				CommonMark:    cm,
+				GFM:           gfm,
+				GFMExtensions: gfmExt,
+				GFMRegression: gfmReg,
 			}
 
 			mergeCompliance(result, c.Repo, v.Name, v.Description, cr)
 
+			totalPass := gfm.Pass + gfmExt.Pass + gfmReg.Pass
+			totalCount := gfm.Total + gfmExt.Total + gfmReg.Total
 			fmt.Fprintf(opts.Log, "    CommonMark: %d/%d (%.1f%%)\n",
 				cm.Pass, cm.Total, cm.Percentage)
-			fmt.Fprintf(opts.Log, "    GFM:        %d/%d (%.1f%%)\n",
-				gfm.Pass, gfm.Total, gfm.Percentage)
+			fmt.Fprintf(opts.Log, "    GFM total:  %d/%d (%.1f%%)\n",
+				totalPass, totalCount, float64(totalPass)/float64(totalCount)*100)
 		}
 	}
 
@@ -192,6 +209,44 @@ func runGFMSuite(adapters Adapters, examples []gfmtests.Example) SpecResult {
 		Percentage: pct,
 		Sections:   sections,
 	}
+}
+
+// allExtsRenderer returns a render function with all GFM extensions enabled.
+// For candidates with RenderGFMHTML, it passes all extensions. Otherwise
+// falls back to RenderHTML (competitors like goldmark have extensions always on).
+func allExtsRenderer(a Adapters) func(io.Reader, io.Writer) error {
+	allExts := []string{"autolink", "tagfilter", "table", "strikethrough"}
+	if a.RenderGFMHTML != nil {
+		return func(r io.Reader, w io.Writer) error {
+			return a.RenderGFMHTML(r, w, allExts)
+		}
+	}
+	return a.RenderHTML
+}
+
+// runGFMSuiteAllExts runs a GFM corpus with all extensions enabled
+// (for extensions.txt and regression.txt which have no per-example tags).
+func runGFMSuiteAllExts(renderHTML func(io.Reader, io.Writer) error, examples []gfmtests.Example) SpecResult {
+	adapted := make([]commonmarktests.Example, 0, len(examples))
+	for _, ex := range examples {
+		if strings.Contains(ex.HTML, "<IGNORE>") {
+			continue
+		}
+		adapted = append(adapted, commonmarktests.Example{
+			Markdown: ex.Markdown,
+			HTML:     ex.HTML,
+			Example:  ex.Example,
+			Section:  ex.Section,
+		})
+	}
+	result := runSpecSuite(renderHTML, adapted)
+	// Set total to original count (including IGNORE) for consistent reporting.
+	result.Total = len(examples)
+	result.Pass += len(examples) - len(adapted) // count IGNORE as pass
+	if result.Total > 0 {
+		result.Percentage = float64(result.Pass) / float64(result.Total) * 100
+	}
+	return result
 }
 
 // normalizeHTML trims whitespace and normalizes newlines.

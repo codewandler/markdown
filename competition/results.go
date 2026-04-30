@@ -66,8 +66,10 @@ type MetadataResult struct {
 
 // ComplianceResult holds spec test results for a variant.
 type ComplianceResult struct {
-	CommonMark SpecResult `json:"commonmark"`
-	GFM        SpecResult `json:"gfm"`
+	CommonMark     SpecResult `json:"commonmark"`
+	GFM            SpecResult `json:"gfm"`
+	GFMExtensions  SpecResult `json:"gfm_extensions"`
+	GFMRegression  SpecResult `json:"gfm_regression"`
 }
 
 // SpecResult holds pass/total counts for one spec suite.
