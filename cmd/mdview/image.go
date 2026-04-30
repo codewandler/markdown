@@ -2,20 +2,23 @@ package main
 
 import (
 	"fmt"
-	"image/color"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/eliukblau/pixterm/pkg/ansimage"
-	"golang.org/x/term"
+	"github.com/dolmen-go/kittyimg"
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 )
 
-// replaceAllImages finds ![alt](src) patterns in the input and replaces
-// local image references with ANSI-rendered pixel art. Remote URLs are
-// left as-is for the Markdown renderer to handle.
+// replaceAllImages finds ![alt](src) and <img src="..."> patterns in the
+// input and replaces local image references with kitty terminal graphics.
 func replaceAllImages(input string, baseDir string) string {
-	// Replace HTML <img> tags with rendered images.
 	input = replaceHTMLImages(input, baseDir)
 
 	if !strings.Contains(input, "![") {
@@ -26,7 +29,6 @@ func replaceAllImages(input string, baseDir string) string {
 	b.Grow(len(input))
 	i := 0
 	for i < len(input) {
-		// Look for ![
 		idx := strings.Index(input[i:], "![")
 		if idx < 0 {
 			b.WriteString(input[i:])
@@ -35,7 +37,6 @@ func replaceAllImages(input string, baseDir string) string {
 		b.WriteString(input[i : i+idx])
 		pos := i + idx
 
-		// Parse ![alt](src)
 		altEnd := strings.Index(input[pos+2:], "](")
 		if altEnd < 0 {
 			b.WriteString("![")
@@ -62,7 +63,6 @@ func replaceAllImages(input string, baseDir string) string {
 				b.WriteString(fmt.Sprintf("[image: %s]", alt))
 			}
 		} else {
-			// Keep remote images as markdown for the renderer.
 			b.WriteString(input[pos : srcEnd+1])
 		}
 		i = srcEnd + 1
@@ -70,44 +70,8 @@ func replaceAllImages(input string, baseDir string) string {
 	return b.String()
 }
 
-// renderImage renders a local image file to ANSI colored blocks.
-// Animated GIFs are skipped (they render poorly as static ANSI art).
-func renderImage(src string, baseDir string) string {
-	if !filepath.IsAbs(src) {
-		src = filepath.Join(baseDir, src)
-	}
-
-	if _, err := os.Stat(src); err != nil {
-		return ""
-	}
-
-	// Skip GIFs — they render poorly as static ANSI art.
-	ext := strings.ToLower(filepath.Ext(src))
-	if ext == ".gif" {
-		return ""
-	}
-
-	width := 80
-	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
-		width = w
-	}
-
-	if width < 2 {
-		width = 80
-	}
-	// Use a large height so the image is only constrained by width.
-	height := width * 2
-	img, err := ansimage.NewScaledFromFile(src, height, width,
-		color.Black, ansimage.ScaleModeFit, ansimage.NoDithering)
-	if err != nil {
-		return fmt.Sprintf("[image: %s (%v)]", src, err)
-	}
-
-	return img.Render()
-}
-
 // replaceHTMLImages finds <img src="..."> tags and replaces local
-// image references with ANSI-rendered pixel art.
+// image references with rendered output.
 func replaceHTMLImages(input string, baseDir string) string {
 	if !strings.Contains(input, "<img") {
 		return input
@@ -124,7 +88,6 @@ func replaceHTMLImages(input string, baseDir string) string {
 		b.WriteString(input[i : i+idx])
 		pos := i + idx
 
-		// Find the closing >
 		end := strings.IndexByte(input[pos:], '>')
 		if end < 0 {
 			b.WriteString(input[pos:])
@@ -132,7 +95,6 @@ func replaceHTMLImages(input string, baseDir string) string {
 		}
 		tag := input[pos : pos+end+1]
 
-		// Extract src attribute.
 		src := extractAttr(tag, "src")
 		if src != "" && !isURL(src) {
 			rendered := renderImage(src, baseDir)
@@ -146,7 +108,6 @@ func replaceHTMLImages(input string, baseDir string) string {
 				b.WriteString(fmt.Sprintf("[image: %s]", alt))
 			}
 		} else {
-			// Remote or no src — keep as-is.
 			b.WriteString(tag)
 		}
 		i = pos + end + 1
@@ -154,9 +115,32 @@ func replaceHTMLImages(input string, baseDir string) string {
 	return b.String()
 }
 
-// extractAttr extracts the value of an HTML attribute from a tag string.
+// renderImage renders a local image file using the kitty terminal
+// graphics protocol. Returns the escape sequence string, or "" on error.
+func renderImage(src string, baseDir string) string {
+	if !filepath.IsAbs(src) {
+		src = filepath.Join(baseDir, src)
+	}
+
+	f, err := os.Open(src)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return ""
+	}
+
+	var b strings.Builder
+	if err := kittyimg.Fprint(&b, img); err != nil {
+		return ""
+	}
+	return b.String()
+}
+
 func extractAttr(tag, attr string) string {
-	// Look for attr="value" or attr='value'
 	for _, q := range []byte{'"', '\''} {
 		pattern := attr + "=" + string(q)
 		idx := strings.Index(tag, pattern)
