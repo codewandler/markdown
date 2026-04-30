@@ -86,10 +86,11 @@ type savedList struct {
 // has not yet been parsed. This allows forward link reference definitions
 // to be collected before inline parsing resolves references.
 type pendingBlock struct {
-	text  string
-	span  Span
-	block BlockKind // BlockParagraph or BlockHeading
-	level int       // heading level (1-6), 0 for paragraphs
+	text        string
+	span        Span
+	block       BlockKind // BlockParagraph or BlockHeading
+	level       int       // heading level (1-6), 0 for paragraphs
+	hasBrackets bool
 }
 
 type linkReference struct {
@@ -837,10 +838,11 @@ func (p *parser) processNonContainerLine(line lineInfo, events *[]Event) {
 		// definitions can be collected first.
 		if strings.ContainsAny(text, "[]") {
 			p.pendingBlocks = append(p.pendingBlocks, pendingBlock{
-				text:  text,
-				span:  span,
-				block: BlockHeading,
-				level: level,
+				text:        text,
+				span:        span,
+				block:       BlockHeading,
+				level:       level,
+				hasBrackets: true,
 			})
 		} else {
 			p.drainPendingBlocks(events)
@@ -922,9 +924,10 @@ func (p *parser) closeParagraph(events *[]Event) {
 		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: span})
 	} else {
 		p.pendingBlocks = append(p.pendingBlocks, pendingBlock{
-			text:  paragraphText(p.paragraph.lines),
-			span:  span,
-			block: BlockParagraph,
+			text:        paragraphText(p.paragraph.lines),
+			span:        span,
+			block:       BlockParagraph,
+			hasBrackets: p.paragraph.hasBrackets,
 		})
 	}
 	p.clearParagraphLines()
@@ -1015,7 +1018,7 @@ func (p *parser) drainPendingBlocksEager(events *[]Event) {
 	// read index — every iteration either keeps or emits the element.
 	kept := p.pendingBlocks[:0]
 	for _, pb := range p.pendingBlocks {
-		if strings.ContainsAny(pb.text, "[]") {
+		if pb.hasBrackets {
 			kept = append(kept, pb)
 			continue
 		}

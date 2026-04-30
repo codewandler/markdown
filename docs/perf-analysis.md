@@ -693,3 +693,39 @@ A standalone `openersBottom` array change improved normal corpus allocations but
 regressed pathological delimiter speed. The final version keeps that array and
 also removes the style-event map, which restores and improves pathological
 performance while reducing allocation count substantially.
+
+
+### Opt 20: Track pending block bracket state (2026-04-30)
+
+`drainPendingBlocksEager` previously rescanned every pending block's text with
+`strings.ContainsAny(pb.text, "[]")` to decide whether the block still needed
+forward reference-definition resolution. The parser already knows this when the
+block becomes pending, so `pendingBlock` now stores a `hasBrackets` flag.
+
+Implementation details:
+
+- Added `pendingBlock.hasBrackets`.
+- Pending headings set `hasBrackets: true` because only bracket-containing
+  headings are deferred.
+- Pending paragraphs copy `paragraphState.hasBrackets`.
+- `drainPendingBlocksEager` checks the flag instead of rescanning text.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | ~0.94-0.95 ms | ~0.93 ms | noisy / small win |
+| CommonMark corpus allocations | 3,019 | 3,019 | same |
+| Tiny chunks allocations | 22,710 | 22,710 | same |
+| Competition Spec speed | ~2.54-2.60 ms | ~2.50-2.76 ms | noisy / same |
+| Competition Spec allocations | 7,835 | 7,835 | same |
+| Competition README allocations | not captured post-Opt-16 | 762 | measured after |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus|BenchmarkParserLongParagraph$' -benchmem -count=5 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec|README)$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+This is a small CPU cleanup rather than an allocation win. It removes repeated
+text scans from eager pending-block draining while preserving forward reference
+resolution semantics.
