@@ -119,7 +119,8 @@ type lineInfo struct {
 }
 
 type paragraphState struct {
-	lines []paragraphLine
+	lines       []paragraphLine
+	hasBrackets bool
 }
 
 type paragraphLine struct {
@@ -894,6 +895,9 @@ func (p *parser) addParagraphLine(line lineInfo) {
 	} else {
 		text = strings.TrimLeft(text, " \t")
 	}
+	if !p.paragraph.hasBrackets && strings.ContainsAny(text, "[]") {
+		p.paragraph.hasBrackets = true
+	}
 	p.paragraph.lines = append(p.paragraph.lines, paragraphLine{
 		text: text,
 		span: Span{Start: line.start, End: line.end},
@@ -907,24 +911,49 @@ func (p *parser) closeParagraph(events *[]Event) {
 	p.ensureDocument(events)
 	start := p.paragraph.lines[0].span.Start
 	end := p.paragraph.lines[len(p.paragraph.lines)-1].span.End
-	var text strings.Builder
-	for i, line := range p.paragraph.lines {
-		if i > 0 {
-			text.WriteByte('\n')
-		}
-		text.WriteString(line.text)
+	span := Span{Start: start, End: end}
+	text := paragraphText(p.paragraph.lines)
+	if !p.paragraph.hasBrackets && len(p.pendingBlocks) == 0 {
+		*events = append(*events, Event{Kind: EventEnterBlock, Block: BlockParagraph, Span: span})
+		p.parseInline(text, span, events)
+		*events = append(*events, Event{Kind: EventExitBlock, Block: BlockParagraph, Span: span})
+	} else {
+		p.pendingBlocks = append(p.pendingBlocks, pendingBlock{
+			text:  text,
+			span:  span,
+			block: BlockParagraph,
+		})
 	}
-	p.pendingBlocks = append(p.pendingBlocks, pendingBlock{
-		text:  text.String(),
-		span:  Span{Start: start, End: end},
-		block: BlockParagraph,
-	})
+	p.clearParagraphLines()
+}
+
+func (p *parser) clearParagraphLines() {
 	clear(p.paragraph.lines)
+	p.paragraph.hasBrackets = false
 	if cap(p.paragraph.lines) > 1024 {
 		p.paragraph.lines = nil
 	} else {
 		p.paragraph.lines = p.paragraph.lines[:0]
 	}
+}
+
+func paragraphText(lines []paragraphLine) string {
+	if len(lines) == 1 {
+		return lines[0].text
+	}
+	length := len(lines) - 1 // inserted newlines
+	for _, line := range lines {
+		length += len(line.text)
+	}
+	var text strings.Builder
+	text.Grow(length)
+	for i, line := range lines {
+		if i > 0 {
+			text.WriteByte('\n')
+		}
+		text.WriteString(line.text)
+	}
+	return text.String()
 }
 
 // drainPendingBlocks inline-parses and emits all buffered paragraph/heading
@@ -985,12 +1014,7 @@ func (p *parser) closeSetextHeading(level int, underline Span, events *[]Event) 
 	}
 	p.parseInline(text.String(), Span{Start: start, End: end}, events)
 	*events = append(*events, Event{Kind: EventExitBlock, Block: BlockHeading, Level: level, Span: Span{Start: start, End: end}})
-	clear(p.paragraph.lines)
-	if cap(p.paragraph.lines) > 1024 {
-		p.paragraph.lines = nil
-	} else {
-		p.paragraph.lines = p.paragraph.lines[:0]
-	}
+	p.clearParagraphLines()
 }
 
 func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
@@ -1034,7 +1058,7 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 		p.paragraph.lines = prevLines
 		p.closeParagraph(events)
 	} else {
-		p.paragraph.lines = p.paragraph.lines[:0]
+		p.clearParagraphLines()
 	}
 
 	tableAlign := append([]TableAlign(nil), align...)

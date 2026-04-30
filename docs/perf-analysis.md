@@ -472,3 +472,43 @@ cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec
 The CommonMark corpus contains many syntax-heavy examples, so the internal
 corpus benchmark only moves slightly. The competition Spec parse benchmark shows
 a clearer ~6-7% speedup from skipping the inline pipeline for plain text blocks.
+
+### Opt 15: Emit no-bracket paragraphs immediately (2026-04-30)
+
+Paragraphs are only kept in `pendingBlocks` to support forward link reference
+definitions. Paragraphs without `[` or `]` cannot contain reference links, so
+they do not benefit from deferred inline parsing. Such paragraphs now emit their
+paragraph enter/text/exit events immediately when there are no older pending
+blocks that must preserve document order.
+
+Implementation details:
+
+- Added `paragraphState.hasBrackets`, updated while paragraph lines are added.
+- Added `paragraphText` helper with a single-line no-copy fast path.
+- Added `clearParagraphLines` so all paragraph close paths reset bracket state.
+- `closeParagraph` only appends to `pendingBlocks` when the paragraph has
+  brackets or previous pending blocks must remain ordered before it.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | 1.01 ms | 0.97 ms | **-3.8%** |
+| CommonMark corpus memory | 1.47 MB | 1.46 MB | **-0.6%** |
+| CommonMark corpus allocations | 3,888 | 3,381 | **-13.0%** |
+| Tiny chunks allocations | 23,579 | 23,072 | **-507 allocs** |
+| Competition Spec speed | 2.72 ms | 2.74 ms | ~same |
+| Competition Spec memory | 8.53 MB | 8.50 MB | **-0.3%** |
+| Competition Spec allocations | 9,836 | 8,835 | **-10.2%** |
+| Competition README speed | 0.29-0.32 ms | 0.30 ms | ~same |
+| Competition README allocations | 922 | 811 | **-12.0%** |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus|BenchmarkParserLongParagraph$' -benchmem -count=5 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec|README)$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+This is primarily an allocation/GC-pressure win. The initial implementation
+rescanned paragraph text for brackets at close and regressed speed; bracket
+state is now tracked incrementally in `addParagraphLine`, which keeps the
+allocation reduction without the extra close-time scan.
