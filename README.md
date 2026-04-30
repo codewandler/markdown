@@ -8,7 +8,7 @@ Parse incrementally. Render immediately. Keep memory bounded.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![CommonMark](https://img.shields.io/badge/CommonMark-100%25-brightgreen)](https://spec.commonmark.org/)
-[![GFM](https://img.shields.io/badge/GFM-96.0%25-brightgreen)](https://github.github.com/gfm/)
+[![GFM](https://img.shields.io/badge/GFM-98.7%25-brightgreen)](https://github.github.com/gfm/)
 
 <img src="examples/demo/demo.gif" alt="demo" width="720">
 
@@ -21,7 +21,7 @@ Parse incrementally. Render immediately. Keep memory bounded.
 - **3-7x faster** than glamour on real-world documents, up to
   **121x faster** on pathological inputs
   ([benchmarks](COMPARISON.md))
-- **100% CommonMark** (652/652), **96.0% GFM** -- higher compliance than
+- **100% CommonMark** (652/652), **98.7% GFM** (663/672) -- higher compliance than
   goldmark (99.2% / 97.5%), blackfriday (37.4%), and gomarkdown (40.3%)
   ([measured](competition/benchmarks/compliance_test.go))
 - **2 dependencies** -- parser is pure stdlib; only Chroma for
@@ -48,7 +48,7 @@ Benchmarked against 5 Go Markdown libraries. Full results in
 | Spec | ours | goldmark | blackfriday | gomarkdown |
 | --- | ---: | ---: | ---: | ---: |
 | CommonMark 0.31.2 | **652/652 (100.0%)** | 647/652 (99.2%) | 244/652 (37.4%) | 263/652 (40.3%) |
-| GFM 0.29 | **645/672 (96.0%)** | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
+| GFM 0.29 | **663/672 (98.7%)** | 655/672 (97.5%) | 247/672 (36.8%) | 263/672 (39.1%) |
 
 ### Feature matrix
 

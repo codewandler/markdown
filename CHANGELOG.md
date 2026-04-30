@@ -10,6 +10,46 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.39.1] - 2026-04-30
+
+### Fixed
+
+- **GFM compliance: 645 → 663/672 (98.7%)**, now higher than goldmark (97.5%).
+- **Per-extension GFM compliance testing** — each spec example now runs with
+  only the extensions it declares, matching the official `spec_tests.py`
+  behavior. Previously all extensions were enabled globally, causing false
+  failures on CommonMark base examples.
+- **Renderer: trailing whitespace** — strip trailing spaces before soft breaks,
+  not just before block close (examples 556, 587, 649).
+- **Parser: indented code blank lines** — preserve whitespace content after
+  indent stripping (example 112).
+- **Parser: GFM autolinks** — add `ftp://` scheme, entity-like `&foo;` suffix
+  stripping, email domain trailing `_`/`-` rejection, underscore in domain
+  segments.
+- **Parser: table cells** — unescape `\|` → `|` after cell splitting.
+- **Renderer: task list checkboxes** — attribute order matches GFM spec
+  (`checked`, `disabled`, `type`).
+- **Renderer: tables** — pad short rows with empty `<td></td>`, suppress excess
+  cells beyond header column count, omit `<tbody>` for header-only tables.
+- **Renderer: GFM tag filter** — `WithTagFilter()` option replaces `<` with
+  `&lt;` for disallowed tags (title, textarea, style, xmp, iframe, noembed,
+  noframes, script, plaintext). Type 1 HTML blocks (script/style/pre) are
+  exempt.
+- Tightened `normalizeHTML` in compliance test to match competition pipeline.
+
+### Added
+
+- `markdown.WithGFM()` parse option for enabling GFM extensions.
+- `html.WithTagFilter()` render option for GFM tag filter extension.
+- `Adapters.RenderGFMHTML` in competition pipeline for per-extension dispatch.
+
+### Changed
+
+- Removed `benchmarks/` directory (superseded by `competition/`).
+- Removed legacy `bench:*` Taskfile tasks.
+- Removed `ours-reuse` competition variant.
+- Updated COMPARISON.md note: removed stale "renderer is new" caveat.
+
 ## [0.39.0] - 2026-04-29
 
 ### Added

@@ -313,10 +313,10 @@ func (g *reportGen) compliance() {
 	g.nl()
 
 	g.writef("Note: All parsers are measured by comparing HTML output against the\n")
-	g.writef("spec expected HTML. Our HTML renderer is new and does not yet cover\n")
-	g.writef("all edge cases \u2014 our event-level (structural) compliance is 96.2%%\n")
-	g.writef("CommonMark and 100%% GFM. The HTML compliance will converge as the\n")
-	g.writef("renderer matures.\n\n")
+	g.writef("spec expected HTML. GFM compliance uses per-example extension\n")
+	g.writef("dispatch matching the official spec_tests.py behavior. The 9\n")
+	g.writef("remaining GFM failures are emphasis Rule 13 cases where CommonMark\n")
+	g.writef("0.31.2 and GFM 0.29 disagree; we follow the newer CommonMark spec.\n\n")
 }
 
 // --- Benchmark sections -----------------------------------------------------

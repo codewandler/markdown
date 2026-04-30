@@ -81,19 +81,107 @@ When working on CommonMark compliance:
   tightly than emphasis and links. `matchingBracketEnd` skips over code spans
   and HTML tags when scanning for the closing `]` of a link label.
 
+## File Inventory
+
+Key files by size (lines), for planning read strategies:
+
+| File | Lines | Role |
+| --- | ---: | --- |
+| `stream/parser_impl.go` | 4,579 | Entire parser: block + inline |
+| `terminal/renderer.go` | ~750 | Terminal ANSI renderer |
+| `html/renderer.go` | ~750 | HTML renderer |
+| `stream/event.go` | 113 | Event/Block/Style types (public API) |
+| `stream/parser.go` | 47 | Parser interface + config |
+| `stream/bench_test.go` | 121 | Parser-only benchmarks |
+| `competition/benchmarks/bench_test.go` | 286 | Cross-library comparison benchmarks |
+
+Use `grep` to find functions before reading `parser_impl.go` — don't read
+it linearly.
+
+## Performance Context
+
+### Current Gap vs Goldmark (Parse-Only, Spec Input)
+
+| Metric | ours | goldmark | ratio |
+| --- | ---: | ---: | ---: |
+| Speed | 7.8ms | 1.7ms | 4.6x slower |
+| Allocations | 22.3K | 11.4K | 2.0x more |
+| Memory | 25.8 MB | 1.7 MB | 15.5x more |
+
+Internal benchmark baseline (this machine, `BenchmarkParserCommonMarkCorpus`):
+
+```
+~2.04ms    5.6MB    7,668 allocs
+```
+
+### Hot Paths (CPU profile, CommonMark corpus)
+
+1. **`drainPendingBlocks`** — 21% cum. Calls `parseInline` per paragraph,
+   uses `append(*events, slice...)` pattern that creates temporary slices.
+2. **`tokenizeInline`** — 17% cum. Allocates `[]inlineToken` (160B each).
+3. **`resolveEmphasis`** — 4% flat. Allocates new `[]inlineToken` + maps.
+4. **`coalesceInlineTokens`** — 5% cum. Allocates `[]Event` (248B each).
+5. **GC** — 34% of total CPU. Driven by allocation volume.
+6. **`strings.ToLower`** — 4% flat. Called in `normalizeReferenceLabel`.
+
+### Top Allocation Sites (alloc_space)
+
+1. `drainPendingBlocks` — 37% (2,214 MB)
+2. `tokenizeInline` — 13% (767 MB)
+3. `coalesceInlineTokens` — 13% (767 MB)
+4. `processFenceLine` — 10% (599 MB)
+5. `processHTMLBlockLine` — 7% (427 MB)
+6. `resolveEmphasis` — 5% (321 MB)
+
+### Struct Sizes
+
+- `Event`: 248 bytes (InlineStyle 104B + 3 pointers + 2 strings + Span 48B)
+- `inlineToken`: ~160 bytes (InlineStyle copy + delimiter fields)
+- `InlineStyle`: 104 bytes (5 strings, 6 bools, 2 ints)
+
+See `docs/perf-analysis.md` for the full optimization plan.
+
+### Benchmark Commands
+
+```bash
+# Quick parse-only benchmark (internal, ~3s)
+go test -bench='BenchmarkParserCommonMarkCorpus$' -benchmem -count=3 -benchtime=500ms ./stream/
+
+# CPU profile
+go test -bench='BenchmarkParserCommonMarkCorpus$' -benchmem -count=1 -benchtime=2s -cpuprofile=/tmp/cpu.prof ./stream/
+go tool pprof -top -cum /tmp/cpu.prof
+
+# Memory profile
+go test -bench='BenchmarkParserCommonMarkCorpus$' -benchmem -count=1 -benchtime=2s -memprofile=/tmp/mem.prof ./stream/
+go tool pprof -top -alloc_space /tmp/mem.prof
+
+# Full competition benchmarks (slow, ~5min)
+task competition:bench
+```
+
+### Performance Rules
+
+- Every optimization must preserve all CommonMark + GFM test results.
+- Benchmark before and after every change with `-count=3`.
+- Profile before guessing — use `pprof` to confirm the hot path.
+- Prefer reducing allocation count over reducing allocation size.
+- The streaming Event-slice architecture is a non-negotiable constraint.
+  Memory parity with batch parsers (goldmark) is not a goal.
+
 ## Verification
 
 Use focused tests first:
 
 ```bash
-env GOCACHE=/tmp/go-cache GOMODCACHE=/tmp/go-mod-cache go test ./stream
-env GOCACHE=/tmp/go-cache GOMODCACHE=/tmp/go-mod-cache go test ./terminal
+go test ./stream
+go test ./terminal
+go test .
 ```
 
 For the example module:
 
 ```bash
-cd examples/stream-readme && env GOCACHE=/tmp/go-cache GOMODCACHE=/tmp/go-mod-cache go test ./...
+cd examples/stream-readme && go test ./...
 ```
 
 If a command needs network access or hits sandbox limits, stop and request the
