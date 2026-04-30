@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/codewandler/markdown/bubbleview"
 	"github.com/codewandler/markdown/stream"
 	"github.com/codewandler/markdown/terminal"
 	"github.com/spf13/cobra"
@@ -35,6 +37,7 @@ type cliOptions struct {
 	chunk         int
 	delay         time.Duration
 	live          bool
+	pager         bool
 	showVersion   bool
 }
 
@@ -84,6 +87,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd.Flags().IntVar(&cfg.chunk, "chunk", cfg.chunk, "bytes per streaming chunk when --stream is set")
 	cmd.Flags().DurationVar(&cfg.delay, "delay", cfg.delay, "delay between chunks when --stream is set")
 	cmd.Flags().BoolVar(&cfg.live, "live", false, "use live renderer with redrawable tables when stdout is a terminal")
+	cmd.Flags().BoolVar(&cfg.pager, "pager", false, "open rendered Markdown in an interactive terminal pager")
 	cmd.Flags().BoolVar(&cfg.showVersion, "version", false, "print version and exit")
 	return cmd
 }
@@ -162,6 +166,16 @@ func run(cfg cliOptions, args []string, stdout, stderr io.Writer) error {
 		terminal.WithInlineRenderer("file-ref", fileRefRenderer(baseDir, cfg.fileLinks)),
 	)
 
+	if cfg.pager {
+		if cfg.live {
+			return fmt.Errorf("--pager cannot be used with --live")
+		}
+		if cfg.streamInput {
+			return fmt.Errorf("--pager cannot be used with --stream")
+		}
+		return runPager([]byte(input), opts...)
+	}
+
 	// Split input into segments: markdown text and image placeholders.
 	// Images are rendered directly to stdout, bypassing the Markdown parser.
 	segments := splitImages(input, baseDir)
@@ -190,6 +204,18 @@ func run(cfg cliOptions, args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+func runPager(input []byte, opts ...terminal.RendererOption) error {
+	modelOpts := make([]bubbleview.Option, 0, len(opts))
+	for _, opt := range opts {
+		if opt != nil {
+			modelOpts = append(modelOpts, bubbleview.WithRendererOption(opt))
+		}
+	}
+	program := tea.NewProgram(bubbleview.NewPagerModel(input, modelOpts...), tea.WithAltScreen())
+	_, err := program.Run()
+	return err
 }
 
 func newMarkdownRenderer(w io.Writer, live bool, opts ...terminal.RendererOption) markdownRenderer {

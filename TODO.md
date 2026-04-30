@@ -1,3 +1,4 @@
 - stream delay via event extension?
 - mermaid renderer
-- bubble view component
+- bubbleview link navigation/browser mode
+- bubbleview disk-backed large-file store

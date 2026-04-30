@@ -10,6 +10,23 @@ match these entries as the project starts publishing releases.
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-04-30
+
+### Added
+
+- `bubbleview` nested module with reusable Bubble Tea `StreamModel` and
+  `PagerModel` components for streaming and full-input Markdown viewports.
+- `mdview --pager` for opening rendered Markdown in an interactive alternate-screen
+  viewport with keyboard scrolling.
+
+### Changed
+
+- `mdview` keeps Bubble Tea dependencies scoped to the `cmd/mdview` and
+  `bubbleview` modules; the root Markdown module remains free of Bubble Tea
+  dependencies.
+
+## [0.45.0] - 2026-04-30
+
 ### Added
 
 - `terminal.NordTheme` and `mdview --theme nord` for a second built-in colour theme.
