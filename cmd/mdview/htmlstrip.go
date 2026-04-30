@@ -17,8 +17,9 @@ func stripHTML(input string) string {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
-		// Strip <div ...> and </div> tags.
+		// Replace <div ...> and </div> with blank lines to preserve spacing.
 		if matchTag(trimmed, "div") || trimmed == "</div>" {
+			b.WriteByte('\n')
 			continue
 		}
 
