@@ -6,13 +6,13 @@ Benchmark: `BenchmarkParserCommonMarkCorpus` (CommonMark spec, ~15.6KB input)
 
 ## Current Gap vs Goldmark (Parse-Only)
 
-From COMPARISON.md (Spec input):
+From competition benchmark (Spec input, 2026-04-30 post-optimization):
 
-| Metric       | ours     | goldmark  | ratio         |
-| ------------ | -------: | --------: | ------------: |
-| Speed        | 7.8ms    | 1.7ms     | **4.6x slower** |
-| Allocations  | 22.3K    | 11.4K     | **2.0x more** |
-| Memory       | 25.8 MB  | 1.7 MB    | **15.5x more** |
+| Metric       | ours     | goldmark  | ratio           | was             |
+| ------------ | -------: | --------: | --------------: | --------------: |
+| Speed        | 3.7ms    | 1.9ms     | **1.9x slower** | was 4.6x slower |
+| Allocations  | 14.0K    | 11.4K     | **1.2x more**   | was 2.0x more   |
+| Memory       | 8.6 MB   | 1.7 MB    | **5.1x more**   | was 15.5x more  |
 
 Target: match or beat goldmark on speed and allocations. Memory will remain
 higher due to the streaming Event-slice architecture (vs goldmark's compact
