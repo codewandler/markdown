@@ -156,15 +156,21 @@ func (p *parser) Write(chunk []byte) ([]Event, error) {
 	if newlines > 0 {
 		events = make([]Event, 0, newlines*4)
 	}
+	hasCR := bytes.IndexByte(p.partial, '\r') >= 0
 	for {
-		// Find the next line ending: \n, \r\n, or bare \r.
-		i := bytes.IndexAny(p.partial, "\r\n")
+		// Find the next line ending.
+		var i int
+		if hasCR {
+			i = bytes.IndexAny(p.partial, "\r\n")
+		} else {
+			i = bytes.IndexByte(p.partial, '\n')
+		}
 		if i < 0 {
 			break
 		}
 		raw := p.partial[:i]
 		advance := i + 1
-		if p.partial[i] == '\r' && i+1 < len(p.partial) && p.partial[i+1] == '\n' {
+		if hasCR && p.partial[i] == '\r' && i+1 < len(p.partial) && p.partial[i+1] == '\n' {
 			advance = i + 2 // \r\n
 		}
 		info := p.nextLineInfo(string(raw), true)

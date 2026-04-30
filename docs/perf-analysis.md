@@ -358,3 +358,16 @@ direct `strings.EqualFold` prefix checks.
 | Allocations | 4,079 | 3,735 | **-8.4%** |
 
 Cumulative from baseline: speed -44.6%, memory -73.9%, allocs -51.3%.
+
+### Opt 10: Use bytes.IndexByte instead of bytes.IndexAny in Write loop (2026-04-30)
+
+Check once for \r presence, then use `bytes.IndexByte(_, '\n')` (SIMD)
+on the common path instead of `bytes.IndexAny(_, "\r\n")` (generic).
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| Speed | 1.13 ms | 1.08 ms | **-4.4%** |
+| Memory | 1.46 MB | 1.46 MB | same |
+| Allocations | 3,735 | 3,735 | same |
+
+Cumulative from baseline: speed -47.1%, memory -73.9%, allocs -51.3%.
