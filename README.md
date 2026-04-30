@@ -152,7 +152,7 @@ intended for normal documentation and generated reports, not multi-gigabyte file
   from file/stdin/socket
           │
           ▼
-┌──────────────────────┐       custom inline scanners       ┌─────────────────────┐
+┌──────────────────────┐       custom inline scanners        ┌─────────────────────┐
 │ stream.Parser        │◄────────────────────────────────────│ app extensions      │
 │                      │                                     │ emoji, file refs,   │
 │ append-only chunks   │                                     │ mentions, issues    │
@@ -164,7 +164,7 @@ intended for normal documentation and generated reports, not multi-gigabyte file
            ▼
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │ Renderers consume events; they do not parse Markdown syntax                   │
-└──────────┬──────────────────────────┬──────────────────────────┬─────────────┘
+└──────────┬──────────────────────────┬──────────────────────────┬──────────────┘
            │                          │                          │
            ▼                          ▼                          ▼
 ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
