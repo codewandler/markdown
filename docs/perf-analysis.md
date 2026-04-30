@@ -729,3 +729,37 @@ cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec
 This is a small CPU cleanup rather than an allocation win. It removes repeated
 text scans from eager pending-block draining while preserving forward reference
 resolution semantics.
+
+
+### Opt 21: Fast path plain image alt text (2026-04-30)
+
+`plainTextFromInline` is used to turn image alt text into plain text. For alt
+text with no inline syntax, it previously still tokenized and ran emphasis
+resolution before returning the same text. It now reuses `hasInlineSyntax` and
+returns immediately for plain alt text.
+
+Implementation details:
+
+- Added `if !hasInlineSyntax(text, false) { return text }` at the start of
+  `plainTextFromInline`.
+- GFM autolink literals are intentionally disabled here, matching the previous
+  `tokenizeInline(text, Span{}, refs, false)` behavior.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | ~0.93 ms | ~0.94 ms | noisy / same |
+| CommonMark corpus memory | 1.459 MB | 1.458 MB | ~same |
+| CommonMark corpus allocations | 3,019 | 2,991 | **-28 allocs** |
+| Competition Spec speed | ~2.50-2.76 ms | ~2.54-2.62 ms | noisy / same |
+| Competition Spec allocations | 7,835 | 7,835 | same |
+| Competition README allocations | 762 | 762 | same |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus$' -benchmem -count=5 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec|README)$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+This is a small allocation cleanup for documents with images whose alt text is
+plain text. Main corpus speed is within benchmark noise.

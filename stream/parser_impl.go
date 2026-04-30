@@ -3312,6 +3312,9 @@ func parseInlineImageAsLink(text string, span Span) (Event, string, bool) {
 // the text content. Used for image alt text per CommonMark §6.4:
 // "The text content is the text with inline markup resolved and stripped."
 func plainTextFromInline(text string, refs map[string]linkReference) string {
+	if !hasInlineSyntax(text, false) {
+		return text
+	}
 	tokens := tokenizeInline(text, Span{}, refs, false)
 	tokens = resolveEmphasis(tokens)
 	var b strings.Builder
