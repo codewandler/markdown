@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/codewandler/markdown/terminal"
 )
@@ -57,24 +58,31 @@ func main() {
 		opts = append(opts, terminal.WithAnsi(terminal.AnsiOff))
 	}
 
-	er := newEmojiReader(r)
+	// Read all input.
+	raw, err := io.ReadAll(r)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
+		os.Exit(1)
+	}
+	input := string(raw)
+
+	// Preprocess: replace emoji shortcodes.
+	input = replaceEmoji(input)
+
+	// Preprocess: render local images inline.
+	var baseDir string
+	if flag.NArg() > 0 {
+		baseDir = filepath.Dir(flag.Arg(0))
+	} else {
+		baseDir, _ = os.Getwd()
+	}
+	input = replaceAllImages(input, baseDir)
+
+	// Render Markdown.
 	sr := terminal.NewStreamRenderer(os.Stdout, opts...)
-	buf := make([]byte, 8192)
-	for {
-		n, err := er.Read(buf)
-		if n > 0 {
-			if _, werr := sr.Write(buf[:n]); werr != nil {
-				fmt.Fprintf(os.Stderr, "mdview: %v\n", werr)
-				os.Exit(1)
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
-			os.Exit(1)
-		}
+	if _, err := sr.Write([]byte(input)); err != nil {
+		fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
+		os.Exit(1)
 	}
 	if err := sr.Flush(); err != nil {
 		fmt.Fprintf(os.Stderr, "mdview: %v\n", err)
