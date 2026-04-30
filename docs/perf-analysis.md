@@ -554,3 +554,41 @@ cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec
 This is a small corpus win but a meaningful long-plain-paragraph win, and it
 removes a known `paragraphText` allocation path without changing Markdown
 semantics.
+
+### Opt 17: Check table header before parsing separator (2026-04-30)
+
+`tryStartTable` parsed the current line as a table separator before checking
+whether the previous paragraph line was actually a table header containing a
+pipe. On ordinary paragraphs this caused unnecessary table-separator splitting
+and alignment allocation attempts. The function now checks the cached paragraph
+header line first and returns early when the header has no pipe.
+
+Implementation details:
+
+- Moved `splitTableRowReuse(header.text, p.tableCells[:0])` before
+  `parseTableSeparator(line.text)`.
+- Ordinary paragraph continuation lines now avoid separator parsing entirely
+  when the previous line cannot be a table header.
+- Table-heavy behavior is unchanged because real table headers still proceed to
+  separator parsing and column-count validation.
+
+| Metric | Before | After | Delta |
+| ----------- | --------: | --------: | --------: |
+| CommonMark corpus speed | 0.98 ms | 0.96 ms | **-2%** |
+| CommonMark corpus memory | 1.46 MB | 1.46 MB | ~same |
+| CommonMark corpus allocations | 3,358 | 3,246 | **-112 allocs** |
+| Tiny chunks allocations | 23,049 | 22,937 | **-112 allocs** |
+| Competition Spec speed | 2.63 ms | 2.56 ms | **-3%** |
+| Competition Spec allocations | 8,835 | 8,835 | same |
+| Competition README allocations | 811 | 802 | **-9 allocs** |
+
+Benchmark commands:
+
+```bash
+GOMAXPROCS=1 go test -run='^$' -bench='BenchmarkParserCommonMarkCorpus|BenchmarkParserLongParagraph$' -benchmem -count=5 -benchtime=1s ./stream/
+cd competition && go test -run='^$' -bench='BenchmarkParse/(ours|goldmark)/(Spec|README)$' -benchmem -count=3 -benchtime=500ms ./benchmarks
+```
+
+This is a small but stable win on the CommonMark corpus and avoids wasted work
+on non-table paragraph continuations.
+

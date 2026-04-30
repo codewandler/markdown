@@ -1059,17 +1059,17 @@ func (p *parser) tryStartTable(line lineInfo, events *[]Event) bool {
 	if p.table.active || len(p.paragraph.lines) == 0 {
 		return false
 	}
-	align, ok := parseTableSeparator(line.text)
-	if !ok {
-		return false
-	}
-	// The table header is the last paragraph line. If there are
-	// earlier lines, emit them as a paragraph first.
+	// The table header is the last paragraph line. Check it before parsing the
+	// separator so ordinary paragraphs avoid separator split/allocation work.
 	header := p.paragraph.lines[len(p.paragraph.lines)-1]
 	var headerHasPipe bool
 	p.tableCells, headerHasPipe = splitTableRowReuse(header.text, p.tableCells[:0])
 	headerCells := p.tableCells
 	if !headerHasPipe {
+		return false
+	}
+	align, ok := parseTableSeparator(line.text)
+	if !ok {
 		return false
 	}
 	// Reject degenerate headers where all cells are empty (e.g. just "|").
