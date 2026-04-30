@@ -5,9 +5,12 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/dolmen-go/kittyimg"
 	_ "golang.org/x/image/bmp"
@@ -41,7 +44,7 @@ func splitImages(input string, baseDir string) []segment {
 			if end >= 0 {
 				tag := input[i : i+end+1]
 				src := extractAttr(tag, "src")
-				if src != "" && !isURL(src) {
+				if src != "" {
 					rendered := renderImage(src, baseDir)
 					if rendered != "" {
 						flushText()
@@ -62,14 +65,12 @@ func splitImages(input string, baseDir string) []segment {
 				if srcEnd >= 0 {
 					srcEnd += altEnd + 2
 					src := input[altEnd+2 : srcEnd]
-					if !isURL(src) {
-						rendered := renderImage(src, baseDir)
-						if rendered != "" {
-							flushText()
-							segs = append(segs, segment{content: rendered + "\n", isImage: true})
-							i = srcEnd + 1
-							continue
-						}
+					rendered := renderImage(src, baseDir)
+					if rendered != "" {
+						flushText()
+						segs = append(segs, segment{content: rendered + "\n", isImage: true})
+						i = srcEnd + 1
+						continue
 					}
 				}
 			}
@@ -82,20 +83,32 @@ func splitImages(input string, baseDir string) []segment {
 	return segs
 }
 
-// renderImage renders a local image file using the kitty terminal
-// graphics protocol. Returns the escape sequence string, or "" on error.
+// renderImage renders an image using the kitty terminal graphics protocol.
+// Supports local files and HTTP/HTTPS URLs.
 func renderImage(src string, baseDir string) string {
-	if !filepath.IsAbs(src) {
-		src = filepath.Join(baseDir, src)
+	var r io.ReadCloser
+	if isURL(src) {
+		// Rewrite shields.io SVG URLs to raster (PNG) equivalents.
+		src = rewriteImageURL(src)
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(src)
+		if err != nil || resp.StatusCode != 200 {
+			return ""
+		}
+		r = resp.Body
+	} else {
+		if !filepath.IsAbs(src) {
+			src = filepath.Join(baseDir, src)
+		}
+		f, err := os.Open(src)
+		if err != nil {
+			return ""
+		}
+		r = f
 	}
+	defer r.Close()
 
-	f, err := os.Open(src)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-
-	img, _, err := image.Decode(f)
+	img, _, err := image.Decode(r)
 	if err != nil {
 		return ""
 	}
@@ -122,6 +135,15 @@ func extractAttr(tag, attr string) string {
 		return tag[start : start+end]
 	}
 	return ""
+}
+
+// rewriteImageURL converts known SVG image URLs to raster equivalents.
+func rewriteImageURL(u string) string {
+	// shields.io: img.shields.io → raster.shields.io for PNG output.
+	if strings.Contains(u, "img.shields.io") {
+		return strings.Replace(u, "img.shields.io", "raster.shields.io", 1)
+	}
+	return u
 }
 
 func isURL(s string) bool {
